@@ -407,9 +407,12 @@ export const DailyTaskSection: React.FC<DailyTaskSectionProps> = ({
               No categories scheduled for this day
             </div>
             <p className="text-xs text-slate-400 max-w-md mx-auto">
-              Plan focus routines for this day. Click a preset below or type a category:
+              {canManageCategories
+                ? 'Plan focus routines for this day. Click a preset below or type a category:'
+                : 'The client has not assigned a category for you to work on for this day.'}
             </p>
 
+            {canManageCategories && (
             <div className="space-y-2 pt-1 max-w-lg mx-auto">
               {recentCustomSubNames.length > 0 && (
                 <div>
@@ -449,6 +452,7 @@ export const DailyTaskSection: React.FC<DailyTaskSectionProps> = ({
                 </div>
               </div>
             </div>
+            )}
           </div>
         )}
 
