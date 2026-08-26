@@ -365,17 +365,23 @@ export default function App() {
   const professionalRole = currentCollaborator?.role || approvedOutgoingReq?.role || null;
   const pendingIncoming = incomingRequests.filter((r) => r.status === 'pending');
 
-  // Any authenticated collaborator in this workspace has full permission to edit and manage routines & tasks
-  const isGoalAssignedToMe = (_goalId: string) => {
-    return true;
+  // A professional may work only on goals assigned by the client.
+  const isGoalAssignedToMe = (goalId: string) => {
+    return !!currentCollaborator?.assignedGoalIds?.includes(goalId);
   };
 
-  const canEditSubcategoryTasks = (_goalId: string, _sub?: Subcategory) => {
-    return true;
+  // Within an assigned goal, a professional may edit only subcategories
+  // explicitly tagged with that professional's role (for example, Trainer).
+  const canEditSubcategoryTasks = (goalId: string, sub?: Subcategory) => {
+    if (isOwner) return true;
+    return !!sub && isGoalAssignedToMe(goalId) && sub.editorRole === professionalRole;
   };
 
-  const canEditTaskRecord = (_goalId: string, _task?: TaskItem) => {
-    return true;
+  const canEditTaskRecord = (goalId: string, task?: TaskItem) => {
+    if (isOwner) return true;
+    const goal = goals.find((item) => item.id === goalId);
+    const subcategory = goal?.subcategories?.find((item) => item.id === task?.subcategoryId);
+    return canEditSubcategoryTasks(goalId, subcategory);
   };
 
   // Computed Current Goal
@@ -646,8 +652,8 @@ export default function App() {
     goalId: string,
     updates: { title?: string; category?: string; description?: string }
   ) => {
-    if (!isOwner && !isGoalAssignedToMe(goalId)) {
-      setErrorMessage('You are not authorized to edit this goal.');
+    if (!isOwner) {
+      setErrorMessage('Only the client can edit the goal details.');
       return;
     }
     const targetGoal = goals.find((g) => g.id === goalId);
@@ -693,7 +699,7 @@ export default function App() {
   };
 
   const handleToggleMilestone = async (goalId: string, milestoneId: string) => {
-    if (!isOwner && !isGoalAssignedToMe(goalId)) return;
+    if (!isOwner) return;
     const targetGoal = goals.find((g) => g.id === goalId);
     if (!targetGoal) return;
 
@@ -719,7 +725,7 @@ export default function App() {
   };
 
   const handleUpdateMilestoneTitle = async (goalId: string, milestoneId: string, title: string) => {
-    if (!isOwner && !isGoalAssignedToMe(goalId)) return;
+    if (!isOwner) return;
     const targetGoal = goals.find((g) => g.id === goalId);
     if (!targetGoal) return;
 
@@ -745,8 +751,8 @@ export default function App() {
   };
 
   const handleAddSubcategory = async (goalId: string, name: string, date?: string): Promise<string | null> => {
-    if (!isOwner && !isGoalAssignedToMe(goalId)) {
-      setErrorMessage('You are not authorized to add subcategories to this goal.');
+    if (!isOwner) {
+      setErrorMessage('Only the client can add subcategories.');
       return null;
     }
     const targetGoal = goals.find((g) => g.id === goalId);
@@ -784,7 +790,7 @@ export default function App() {
   };
 
   const handleRenameSubcategory = async (goalId: string, subcategoryId: string, name: string) => {
-    if (!isOwner && !isGoalAssignedToMe(goalId)) return;
+    if (!isOwner) return;
     const targetGoal = goals.find((g) => g.id === goalId);
     if (!targetGoal) return;
 
@@ -810,7 +816,7 @@ export default function App() {
   };
 
   const handleDeleteSubcategory = async (goalId: string, subcategoryId: string) => {
-    if (!isOwner && !isGoalAssignedToMe(goalId)) return;
+    if (!isOwner) return;
 
     const targetGoal = goals.find((g) => g.id === goalId);
     if (!targetGoal) return;
@@ -843,7 +849,7 @@ export default function App() {
   };
 
   const handleSetSubcategoryRole = async (goalId: string, subcategoryId: string, editorRole: string) => {
-    if (!isOwner && !isGoalAssignedToMe(goalId)) return;
+    if (!isOwner) return;
     const targetGoal = goals.find((g) => g.id === goalId);
     if (!targetGoal) return;
 
@@ -879,8 +885,9 @@ export default function App() {
     if (!targetGoal) return;
 
     if (!isOwner) {
-      if (!isGoalAssignedToMe(goalId)) {
-        setErrorMessage('You are not assigned to edit this goal by the client.');
+      const subcategory = (targetGoal.subcategories || []).find((item) => item.id === subcategoryId);
+      if (!canEditSubcategoryTasks(goalId, subcategory)) {
+        setErrorMessage('You can add tasks only in the category assigned to your role.');
         return;
       }
     }
@@ -2408,7 +2415,7 @@ export default function App() {
                             <span className="text-xs font-semibold text-slate-600 bg-slate-100 px-2.5 py-1 rounded-lg">
                               Target: {formatFullMonth(currentGoal.targetDate)}
                             </span>
-                            {(isOwner || isGoalAssignedToMe(currentGoal.id)) && (
+                            {isOwner && (
                               <button
                                 type="button"
                                 onClick={() => {
@@ -2526,7 +2533,7 @@ export default function App() {
                     <DailyTaskSection
                       goal={currentGoal}
                       isOwner={isOwner}
-                      canManageCategories={isOwner || isGoalAssignedToMe(currentGoal.id)}
+                      canManageCategories={isOwner}
                       professionalRole={professionalRole}
                       selectedMonthKey={selectedGoalMonth}
                       onSelectMonth={setSelectedGoalMonth}
@@ -2546,7 +2553,7 @@ export default function App() {
                   <div className="lg:col-span-6 space-y-6">
                     <MonthlyMilestoneSection
                       goal={currentGoal}
-                      readOnly={!isOwner && !isGoalAssignedToMe(currentGoal.id)}
+                      readOnly={!isOwner}
                       selectedMonthKey={selectedGoalMonth}
                       onSelectMonth={setSelectedGoalMonth}
                       onToggleMilestone={handleToggleMilestone}
