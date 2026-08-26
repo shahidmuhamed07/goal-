@@ -2,9 +2,17 @@ rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
-
     function isSignedIn() {
       return request.auth != null;
+    }
+
+    // The workspace owner or a professional the owner has approved.
+    function canAccessWorkspace(workspaceUid) {
+      return isSignedIn() &&
+        (request.auth.uid == workspaceUid ||
+          (exists(/databases/$(database)/documents/users/$(workspaceUid)) &&
+            get(/databases/$(database)/documents/users/$(workspaceUid))
+              .data.collaboratorUids.hasAny([request.auth.uid])));
     }
 
     // Default deny
@@ -12,25 +20,49 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
-    // User profiles
+    // A user controls their own profile. Approved professionals may read a
+    // client's profile so the app can load the shared workspace.
     match /users/{userId} {
-      allow read, write: if isSignedIn();
+      allow read: if isSignedIn() &&
+        (request.auth.uid == userId ||
+          resource.data.collaboratorUids.hasAny([request.auth.uid]));
+      allow create: if isSignedIn() && request.auth.uid == userId;
+      allow update, delete: if isSignedIn() && request.auth.uid == userId;
     }
 
-    // 6-character connection codes
+    // Connection codes are created and managed only by the account they point to.
+    // Signed-in users may look up a code in order to request access.
     match /codes/{code} {
-      allow read, write: if isSignedIn();
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && request.resource.data.uid == request.auth.uid;
+      allow update, delete: if isSignedIn() && resource.data.uid == request.auth.uid;
     }
 
-    // Collaboration access requests
+    // A professional creates a pending request. Only the client receiving it
+    // can approve or deny it.
     match /accessRequests/{requestId} {
-      allow read, write: if isSignedIn();
+      allow read: if isSignedIn() &&
+        (resource.data.fromUid == request.auth.uid ||
+          resource.data.toUid == request.auth.uid);
+      allow create: if isSignedIn() &&
+        request.resource.data.fromUid == request.auth.uid &&
+        request.resource.data.status == 'pending';
+      allow update: if isSignedIn() &&
+        resource.data.toUid == request.auth.uid &&
+        request.resource.data.fromUid == resource.data.fromUid &&
+        request.resource.data.toUid == resource.data.toUid &&
+        request.resource.data.status in ['approved', 'denied'];
+      allow delete: if false;
     }
 
-    // Goals, milestones, subcategories, and daily tasks
+    // The owner and approved professionals can edit a client's goals.
+    // userId is immutable so a collaborator cannot move a goal to another workspace.
     match /goals/{goalId} {
-      allow read, write: if isSignedIn();
+      allow read: if canAccessWorkspace(resource.data.userId);
+      allow create: if canAccessWorkspace(request.resource.data.userId);
+      allow update: if canAccessWorkspace(resource.data.userId) &&
+        request.resource.data.userId == resource.data.userId;
+      allow delete: if canAccessWorkspace(resource.data.userId);
     }
   }
 }
-

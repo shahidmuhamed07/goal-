@@ -407,9 +407,12 @@ export const DailyTaskSection: React.FC<DailyTaskSectionProps> = ({
               No categories scheduled for this day
             </div>
             <p className="text-xs text-slate-400 max-w-md mx-auto">
-              Plan focus routines for this day. Click a preset below or type a category:
+              {canManageCategories
+                ? 'Plan focus routines for this day. Click a preset below or type a category:'
+                : 'The client has not assigned a category for you to work on for this day.'}
             </p>
 
+            {canManageCategories && (
             <div className="space-y-2 pt-1 max-w-lg mx-auto">
               {recentCustomSubNames.length > 0 && (
                 <div>
@@ -449,6 +452,7 @@ export const DailyTaskSection: React.FC<DailyTaskSectionProps> = ({
                 </div>
               </div>
             </div>
+            )}
           </div>
         )}
 
@@ -463,7 +467,7 @@ export const DailyTaskSection: React.FC<DailyTaskSectionProps> = ({
             canDelete={false}
             canAdd={false}
             canRename={false}
-            canEditTasks={true}
+            canEditTasks={isOwner}
             onToggleTask={onToggleTask}
             onDeleteTask={onDeleteTask}
           />
@@ -471,25 +475,26 @@ export const DailyTaskSection: React.FC<DailyTaskSectionProps> = ({
 
         {subcategories.map((sub) => {
           const isExpanded = expandedIds[sub.id] !== undefined ? expandedIds[sub.id] : allExpanded;
+          const canEditThisSubcategory = canEditSubcategoryTasks(sub);
           return (
             <SubcategoryBlock
               key={sub.id}
               name={sub.name}
               expanded={isExpanded}
               onToggle={() => toggleExpanded(sub.id)}
-              onRename={(nextName) => onRenameSubcategory(goal.id, sub.id, nextName)}
-              onDelete={() => onDeleteSubcategory(goal.id, sub.id)}
+              onRename={canManageCategories ? (nextName) => onRenameSubcategory(goal.id, sub.id, nextName) : undefined}
+              onDelete={canManageCategories ? () => onDeleteSubcategory(goal.id, sub.id) : undefined}
               tasks={selectedDateTasks.filter((t) => t.subcategoryId === sub.id)}
               goal={goal}
               subcategoryId={sub.id}
               selectedDate={selectedDate}
               editorRole={sub.editorRole || ''}
-              canDelete={true}
-              canAdd={true}
-              canRename={true}
-              canEditTasks={true}
+              canDelete={canManageCategories}
+              canAdd={canEditThisSubcategory}
+              canRename={canManageCategories}
+              canEditTasks={canEditThisSubcategory}
               onSetRole={
-                onSetSubcategoryRole
+                canManageCategories && onSetSubcategoryRole
                   ? (nextRole) => onSetSubcategoryRole(goal.id, sub.id, nextRole)
                   : undefined
               }
@@ -502,7 +507,8 @@ export const DailyTaskSection: React.FC<DailyTaskSectionProps> = ({
         })}
       </div>
 
-      {/* ADD SUBCATEGORY FORM FOR THIS DAY */}
+      {/* Only the client can create a new work category. */}
+      {canManageCategories && (
       <form
         onSubmit={(e) => {
           e.preventDefault();
@@ -525,6 +531,7 @@ export const DailyTaskSection: React.FC<DailyTaskSectionProps> = ({
           + Add Category
         </button>
       </form>
+      )}
     </div>
   );
 };
