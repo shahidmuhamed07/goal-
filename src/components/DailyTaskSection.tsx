@@ -463,7 +463,7 @@ export const DailyTaskSection: React.FC<DailyTaskSectionProps> = ({
             canDelete={false}
             canAdd={false}
             canRename={false}
-            canEditTasks={true}
+            canEditTasks={isOwner}
             onToggleTask={onToggleTask}
             onDeleteTask={onDeleteTask}
           />
@@ -471,25 +471,26 @@ export const DailyTaskSection: React.FC<DailyTaskSectionProps> = ({
 
         {subcategories.map((sub) => {
           const isExpanded = expandedIds[sub.id] !== undefined ? expandedIds[sub.id] : allExpanded;
+          const canEditThisSubcategory = canEditSubcategoryTasks(sub);
           return (
             <SubcategoryBlock
               key={sub.id}
               name={sub.name}
               expanded={isExpanded}
               onToggle={() => toggleExpanded(sub.id)}
-              onRename={(nextName) => onRenameSubcategory(goal.id, sub.id, nextName)}
-              onDelete={() => onDeleteSubcategory(goal.id, sub.id)}
+              onRename={canManageCategories ? (nextName) => onRenameSubcategory(goal.id, sub.id, nextName) : undefined}
+              onDelete={canManageCategories ? () => onDeleteSubcategory(goal.id, sub.id) : undefined}
               tasks={selectedDateTasks.filter((t) => t.subcategoryId === sub.id)}
               goal={goal}
               subcategoryId={sub.id}
               selectedDate={selectedDate}
               editorRole={sub.editorRole || ''}
-              canDelete={true}
-              canAdd={true}
-              canRename={true}
-              canEditTasks={true}
+              canDelete={canManageCategories}
+              canAdd={canEditThisSubcategory}
+              canRename={canManageCategories}
+              canEditTasks={canEditThisSubcategory}
               onSetRole={
-                onSetSubcategoryRole
+                canManageCategories && onSetSubcategoryRole
                   ? (nextRole) => onSetSubcategoryRole(goal.id, sub.id, nextRole)
                   : undefined
               }
@@ -502,7 +503,8 @@ export const DailyTaskSection: React.FC<DailyTaskSectionProps> = ({
         })}
       </div>
 
-      {/* ADD SUBCATEGORY FORM FOR THIS DAY */}
+      {/* Only the client can create a new work category. */}
+      {canManageCategories && (
       <form
         onSubmit={(e) => {
           e.preventDefault();
@@ -525,6 +527,7 @@ export const DailyTaskSection: React.FC<DailyTaskSectionProps> = ({
           + Add Category
         </button>
       </form>
+      )}
     </div>
   );
 };
