@@ -1,0 +1,79 @@
+{
+  "entities": {
+    "Goal": {
+      "title": "Goal",
+      "description": "A long-term target broken into monthly milestones and subcategory daily tasks",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "description": "The UID of the user who owns this goal" },
+        "title": { "type": "string", "description": "Title of the goal", "maxLength": 200 },
+        "category": { "type": "string", "description": "Category such as Fitness, Career, Health", "maxLength": 50 },
+        "description": { "type": "string", "description": "Detailed description of the goal", "maxLength": 1000 },
+        "createdAt": { "type": "string", "description": "ISO date string when goal was created" },
+        "targetDate": { "type": "string", "description": "Target completion month in YYYY-MM format" },
+        "milestones": { "type": "array", "description": "Monthly milestone checkpoints" },
+        "subcategories": { "type": "array", "description": "Subcategories for task organization and professional role assignments" },
+        "tasks": { "type": "array", "description": "Daily action items" }
+      },
+      "required": ["userId", "title", "createdAt", "targetDate"]
+    },
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "User account profile and collaborator metadata",
+      "type": "object",
+      "properties": {
+        "displayName": { "type": "string", "description": "Display name of the user" },
+        "email": { "type": "string", "description": "Email address of the user" },
+        "photoURL": { "type": "string", "description": "User avatar photo URL" },
+        "code": { "type": "string", "description": "Unique 6-character connection invite code" },
+        "collaborators": { "type": "array", "description": "List of approved collaborator details" },
+        "collaboratorUids": { "type": "array", "description": "List of collaborator UIDs for quick array-contains querying" },
+        "createdAt": { "type": "string", "description": "Account registration timestamp" }
+      }
+    },
+    "InviteCode": {
+      "title": "InviteCode",
+      "description": "Mapping from a 6-character code to a user UID",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "description": "UID of the user who owns this code" }
+      },
+      "required": ["uid"]
+    },
+    "AccessRequest": {
+      "title": "AccessRequest",
+      "description": "Professional collaborator access request to client account",
+      "type": "object",
+      "properties": {
+        "fromUid": { "type": "string", "description": "UID of the professional requesting access" },
+        "fromName": { "type": "string", "description": "Name of requesting professional" },
+        "fromEmail": { "type": "string", "description": "Email of requesting professional" },
+        "fromPhoto": { "type": "string", "description": "Photo URL of requesting professional" },
+        "toUid": { "type": "string", "description": "UID of the client account" },
+        "toCode": { "type": "string", "description": "6-character invite code used" },
+        "role": { "type": "string", "description": "Requested role (Trainer, Dietitian, Doctor)" },
+        "status": { "type": "string", "description": "Request status (pending, approved, denied, removed)" },
+        "createdAt": { "type": "string", "description": "Request timestamp" }
+      },
+      "required": ["fromUid", "toUid", "role", "status", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/goals/{goalId}": {
+      "schema": "Goal",
+      "description": "Collection of user goals with milestones and tasks"
+    },
+    "/users/{userId}": {
+      "schema": "UserProfile",
+      "description": "Collection of user profiles and collaboration rosters"
+    },
+    "/codes/{code}": {
+      "schema": "InviteCode",
+      "description": "Lookup index of 6-character connection codes"
+    },
+    "/accessRequests/{requestId}": {
+      "schema": "AccessRequest",
+      "description": "Collection of collaboration access requests"
+    }
+  }
+}

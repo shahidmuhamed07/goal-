@@ -1,0 +1,8 @@
+{
+  "name": "Remix goal-path",
+  "description": "Web application configured for continuous automated deployment to Firebase Hosting via GitHub Actions on main branch push.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
