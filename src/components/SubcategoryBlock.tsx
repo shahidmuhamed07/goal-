@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
+import { Check, Edit2, Trash2, X, ChevronDown, ChevronRight } from 'lucide-react';
 import { Goal, TaskItem } from '../types';
-import { PriorityBadge } from './UIElements';
+import { PriorityBadge, GlassIconButton } from './UIElements';
 import { PROFESSIONAL_ROLES } from '../utils';
 
 interface SubcategoryBlockProps {
@@ -18,6 +19,7 @@ interface SubcategoryBlockProps {
   canAdd?: boolean;
   canRename?: boolean;
   canEditTasks?: boolean;
+  isOwner?: boolean;
   onSetRole?: (nextRole: string) => void;
   onAddTask?: (goalId: string, text: string, priority: 'high' | 'medium' | 'low', subcategoryId?: string, date?: string) => void;
   onUpdateTask?: (goalId: string, taskId: string, updates: Partial<TaskItem>) => void;
@@ -40,6 +42,7 @@ export const SubcategoryBlock: React.FC<SubcategoryBlockProps> = ({
   canAdd = true,
   canRename = true,
   canEditTasks = true,
+  isOwner = true,
   onSetRole,
   onAddTask,
   onUpdateTask,
@@ -62,6 +65,21 @@ export const SubcategoryBlock: React.FC<SubcategoryBlockProps> = ({
 
   const done = tasks.filter((t) => t.completed).length;
 
+  console.log('[SubcategoryBlock Controls Check]', {
+    subcategoryName: name,
+    subcategoryId,
+    goalId: goal.id,
+    editorRoleTag: editorRole,
+    canAdd,
+    canRename,
+    canDelete,
+    canEditTasks,
+    hasOnAddTask: !!onAddTask,
+    hasOnRename: !!onRename,
+    hasOnDelete: !!onDelete,
+    hasOnSetRole: !!onSetRole,
+  });
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!text.trim() || !subcategoryId || !onAddTask) return;
@@ -80,21 +98,31 @@ export const SubcategoryBlock: React.FC<SubcategoryBlockProps> = ({
   };
 
   return (
-    <div className="rounded-xl border border-slate-200 overflow-hidden bg-white shadow-2xs">
-      <div className="flex flex-wrap sm:flex-nowrap items-center justify-between gap-1.5 p-2 bg-slate-50/90 border-b border-slate-100 transition">
+    <div
+      className={`rounded-xl border overflow-hidden bg-white shadow-2xs ${
+        !isOwner ? 'border-amber-200/80' : 'border-emerald-200/80'
+      }`}
+    >
+      <div
+        className={`flex flex-wrap sm:flex-nowrap items-center justify-between gap-1.5 p-2 border-b transition ${
+          !isOwner ? 'bg-amber-50/50 border-amber-100/80' : 'bg-emerald-50/40 border-emerald-100/80'
+        }`}
+      >
         {/* Toggle Expand / Collapse Button */}
         <div className="flex items-center gap-1.5 min-w-0 flex-1">
-          <button
-            type="button"
+          <GlassIconButton
             onClick={onToggle}
+            variant={!isOwner ? 'amber' : 'emerald'}
+            size="sm"
+            title={expanded ? 'Collapse group' : 'Expand group to see tasks'}
             aria-expanded={expanded}
-            className="flex-shrink-0 flex items-center justify-center w-8 h-8 rounded-lg text-slate-600 hover:bg-slate-200/70 transition cursor-pointer"
-            title={expanded ? 'Collapse' : 'Expand to see tasks'}
           >
-            <span className="w-5 h-5 flex items-center justify-center text-[13px] font-bold text-slate-700 border border-slate-300 rounded-md bg-white shadow-2xs">
-              {expanded ? '−' : '+'}
-            </span>
-          </button>
+            {expanded ? (
+              <ChevronDown className="w-3.5 h-3.5 stroke-[2.5]" />
+            ) : (
+              <ChevronRight className="w-3.5 h-3.5 stroke-[2.5]" />
+            )}
+          </GlassIconButton>
 
           {editing ? (
             <div className="flex-1 flex flex-wrap sm:flex-nowrap items-center gap-1.5 min-w-0 py-0.5">
@@ -113,17 +141,25 @@ export const SubcategoryBlock: React.FC<SubcategoryBlockProps> = ({
                   }
                 }}
                 autoFocus
-                className="flex-1 min-w-[140px] text-sm font-semibold text-slate-900 bg-white border border-emerald-500 rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
+                className={`flex-1 min-w-[140px] text-sm font-semibold text-slate-900 bg-white border rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-2 ${
+                  !isOwner
+                    ? 'border-amber-500 focus:ring-amber-500/20'
+                    : 'border-emerald-500 focus:ring-emerald-500/20'
+                }`}
                 placeholder="Subcategory name..."
               />
               <div className="flex items-center gap-1">
                 <button
                   type="button"
                   onClick={handleSaveRename}
-                  className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-semibold shadow-2xs transition cursor-pointer flex items-center gap-1"
+                  className={`px-3 py-1.5 text-white rounded-lg text-xs font-semibold shadow-2xs transition cursor-pointer flex items-center gap-1 active:scale-95 ${
+                    !isOwner
+                      ? 'bg-amber-700 hover:bg-amber-800'
+                      : 'bg-emerald-700 hover:bg-emerald-800'
+                  }`}
                   title="Save changes"
                 >
-                  <span>✓</span>
+                  <Check className="w-3.5 h-3.5 stroke-[2.5]" />
                   <span>Save</span>
                 </button>
                 <button
@@ -132,7 +168,7 @@ export const SubcategoryBlock: React.FC<SubcategoryBlockProps> = ({
                     setEditVal(name);
                     setEditing(false);
                   }}
-                  className="px-2.5 py-1.5 bg-slate-200/80 hover:bg-slate-300 text-slate-700 rounded-lg text-xs font-medium transition cursor-pointer"
+                  className="px-2.5 py-1.5 bg-slate-200/80 hover:bg-slate-300 text-slate-700 rounded-lg text-xs font-medium transition cursor-pointer active:scale-95"
                   title="Cancel"
                 >
                   Cancel
@@ -145,7 +181,11 @@ export const SubcategoryBlock: React.FC<SubcategoryBlockProps> = ({
               onClick={onToggle}
               className="flex-1 min-w-0 text-left py-1 pr-1 cursor-pointer group"
             >
-              <span className="block text-sm font-bold text-slate-800 group-hover:text-emerald-700 transition-colors truncate">
+              <span
+                className={`block text-sm font-bold text-slate-800 transition-colors truncate ${
+                  !isOwner ? 'group-hover:text-amber-700' : 'group-hover:text-emerald-700'
+                }`}
+              >
                 {name}
               </span>
             </button>
@@ -155,7 +195,13 @@ export const SubcategoryBlock: React.FC<SubcategoryBlockProps> = ({
         {/* Right side controls: Count, Role, Edit, Delete */}
         {!editing && (
           <div className="flex items-center gap-1 sm:gap-1.5 flex-shrink-0 ml-auto pl-1">
-            <span className="text-[11px] text-slate-500 font-semibold tabular-nums px-1.5 sm:px-2 py-0.5 rounded-md bg-white border border-slate-200">
+            <span
+              className={`text-[11px] font-semibold tabular-nums px-1.5 sm:px-2 py-0.5 rounded-md bg-white border shadow-2xs ${
+                !isOwner
+                  ? 'text-amber-950 border-amber-200'
+                  : 'text-emerald-900 border-emerald-200'
+              }`}
+            >
               {done}/{tasks.length}
             </span>
 
@@ -164,7 +210,11 @@ export const SubcategoryBlock: React.FC<SubcategoryBlockProps> = ({
                 value={editorRole || ''}
                 onClick={(e) => e.stopPropagation()}
                 onChange={(e) => onSetRole(e.target.value)}
-                className="text-[10px] sm:text-[11px] font-medium text-slate-700 bg-white border border-slate-200 rounded-lg px-1.5 sm:px-2 py-1 max-w-[6.5rem] sm:max-w-[8.5rem] cursor-pointer hover:border-slate-300 focus:ring-1 focus:ring-emerald-500 focus:outline-none"
+                className={`text-[10px] sm:text-[11px] font-medium text-slate-700 bg-white border border-slate-200 rounded-lg px-1.5 sm:px-2 py-1 max-w-[6.5rem] sm:max-w-[8.5rem] cursor-pointer focus:ring-1 focus:outline-none shadow-2xs ${
+                  !isOwner
+                    ? 'hover:border-amber-300 focus:ring-amber-500'
+                    : 'hover:border-emerald-300 focus:ring-emerald-500'
+                }`}
                 title="Assign role to this subcategory"
               >
                 <option value="">Client & Pros</option>
@@ -175,46 +225,55 @@ export const SubcategoryBlock: React.FC<SubcategoryBlockProps> = ({
                 ))}
               </select>
             ) : editorRole ? (
-              <span className="text-[10px] font-bold text-emerald-800 bg-emerald-50 border border-emerald-200 px-1.5 py-0.5 rounded-md">
+              <span
+                className={`text-[10px] font-bold px-1.5 py-0.5 rounded-md border ${
+                  !isOwner
+                    ? 'text-amber-900 bg-amber-50 border-amber-200'
+                    : 'text-emerald-800 bg-emerald-50 border-emerald-200'
+                }`}
+              >
                 {editorRole}
               </span>
             ) : null}
 
             {canRename && (
-              <button
-                type="button"
-                title="Edit / Rename Subcategory"
+              <GlassIconButton
                 onClick={(e) => {
                   e.stopPropagation();
                   setEditVal(name);
                   setEditing(true);
                 }}
-                className="flex items-center gap-1 text-slate-700 hover:text-emerald-700 bg-white hover:bg-emerald-50 border border-slate-200 hover:border-emerald-300 px-2 sm:px-2.5 py-1 rounded-lg text-xs font-semibold transition cursor-pointer shadow-2xs active:scale-95 min-h-[28px] sm:min-h-[30px]"
+                variant={!isOwner ? 'amber' : 'emerald'}
+                size="sm"
+                title="Edit / Rename Subcategory"
               >
-                <span>✏️</span>
-                <span className="hidden sm:inline">Edit</span>
-              </button>
+                <Edit2 className="w-3.5 h-3.5" />
+              </GlassIconButton>
             )}
 
             {canDelete && onDelete && (
-              <button
-                type="button"
-                title="Delete subcategory"
+              <GlassIconButton
                 onClick={(e) => {
                   e.stopPropagation();
                   onDelete();
                 }}
-                className="flex items-center justify-center text-slate-400 hover:text-rose-600 hover:bg-rose-50 border border-slate-200 hover:border-rose-200 w-7 h-7 sm:w-8 sm:h-8 rounded-lg text-xs font-bold transition cursor-pointer active:scale-95"
+                variant="rose"
+                size="sm"
+                title="Delete subcategory"
               >
-                ✕
-              </button>
+                <Trash2 className="w-3.5 h-3.5" />
+              </GlassIconButton>
             )}
           </div>
         )}
       </div>
 
       {expanded && (
-        <div className="border-t border-slate-200 p-2.5 sm:p-3 space-y-2 bg-white">
+        <div
+          className={`border-t p-2.5 sm:p-3 space-y-2 bg-white ${
+            !isOwner ? 'border-amber-100' : 'border-emerald-100'
+          }`}
+        >
           {canAdd && onAddTask && (
             <form onSubmit={handleSubmit} className="space-y-1.5 sm:space-y-2">
               <div className="flex gap-1.5 sm:gap-2">
@@ -223,12 +282,20 @@ export const SubcategoryBlock: React.FC<SubcategoryBlockProps> = ({
                   placeholder="Add a task…"
                   value={text}
                   onChange={(e) => setText(e.target.value)}
-                  className="flex-1 text-xs sm:text-sm bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-800 placeholder-slate-400 focus:outline-none focus:bg-white focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600"
+                  className={`flex-1 text-xs sm:text-sm bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-800 placeholder-slate-400 focus:outline-none focus:bg-white focus:ring-2 ${
+                    !isOwner
+                      ? 'focus:ring-amber-500/20 focus:border-amber-600'
+                      : 'focus:ring-emerald-500/20 focus:border-emerald-600'
+                  }`}
                 />
                 <button
                   type="submit"
                   disabled={!text.trim()}
-                  className="px-3 sm:px-4 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-40 text-white text-xs sm:text-sm font-semibold rounded-xl transition cursor-pointer shrink-0"
+                  className={`px-3 sm:px-4 py-2 disabled:opacity-40 text-white text-xs sm:text-sm font-semibold rounded-xl transition cursor-pointer shrink-0 shadow-2xs ${
+                    !isOwner
+                      ? 'bg-amber-700 hover:bg-amber-800'
+                      : 'bg-emerald-700 hover:bg-emerald-800'
+                  }`}
                 >
                   Add
                 </button>
@@ -238,7 +305,9 @@ export const SubcategoryBlock: React.FC<SubcategoryBlockProps> = ({
                 <select
                   value={priority}
                   onChange={(e) => setPriority(e.target.value as 'high' | 'medium' | 'low')}
-                  className="bg-slate-50 border border-slate-200 rounded-lg px-2 py-0.5 text-slate-700 focus:outline-none focus:ring-1 focus:ring-emerald-500 text-[11px] sm:text-xs"
+                  className={`bg-slate-50 border border-slate-200 rounded-lg px-2 py-0.5 text-slate-700 focus:outline-none focus:ring-1 text-[11px] sm:text-xs ${
+                    !isOwner ? 'focus:ring-amber-500' : 'focus:ring-emerald-500'
+                  }`}
                 >
                   <option value="high">High</option>
                   <option value="medium">Medium</option>
@@ -258,8 +327,12 @@ export const SubcategoryBlock: React.FC<SubcategoryBlockProps> = ({
                 key={t.id}
                 className={`p-2.5 sm:p-3 rounded-xl border transition ${
                   t.completed
-                    ? 'bg-slate-50/80 border-slate-100 text-slate-400'
-                    : 'bg-white border-slate-200 text-slate-800 shadow-2xs'
+                    ? !isOwner
+                      ? 'bg-amber-50/20 border-amber-100 text-slate-400'
+                      : 'bg-emerald-50/20 border-emerald-100 text-slate-400'
+                    : !isOwner
+                    ? 'bg-white border-slate-200 text-slate-800 shadow-2xs hover:border-amber-200'
+                    : 'bg-white border-slate-200 text-slate-800 shadow-2xs hover:border-emerald-200'
                 }`}
               >
                 {editingTaskId === t.id ? (
@@ -268,7 +341,11 @@ export const SubcategoryBlock: React.FC<SubcategoryBlockProps> = ({
                       type="text"
                       value={editTaskText}
                       onChange={(e) => setEditTaskText(e.target.value)}
-                      className="w-full text-xs sm:text-sm bg-slate-50 border border-slate-300 rounded-lg px-3 py-1.5 text-slate-800 focus:outline-none focus:bg-white focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600 font-medium"
+                      className={`w-full text-xs sm:text-sm bg-slate-50 border border-slate-300 rounded-lg px-3 py-1.5 text-slate-800 focus:outline-none focus:bg-white focus:ring-2 font-medium ${
+                        !isOwner
+                          ? 'focus:ring-amber-500/20 focus:border-amber-600'
+                          : 'focus:ring-emerald-500/20 focus:border-emerald-600'
+                      }`}
                       autoFocus
                     />
                     <div className="flex items-center justify-between gap-2 flex-wrap">
@@ -293,7 +370,11 @@ export const SubcategoryBlock: React.FC<SubcategoryBlockProps> = ({
                             }
                             setEditingTaskId(null);
                           }}
-                          className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-md text-xs font-semibold cursor-pointer shadow-2xs"
+                          className={`px-2.5 py-1 text-white rounded-md text-xs font-semibold cursor-pointer shadow-2xs ${
+                            !isOwner
+                              ? 'bg-amber-700 hover:bg-amber-800'
+                              : 'bg-emerald-700 hover:bg-emerald-800'
+                          }`}
                         >
                           Save
                         </button>
@@ -315,7 +396,11 @@ export const SubcategoryBlock: React.FC<SubcategoryBlockProps> = ({
                         checked={t.completed}
                         disabled={!canEditTasks}
                         onChange={() => onToggleTask && onToggleTask(goal.id, t.id)}
-                        className="w-4 h-4 mt-0.5 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 disabled:opacity-40 shrink-0"
+                        className={`w-4 h-4 mt-0.5 rounded border-slate-300 disabled:opacity-40 shrink-0 cursor-pointer ${
+                          !isOwner
+                            ? 'text-amber-700 focus:ring-amber-500'
+                            : 'text-emerald-700 focus:ring-emerald-500'
+                        }`}
                       />
                       <div className="flex flex-col min-w-0">
                         <span
@@ -333,28 +418,28 @@ export const SubcategoryBlock: React.FC<SubcategoryBlockProps> = ({
 
                     <div className="flex items-center gap-1 shrink-0">
                       {canEditTasks && onUpdateTask && (
-                        <button
-                          type="button"
+                        <GlassIconButton
                           onClick={() => {
                             setEditingTaskId(t.id);
                             setEditTaskText(t.text);
                             setEditTaskPriority(t.priority || 'medium');
                           }}
-                          className="w-7 h-7 flex items-center justify-center text-slate-400 hover:text-emerald-700 hover:bg-emerald-50 rounded-lg text-xs transition cursor-pointer"
+                          variant={!isOwner ? 'amber' : 'emerald'}
+                          size="xs"
                           title="Edit task"
                         >
-                          ✏️
-                        </button>
+                          <Edit2 className="w-3 h-3" />
+                        </GlassIconButton>
                       )}
                       {canEditTasks && onDeleteTask && (
-                        <button
-                          type="button"
+                        <GlassIconButton
                           onClick={() => onDeleteTask(goal.id, t.id)}
-                          className="w-7 h-7 flex items-center justify-center text-slate-300 hover:text-rose-500 hover:bg-rose-50 rounded-lg text-xs font-bold transition cursor-pointer"
+                          variant="rose"
+                          size="xs"
                           title="Delete task"
                         >
-                          ✕
-                        </button>
+                          <Trash2 className="w-3 h-3" />
+                        </GlassIconButton>
                       )}
                     </div>
                   </div>

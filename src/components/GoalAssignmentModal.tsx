@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { X } from 'lucide-react';
 import { Goal, Collaborator } from '../types';
 
 interface GoalAssignmentModalProps {
@@ -71,8 +72,8 @@ export const GoalAssignmentModal: React.FC<GoalAssignmentModalProps> = ({
             </span>
             <h3 className="text-lg font-bold text-slate-900 mt-1">Assign Professionals</h3>
           </div>
-          <button onClick={onClose} className="text-slate-400 hover:text-slate-600 text-lg cursor-pointer">
-            ✕
+          <button onClick={onClose} className="p-1 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition cursor-pointer" title="Close">
+            <X className="w-4 h-4" />
           </button>
         </div>
 

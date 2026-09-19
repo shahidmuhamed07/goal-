@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { LogOut, Check, Target, X } from 'lucide-react';
 import { User } from 'firebase/auth';
 import { UserProfile, AccessRequest, ProfessionalRole, Goal, Collaborator } from '../types';
 import { PROFESSIONAL_ROLES, formatMonthKey } from '../utils';
@@ -130,6 +131,169 @@ export const CollaboratorsPanel: React.FC<CollaboratorsPanelProps> = ({
   const isViewingClient = !!workspaceUid && workspaceUid !== user.uid;
   const activeClient = isViewingClient ? clientList.find((c) => c.id === workspaceUid) : null;
 
+  // WHEN VIEWING A CLIENT WORKSPACE AS A TRAINER / PROFESSIONAL:
+  // Strictly respect user intent: only show who is collaborating with this client, the exit button, and the list of clients they work on.
+  if (isViewingClient) {
+    return (
+      <div className="space-y-6 max-w-3xl">
+        {/* ACTIVE CLIENT WORKSPACE BANNER WITH GREEN EXIT BUTTON */}
+        <div className="bg-gradient-to-r from-slate-900 via-amber-950/40 to-slate-900 border border-amber-400/50 text-white rounded-2xl p-4 sm:p-5 shadow-md flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="space-y-1">
+            <div className="flex items-center gap-2">
+              <span className="w-2.5 h-2.5 rounded-full bg-amber-400 animate-pulse" />
+              <span className="text-[11px] font-bold uppercase tracking-wider text-amber-300">
+                Active Client Workspace
+              </span>
+            </div>
+            <p className="text-sm font-bold text-white">
+              Currently viewing: <span className="text-amber-200">{activeClient?.displayName || activeClient?.email || 'Client'}</span>
+            </p>
+            <p className="text-xs text-amber-100/80">
+              You are managing this client's workspace. You can edit their goals, routine subcategories, and daily task plans.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => onSwitchWorkspace(user.uid)}
+            className="self-start sm:self-auto bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-2 rounded-xl text-xs font-bold transition cursor-pointer shadow-sm flex items-center gap-1.5 active:scale-95"
+            title="Return to your personal workspace"
+          >
+            <LogOut className="w-3.5 h-3.5 text-white" />
+            <span>Exit Client Workspace</span>
+          </button>
+        </div>
+
+        <div>
+          <h1 className="text-2xl font-bold text-slate-900">Client Collaborators</h1>
+          <p className="text-sm text-slate-500 mt-1">
+            Viewing team members and professionals connected to <strong>{activeClient?.displayName || activeClient?.email || 'this client'}</strong>.
+          </p>
+        </div>
+
+        {/* WHO ALL THE PEOPLE ARE COLLABORATED WITH THIS CLIENT */}
+        <div className="bg-white border border-amber-200/90 rounded-2xl p-6 shadow-xs">
+          <h2 className="text-sm font-bold text-slate-900 uppercase tracking-wider flex items-center gap-2">
+            <span>People Connected with this Client</span>
+            <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-amber-100 text-amber-900">
+              {collaborators.length}
+            </span>
+          </h2>
+          <p className="text-xs text-slate-500 mt-1 mb-4">
+            Professionals and trainers who have access to support this client's goals.
+          </p>
+          {collaborators.length === 0 ? (
+            <p className="text-sm text-slate-400">No other professionals connected.</p>
+          ) : (
+            <ul className="space-y-3">
+              {collaborators.map((c) => {
+                const isMe = c.uid === user.uid;
+                const assignedIds = c.assignedGoalIds !== undefined ? c.assignedGoalIds : goals.map((g) => g.id);
+                const assignedGoalList = goals.filter((g) => assignedIds.includes(g.id));
+
+                return (
+                  <li
+                    key={c.uid}
+                    className={`border rounded-xl p-4 space-y-2.5 transition ${
+                      isMe
+                        ? 'bg-amber-50/50 border-amber-300/80 shadow-2xs'
+                        : 'bg-white border-slate-200'
+                    }`}
+                  >
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-sm font-bold text-slate-900">
+                          {c.name || c.email || c.uid}
+                        </span>
+                        {isMe && (
+                          <span className="text-[10px] font-bold px-1.5 py-0.5 bg-amber-200 text-amber-950 rounded-md">
+                            You
+                          </span>
+                        )}
+                        <span className="text-xs font-semibold px-2 py-0.5 bg-amber-100 text-amber-900 rounded-md border border-amber-200">
+                          {c.role}
+                        </span>
+                      </div>
+                      <div className="text-xs text-slate-500">{c.email}</div>
+                    </div>
+
+                    {/* Goals assigned to this collaborator */}
+                    <div className="pt-2 border-t border-slate-100/90 flex items-center gap-1.5 flex-wrap">
+                      <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mr-1">
+                        Assigned Goals:
+                      </span>
+                      {assignedGoalList.length === 0 ? (
+                        <span className="text-xs text-amber-800 font-medium bg-amber-100/70 px-2 py-0.5 rounded-md">
+                          Read-only access
+                        </span>
+                      ) : (
+                        assignedGoalList.map((g) => (
+                          <span
+                            key={g.id}
+                            className="text-xs bg-white text-slate-700 border border-slate-200 px-2 py-0.5 rounded-md font-medium shadow-2xs"
+                          >
+                            {g.title}
+                          </span>
+                        ))
+                      )}
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </div>
+
+        {/* ALL CLIENTS YOU SUPPORT */}
+        <div className="bg-white border border-amber-200/90 rounded-2xl p-6 shadow-xs">
+          <h2 className="text-sm font-bold text-slate-900 uppercase tracking-wider">All Clients You Work With</h2>
+          <p className="text-xs text-slate-500 mt-1 mb-4">
+            Switch between client accounts you have been approved to manage.
+          </p>
+          {clientList.length === 0 ? (
+            <p className="text-sm text-slate-400">You are not connected to any other clients.</p>
+          ) : (
+            <ul className="space-y-3">
+              {clientList.map((c) => {
+                const myCollab = (c.collaborators || []).find((x) => x.uid === user.uid);
+                const myRole = myCollab?.role;
+                const isActive = workspaceUid === c.id;
+                return (
+                  <li
+                    key={c.id}
+                    className={`flex items-center justify-between gap-3 border rounded-xl p-3.5 transition ${
+                      isActive
+                        ? 'bg-amber-50/70 border-amber-300'
+                        : 'bg-white border-slate-200 hover:border-slate-300'
+                    }`}
+                  >
+                    <div>
+                      <div className="text-sm font-bold text-slate-900">
+                        {c.displayName || c.email || 'Client'}
+                      </div>
+                      <div className="text-xs text-slate-500">Your role: {myRole || 'Professional'}</div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => onSwitchWorkspace(isActive ? user.uid : (c.id || ''))}
+                      className={`text-xs font-semibold px-3 py-1.5 rounded-lg cursor-pointer transition ${
+                        isActive
+                          ? 'bg-amber-700 text-white font-bold shadow-2xs'
+                          : 'border border-slate-200 text-slate-700 hover:bg-slate-50'
+                      }`}
+                    >
+                      {isActive ? 'Current Client' : 'Switch Client'}
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  // DEFAULT OWNER VIEW:
   return (
     <div className="space-y-6 max-w-3xl">
       {isViewingClient && (
@@ -153,7 +317,7 @@ export const CollaboratorsPanel: React.FC<CollaboratorsPanelProps> = ({
             onClick={() => onSwitchWorkspace(user.uid)}
             className="self-start sm:self-auto bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-2 rounded-xl text-xs font-bold transition cursor-pointer shadow-sm flex items-center gap-1.5 active:scale-95"
           >
-            <span>🚪</span>
+            <LogOut className="w-3.5 h-3.5" />
             <span>Exit Client Workspace</span>
           </button>
         </div>
@@ -261,7 +425,7 @@ export const CollaboratorsPanel: React.FC<CollaboratorsPanelProps> = ({
                     onClick={() => handleOpenApproveModal(r)}
                     className="text-xs font-semibold px-3.5 py-2 rounded-xl bg-emerald-600 text-white hover:bg-emerald-700 shadow-xs cursor-pointer flex items-center gap-1.5"
                   >
-                    <span>✓</span>
+                    <Check className="w-3.5 h-3.5 stroke-[2.5]" />
                     <span>Approve & Assign Goals</span>
                   </button>
                   <button
@@ -309,10 +473,10 @@ export const CollaboratorsPanel: React.FC<CollaboratorsPanelProps> = ({
                       <button
                         type="button"
                         onClick={() => handleOpenManageModal(c)}
-                        className="text-xs font-semibold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 px-3 py-1.5 rounded-lg transition cursor-pointer flex items-center gap-1"
+                        className="text-xs font-semibold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 px-3 py-1.5 rounded-lg transition cursor-pointer flex items-center gap-1.5"
                         title="Change which goals this professional can manage"
                       >
-                        <span>🎯</span>
+                        <Target className="w-3.5 h-3.5 text-emerald-600" />
                         <span>Assign Goals ({assignedGoalList.length})</span>
                       </button>
 
@@ -430,9 +594,9 @@ export const CollaboratorsPanel: React.FC<CollaboratorsPanelProps> = ({
                 <button
                   type="button"
                   onClick={handleCloseModal}
-                  className="text-slate-400 hover:text-slate-600 text-sm p-1 rounded-lg hover:bg-slate-100 transition cursor-pointer"
+                  className="text-slate-400 hover:text-slate-600 p-1 rounded-lg hover:bg-slate-100 transition cursor-pointer"
                 >
-                  ✕
+                  <X className="w-4 h-4" />
                 </button>
               </div>
               <h3 className="text-lg font-bold text-slate-900 mt-2">
@@ -524,7 +688,7 @@ export const CollaboratorsPanel: React.FC<CollaboratorsPanelProps> = ({
                 onClick={handleConfirmAssignment}
                 className="text-xs font-semibold px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs transition cursor-pointer flex items-center gap-1.5"
               >
-                <span>✓</span>
+                <Check className="w-3.5 h-3.5 stroke-[2.5]" />
                 <span>
                   {modalTargetRequest
                     ? `Confirm & Approve (${selectedGoalIds.length} Goals)`

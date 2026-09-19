@@ -1,6 +1,9 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
+import { Calendar, ChevronLeft, ChevronRight, Sparkles, Plus } from 'lucide-react';
 import { Goal, Subcategory } from '../types';
 import { SubcategoryBlock } from './SubcategoryBlock';
+import { GlassIconButton, GlassBadge } from './UIElements';
+import { getCategoryPresets } from '../categoryPresets';
 import {
   getTodayDateString,
   getCurrentMonthKey,
@@ -26,27 +29,6 @@ interface DailyTaskSectionProps {
   onToggleTask: (goalId: string, taskId: string) => void;
   onDeleteTask: (goalId: string, taskId: string) => void;
 }
-
-const FITNESS_SUBCATEGORY_SUGGESTIONS = [
-  'Chest Day',
-  'Back & Biceps',
-  'Legs & Core',
-  'Shoulders & Arms',
-  'Push Day',
-  'Pull Day',
-  'Cardio & HIIT',
-  'Diet & Nutrition',
-  'Rest & Recovery',
-];
-
-const GENERAL_SUBCATEGORY_SUGGESTIONS = [
-  'Morning Routine',
-  'Workout & Fitness',
-  'Diet & Nutrition',
-  'Deep Work / Study',
-  'Daily Habits',
-  'Evening Review',
-];
 
 export const DailyTaskSection: React.FC<DailyTaskSectionProps> = ({
   goal,
@@ -204,16 +186,12 @@ export const DailyTaskSection: React.FC<DailyTaskSectionProps> = ({
     }
   };
 
-  // Check if goal is fitness related to customize suggestion presets
-  const isFitness = useMemo(() => {
-    const cat = (goal.category || '').toLowerCase();
-    const title = (goal.title || '').toLowerCase();
-    return cat.includes('health') || cat.includes('fitness') || title.includes('gym') || title.includes('workout') || title.includes('fit');
+  // Domain-specific category presets based strictly on this goal's category & title
+  const categoryConfig = useMemo(() => {
+    return getCategoryPresets(goal.category, goal.title);
   }, [goal.category, goal.title]);
 
-  const suggestions = isFitness ? FITNESS_SUBCATEGORY_SUGGESTIONS : GENERAL_SUBCATEGORY_SUGGESTIONS;
-
-  // Previous subcategories from other days the user created
+  // Previous custom subcategories from other days the user created
   const recentCustomSubNames = useMemo(() => {
     const currentNames = new Set(subcategories.map((s) => s.name.toLowerCase()));
     const list: string[] = [];
@@ -230,33 +208,73 @@ export const DailyTaskSection: React.FC<DailyTaskSectionProps> = ({
   const milestoneMonths = goal.milestones || [];
 
   return (
-    <div className="bg-white border border-slate-200 rounded-2xl p-4 sm:p-6 shadow-xs space-y-4 sm:space-y-5">
+    <div
+      className={`bg-white border rounded-2xl p-4 sm:p-6 shadow-xs space-y-4 sm:space-y-5 transition-colors duration-200 ${
+        !isOwner
+          ? 'border-amber-200/90 shadow-amber-950/5'
+          : 'border-purple-200/80'
+      }`}
+    >
       {/* HEADER & MONTH SELECTOR */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 pb-3 border-b border-slate-100">
         <div>
           <div className="flex items-center gap-2 flex-wrap">
-            <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-md">
-              Daily Action Plan
+            <span
+              className={`text-[11px] font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-md border ${
+                !isOwner
+                  ? 'text-amber-950 bg-amber-100 border-amber-300/80'
+                  : 'text-purple-900 bg-purple-100 border-purple-200/90'
+              }`}
+            >
+              {!isOwner ? 'Trainer Routine Planning' : 'Daily Action Plan'}
             </span>
+
+            {!isOwner && (
+              <span className="text-[10px] font-bold text-amber-800 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-md">
+                Client Workspace
+              </span>
+            )}
 
             {/* MONTH SELECTOR DROPDOWN / PILL */}
             {milestoneMonths.length > 0 && onSelectMonth ? (
-              <select
-                value={activeMonthKey}
-                onChange={(e) => onSelectMonth(e.target.value)}
-                className="text-xs font-bold text-slate-700 bg-slate-100 hover:bg-slate-200 border border-slate-200 rounded-lg px-2.5 py-1 cursor-pointer focus:outline-none focus:ring-1 focus:ring-emerald-500"
-                title="Select month"
+              <div
+                className={`flex items-center gap-1.5 rounded-lg px-2 py-0.5 border ${
+                  !isOwner
+                    ? 'bg-amber-50/70 border-amber-200/90'
+                    : 'bg-emerald-50/70 border-emerald-200/90'
+                }`}
               >
-                {milestoneMonths.map((m) => (
-                  <option key={m.monthKey} value={m.monthKey}>
-                    📅 {formatFullMonth(m.monthKey)} {m.monthKey === currentCalendarMonth ? '(Current)' : ''}
-                  </option>
-                ))}
-              </select>
+                <Calendar
+                  className={`w-3.5 h-3.5 flex-shrink-0 ${
+                    !isOwner ? 'text-amber-700' : 'text-emerald-700'
+                  }`}
+                />
+                <select
+                  value={activeMonthKey}
+                  onChange={(e) => onSelectMonth(e.target.value)}
+                  className={`text-xs font-bold bg-transparent cursor-pointer focus:outline-none ${
+                    !isOwner ? 'text-amber-950' : 'text-emerald-950'
+                  }`}
+                  title="Select month"
+                >
+                  {milestoneMonths.map((m) => (
+                    <option key={m.monthKey} value={m.monthKey}>
+                      {formatFullMonth(m.monthKey)} {m.monthKey === currentCalendarMonth ? '(Current)' : ''}
+                    </option>
+                  ))}
+                </select>
+              </div>
             ) : (
-              <span className="text-xs font-semibold text-slate-500">
-                {formatFullMonth(activeMonthKey)}
-              </span>
+              <div
+                className={`flex items-center gap-1.5 text-xs font-semibold ${
+                  !isOwner ? 'text-amber-800' : 'text-emerald-800'
+                }`}
+              >
+                <Calendar
+                  className={`w-3.5 h-3.5 ${!isOwner ? 'text-amber-600' : 'text-emerald-600'}`}
+                />
+                <span>{formatFullMonth(activeMonthKey)}</span>
+              </div>
             )}
           </div>
 
@@ -270,12 +288,22 @@ export const DailyTaskSection: React.FC<DailyTaskSectionProps> = ({
             <button
               type="button"
               onClick={() => setSelectedDate(todayStr)}
-              className="text-xs font-semibold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 px-2.5 py-1 rounded-lg transition cursor-pointer"
+              className={`text-xs font-semibold px-2.5 py-1 rounded-lg transition cursor-pointer border ${
+                !isOwner
+                  ? 'text-amber-950 bg-amber-50 hover:bg-amber-100 border-amber-200'
+                  : 'text-emerald-900 bg-emerald-50 hover:bg-emerald-100 border-emerald-200'
+              }`}
             >
               Today
             </button>
           )}
-          <span className="text-xs font-bold px-2.5 py-1 bg-slate-50 text-slate-700 border border-slate-200 rounded-full tabular-nums">
+          <span
+            className={`text-xs font-bold px-2.5 py-1 rounded-full tabular-nums border ${
+              !isOwner
+                ? 'bg-amber-50 text-amber-950 border-amber-200'
+                : 'bg-emerald-50 text-emerald-900 border-emerald-200'
+            }`}
+          >
             {completedCount}/{selectedDateTasks.length} Done
           </span>
         </div>
@@ -287,25 +315,25 @@ export const DailyTaskSection: React.FC<DailyTaskSectionProps> = ({
           <span className="font-medium text-slate-700 text-[11px] sm:text-xs">
             Days in <strong className="text-slate-900">{formatFullMonth(activeMonthKey)}</strong>:
           </span>
-          <div className="flex items-center gap-1">
-            <button
-              type="button"
+          <div className="flex items-center gap-1.5">
+            <GlassIconButton
               onClick={handlePrevDay}
               disabled={selectedDate === monthDays[0]?.dateStr}
-              className="p-1 rounded-md text-slate-400 hover:text-slate-700 hover:bg-slate-100 disabled:opacity-30 cursor-pointer text-xs"
+              size="sm"
+              variant={!isOwner ? 'amber' : 'emerald'}
               title="Previous Day"
             >
-              ◀
-            </button>
-            <button
-              type="button"
+              <ChevronLeft className="w-3.5 h-3.5 stroke-[2.5]" />
+            </GlassIconButton>
+            <GlassIconButton
               onClick={handleNextDay}
               disabled={selectedDate === monthDays[monthDays.length - 1]?.dateStr}
-              className="p-1 rounded-md text-slate-400 hover:text-slate-700 hover:bg-slate-100 disabled:opacity-30 cursor-pointer text-xs"
+              size="sm"
+              variant={!isOwner ? 'amber' : 'emerald'}
               title="Next Day"
             >
-              ▶
-            </button>
+              <ChevronRight className="w-3.5 h-3.5 stroke-[2.5]" />
+            </GlassIconButton>
           </div>
         </div>
 
@@ -329,11 +357,17 @@ export const DailyTaskSection: React.FC<DailyTaskSectionProps> = ({
                 onClick={() => setSelectedDate(d.dateStr)}
                 className={`flex-shrink-0 flex flex-col items-center justify-center min-w-[3rem] sm:min-w-[3.25rem] py-1.5 sm:py-2 px-1 rounded-xl border transition-all cursor-pointer select-none relative ${
                   isSelected
-                    ? 'bg-slate-900 text-white border-slate-900 shadow-sm ring-2 ring-emerald-500/30'
+                    ? !isOwner
+                      ? 'bg-gradient-to-b from-amber-700 via-orange-800 to-amber-900 text-white border-amber-700 shadow-sm ring-2 ring-amber-400/40'
+                      : 'bg-gradient-to-b from-emerald-700 via-emerald-800 to-teal-900 text-white border-emerald-700 shadow-sm ring-2 ring-emerald-400/40'
                     : d.isToday
-                    ? 'bg-emerald-50 text-emerald-950 border-emerald-300 font-semibold'
+                    ? !isOwner
+                      ? 'bg-amber-50 text-amber-950 border-amber-300 font-semibold'
+                      : 'bg-emerald-50 text-emerald-950 border-emerald-300 font-semibold'
                     : hasTasks
-                    ? 'bg-white text-slate-800 border-slate-200 hover:border-slate-300'
+                    ? !isOwner
+                      ? 'bg-white text-slate-800 border-slate-200 hover:border-amber-300'
+                      : 'bg-white text-slate-800 border-slate-200 hover:border-emerald-300'
                     : 'bg-slate-50/60 text-slate-600 border-transparent hover:bg-slate-100'
                 }`}
               >
@@ -350,27 +384,29 @@ export const DailyTaskSection: React.FC<DailyTaskSectionProps> = ({
                     <span
                       className={`w-1.5 h-1.5 rounded-full ${
                         allDone
-                          ? 'bg-emerald-400'
+                          ? !isOwner ? 'bg-amber-600' : 'bg-emerald-600'
                           : isSelected
-                          ? 'bg-emerald-300'
-                          : 'bg-amber-500'
+                          ? !isOwner ? 'bg-amber-200' : 'bg-emerald-200'
+                          : !isOwner ? 'bg-amber-400' : 'bg-emerald-400'
                       }`}
                       title={`${stats.done}/${stats.total} tasks completed`}
                     />
                   ) : hasSubs ? (
                     <span
                       className={`w-1 h-1 rounded-full ${
-                        isSelected ? 'bg-slate-400' : 'bg-slate-400'
+                        isSelected ? (!isOwner ? 'bg-amber-200' : 'bg-emerald-200') : 'bg-slate-400'
                       }`}
                       title={`${stats.subCount} subcategory scheduled`}
                     />
                   ) : d.isToday ? (
                     <span
                       className={`text-[8px] font-bold leading-none ${
-                        isSelected ? 'text-emerald-300' : 'text-emerald-600'
+                        isSelected
+                          ? !isOwner ? 'text-amber-200' : 'text-emerald-200'
+                          : !isOwner ? 'text-amber-600' : 'text-emerald-600'
                       }`}
                     >
-                      •
+                      ★
                     </span>
                   ) : null}
                 </div>
@@ -400,21 +436,37 @@ export const DailyTaskSection: React.FC<DailyTaskSectionProps> = ({
           )}
         </div>
 
-        {/* EMPTY STATE FOR THIS DAY */}
+        {/* EMPTY STATE FOR THIS DAY - CATEGORY SPECIFIC */}
         {subcategories.length === 0 && uncategorizedTasks.length === 0 && (
-          <div className="text-center py-6 px-3 sm:px-4 border border-dashed border-slate-200 rounded-2xl bg-slate-50/50 space-y-2.5">
-            <div className="text-xs sm:text-sm font-semibold text-slate-700">
-              No categories scheduled for this day
+          <div
+            className={`text-center py-6 px-3 sm:px-5 border border-dashed rounded-2xl space-y-3 ${
+              !isOwner
+                ? 'border-amber-200/80 bg-gradient-to-b from-amber-50/40 via-white to-slate-50/40'
+                : 'border-emerald-200/80 bg-gradient-to-b from-emerald-50/40 via-white to-slate-50/40'
+            }`}
+          >
+            <div
+              className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-bold ${
+                !isOwner
+                  ? 'bg-amber-100/80 text-amber-900'
+                  : 'bg-emerald-100/80 text-emerald-800'
+              }`}
+            >
+              <Sparkles
+                className={`w-3 h-3 ${!isOwner ? 'text-amber-600' : 'text-emerald-600'}`}
+              />
+              <span>{categoryConfig.presetGroupLabel}</span>
             </div>
-            <p className="text-xs text-slate-400 max-w-md mx-auto">
-              Plan focus routines for this day. Click a preset below or type a category:
+            
+            <p className="text-xs text-slate-600 max-w-md mx-auto">
+              {categoryConfig.contextDescription} Choose a tailored preset below to start planning:
             </p>
 
-            <div className="space-y-2 pt-1 max-w-lg mx-auto">
+            <div className="space-y-2.5 pt-1 max-w-xl mx-auto">
               {recentCustomSubNames.length > 0 && (
                 <div>
                   <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1">
-                    Recent:
+                    Recently Used:
                   </div>
                   <div className="flex flex-wrap items-center justify-center gap-1.5">
                     {recentCustomSubNames.slice(0, 4).map((name) => (
@@ -422,7 +474,7 @@ export const DailyTaskSection: React.FC<DailyTaskSectionProps> = ({
                         key={name}
                         type="button"
                         onClick={() => handleAddSub(name)}
-                        className="text-xs font-semibold text-slate-800 bg-white hover:bg-slate-100 border border-slate-300 px-2.5 py-1 rounded-lg transition cursor-pointer shadow-2xs"
+                        className="text-xs font-semibold text-slate-800 bg-white hover:bg-slate-100 border border-slate-300 px-2.5 py-1 rounded-lg transition cursor-pointer shadow-2xs active:scale-95"
                       >
                         + {name}
                       </button>
@@ -432,22 +484,78 @@ export const DailyTaskSection: React.FC<DailyTaskSectionProps> = ({
               )}
 
               <div>
-                <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1">
-                  Presets:
+                <div
+                  className={`text-[10px] font-bold uppercase tracking-wider mb-1.5 ${
+                    !isOwner ? 'text-amber-800' : 'text-emerald-700/80'
+                  }`}
+                >
+                  {categoryConfig.categoryName} Presets:
                 </div>
                 <div className="flex flex-wrap items-center justify-center gap-1.5">
-                  {suggestions.map((preset) => (
+                  {categoryConfig.subcategories.map((preset) => (
                     <button
                       key={preset}
                       type="button"
                       onClick={() => handleAddSub(preset)}
-                      className="text-xs font-semibold text-emerald-800 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 px-2.5 py-1 rounded-lg transition cursor-pointer"
+                      className={`text-xs font-semibold px-2.5 py-1 rounded-lg transition cursor-pointer active:scale-95 shadow-2xs ${
+                        !isOwner
+                          ? 'text-amber-950 bg-amber-50 hover:bg-amber-100/80 border border-amber-200/80 hover:border-amber-300'
+                          : 'text-emerald-900 bg-emerald-50 hover:bg-emerald-100/80 border border-emerald-200/80 hover:border-emerald-300'
+                      }`}
                     >
                       + {preset}
                     </button>
                   ))}
                 </div>
               </div>
+
+              {/* Category-Specific Quick Tasks */}
+              {categoryConfig.suggestedTasks && categoryConfig.suggestedTasks.length > 0 && (
+                <div
+                  className={`pt-2 border-t ${
+                    !isOwner ? 'border-amber-100/80' : 'border-emerald-100/80'
+                  }`}
+                >
+                  <div className="text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1.5">
+                    Quick Sample Tasks for {categoryConfig.categoryName}:
+                  </div>
+                  <div className="flex flex-col gap-1.5 text-left max-w-md mx-auto">
+                    {categoryConfig.suggestedTasks.slice(0, 3).map((taskItem, idx) => (
+                      <button
+                        key={idx}
+                        type="button"
+                        onClick={async () => {
+                          let subId: string | undefined = undefined;
+                          if (taskItem.defaultSub) {
+                            const existing = subcategories.find((s) => s.name === taskItem.defaultSub);
+                            if (existing) {
+                              subId = existing.id;
+                            } else {
+                              const createdId = await onAddSubcategory(goal.id, taskItem.defaultSub, selectedDate);
+                              if (createdId) subId = createdId;
+                            }
+                          }
+                          onAddTask(goal.id, taskItem.text, taskItem.priority, subId, selectedDate);
+                        }}
+                        className={`text-xs p-2 rounded-xl transition flex items-center justify-between gap-2 group cursor-pointer border ${
+                          !isOwner
+                            ? 'text-slate-700 hover:text-amber-950 bg-white/80 hover:bg-amber-50/60 border-slate-200 hover:border-amber-200'
+                            : 'text-slate-700 hover:text-emerald-900 bg-white/80 hover:bg-emerald-50/60 border-slate-200 hover:border-emerald-200'
+                        }`}
+                      >
+                        <span className="truncate">{taskItem.text}</span>
+                        <span
+                          className={`text-[10px] font-semibold flex items-center gap-0.5 flex-shrink-0 group-hover:underline ${
+                            !isOwner ? 'text-amber-700' : 'text-emerald-600'
+                          }`}
+                        >
+                          <Plus className="w-3 h-3" /> Add
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         )}
@@ -464,6 +572,7 @@ export const DailyTaskSection: React.FC<DailyTaskSectionProps> = ({
             canAdd={false}
             canRename={false}
             canEditTasks={true}
+            isOwner={isOwner}
             onToggleTask={onToggleTask}
             onDeleteTask={onDeleteTask}
           />
@@ -471,32 +580,39 @@ export const DailyTaskSection: React.FC<DailyTaskSectionProps> = ({
 
         {subcategories.map((sub) => {
           const isExpanded = expandedIds[sub.id] !== undefined ? expandedIds[sub.id] : allExpanded;
+          
+          // Role checking
+          const subcategoryRole = sub.editorRole || null;
+          const currentUserRole = professionalRole || null;
+          const canEditThisSub = isOwner || canEditSubcategoryTasks(sub);
+
           return (
             <SubcategoryBlock
               key={sub.id}
               name={sub.name}
               expanded={isExpanded}
               onToggle={() => toggleExpanded(sub.id)}
-              onRename={(nextName) => onRenameSubcategory(goal.id, sub.id, nextName)}
-              onDelete={() => onDeleteSubcategory(goal.id, sub.id)}
+              onRename={canEditThisSub ? (nextName) => onRenameSubcategory(goal.id, sub.id, nextName) : undefined}
+              onDelete={canEditThisSub && (isOwner || canManageCategories) ? () => onDeleteSubcategory(goal.id, sub.id) : undefined}
               tasks={selectedDateTasks.filter((t) => t.subcategoryId === sub.id)}
               goal={goal}
               subcategoryId={sub.id}
               selectedDate={selectedDate}
               editorRole={sub.editorRole || ''}
-              canDelete={true}
-              canAdd={true}
-              canRename={true}
-              canEditTasks={true}
+              canDelete={canEditThisSub && (isOwner || canManageCategories)}
+              canAdd={canEditThisSub}
+              canRename={canEditThisSub}
+              canEditTasks={canEditThisSub}
+              isOwner={isOwner}
               onSetRole={
-                onSetSubcategoryRole
+                isOwner && onSetSubcategoryRole
                   ? (nextRole) => onSetSubcategoryRole(goal.id, sub.id, nextRole)
                   : undefined
               }
-              onAddTask={onAddTask}
-              onUpdateTask={onUpdateTask}
-              onToggleTask={onToggleTask}
-              onDeleteTask={onDeleteTask}
+              onAddTask={canEditThisSub ? onAddTask : undefined}
+              onUpdateTask={canEditThisSub ? onUpdateTask : undefined}
+              onToggleTask={canEditThisSub ? onToggleTask : undefined}
+              onDeleteTask={canEditThisSub ? onDeleteTask : undefined}
             />
           );
         })}
@@ -512,15 +628,23 @@ export const DailyTaskSection: React.FC<DailyTaskSectionProps> = ({
       >
         <input
           type="text"
-          placeholder="New subcategory (e.g. Chest Day, Leg Day)..."
+          placeholder={categoryConfig.placeholder}
           value={newSubName}
           onChange={(e) => setNewSubName(e.target.value)}
-          className="flex-1 text-xs sm:text-sm bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-slate-800 placeholder-slate-400 focus:outline-none focus:bg-white focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600"
+          className={`flex-1 text-xs sm:text-sm bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-slate-800 placeholder-slate-400 focus:outline-none focus:bg-white focus:ring-2 ${
+            !isOwner
+              ? 'focus:ring-amber-500/20 focus:border-amber-600'
+              : 'focus:ring-emerald-500/20 focus:border-emerald-600'
+          }`}
         />
         <button
           type="submit"
           disabled={!newSubName.trim()}
-          className="w-full sm:w-auto px-4 py-2.5 bg-slate-900 hover:bg-slate-800 disabled:opacity-40 text-white text-xs sm:text-sm font-semibold rounded-xl transition cursor-pointer shrink-0"
+          className={`w-full sm:w-auto px-4 py-2.5 disabled:opacity-40 text-white text-xs sm:text-sm font-semibold rounded-xl transition cursor-pointer shrink-0 shadow-2xs active:scale-98 ${
+            !isOwner
+              ? 'bg-gradient-to-r from-amber-700 to-orange-800 hover:from-amber-800 hover:to-orange-900'
+              : 'bg-gradient-to-r from-emerald-700 to-teal-800 hover:from-emerald-800 hover:to-teal-900'
+          }`}
         >
           + Add Category
         </button>

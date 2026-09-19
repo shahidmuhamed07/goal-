@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { AlertTriangle, Check, Copy } from 'lucide-react';
 import firebaseConfig from '../../firebase-applet-config.json';
 import goalPathLogo from '../assets/images/goal_path_logo_1787491130948.jpg';
 
@@ -44,7 +45,8 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, loading, erro
         {isUnauthorizedDomain ? (
           <div className="bg-amber-50 border border-amber-200 text-amber-900 text-xs px-4 py-3.5 rounded-2xl mb-6 text-left space-y-2.5">
             <div className="font-bold flex items-center gap-1.5 text-amber-800">
-              <span>⚠️ Domain authorization required</span>
+              <AlertTriangle className="w-4 h-4 text-amber-700 flex-shrink-0" />
+              <span>Domain authorization required</span>
             </div>
             <p className="leading-relaxed text-amber-800">
               Firebase blocked login because this preview domain is not yet in your Firebase authorized domains list.
@@ -54,9 +56,19 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, loading, erro
               <button
                 type="button"
                 onClick={copyHostname}
-                className="text-[11px] font-semibold bg-amber-200/70 hover:bg-amber-200 text-amber-900 px-2.5 py-1 rounded-lg transition cursor-pointer flex-shrink-0"
+                className="text-[11px] font-semibold bg-amber-200/70 hover:bg-amber-200 text-amber-900 px-2.5 py-1 rounded-lg transition cursor-pointer flex-shrink-0 flex items-center gap-1"
               >
-                {copied ? 'Copied ✓' : 'Copy'}
+                {copied ? (
+                  <>
+                    <Check className="w-3 h-3 text-emerald-700" />
+                    <span>Copied</span>
+                  </>
+                ) : (
+                  <>
+                    <Copy className="w-3 h-3 text-amber-800" />
+                    <span>Copy</span>
+                  </>
+                )}
               </button>
             </div>
             <div className="text-[11px] text-amber-800 space-y-1">

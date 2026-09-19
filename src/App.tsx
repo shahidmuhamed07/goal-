@@ -26,6 +26,25 @@ import {
   runTransaction,
 } from 'firebase/firestore';
 
+import {
+  Plus,
+  Target,
+  Edit2,
+  Trash2,
+  Check,
+  CheckCircle2,
+  Lock,
+  ShieldCheck,
+  LogOut,
+  Search,
+  Users,
+  Settings,
+  Flag,
+  X,
+  ArrowRight,
+  Sparkles,
+} from 'lucide-react';
+
 import { auth, db, googleProvider } from './firebase';
 import {
   Goal,
@@ -48,15 +67,17 @@ import {
   PROFESSIONAL_ROLES,
   getMonthDays,
   formatDisplayDate,
+  addMonthsToKey,
 } from './utils';
 
 import { LoginScreen } from './components/LoginScreen';
-import { PriorityBadge, ProgressBar } from './components/UIElements';
+import { PriorityBadge, ProgressBar, GoalPathLogo, GlassIconButton, GlassBadge } from './components/UIElements';
 import { DailyTaskSection } from './components/DailyTaskSection';
 import { MonthlyMilestoneSection } from './components/MonthlyMilestoneSection';
 import { CollaboratorsPanel } from './components/CollaboratorsPanel';
 import { CreateGoalModal } from './components/CreateGoalModal';
 import { GoalAssignmentModal } from './components/GoalAssignmentModal';
+import { GiveUpInterventionModal } from './components/GiveUpInterventionModal';
 import goalPathLogo from './assets/images/goal_path_logo_1787491130948.jpg';
 import goalPathHero from './assets/images/goal_path_hero_1787491145015.jpg';
 
@@ -117,6 +138,8 @@ export default function App() {
   const [goals, setGoals] = useState<Goal[]>([]);
   const [dataLoading, setDataLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [giveUpTargetGoal, setGiveUpTargetGoal] = useState<Goal | null>(null);
 
   // UI View State
   const [activeTab, setActiveTab] = useState<'dashboard' | 'today' | 'detail' | 'connect'>('dashboard');
@@ -248,6 +271,7 @@ export default function App() {
 
   // Realtime client list & active client profile listener
   const [activeClientProfile, setActiveClientProfile] = useState<UserProfile | null>(null);
+  const [isAccountMenuOpen, setIsAccountMenuOpen] = useState(false);
 
   useEffect(() => {
     if (!user || isDemoMode) {
@@ -365,17 +389,108 @@ export default function App() {
   const professionalRole = currentCollaborator?.role || approvedOutgoingReq?.role || null;
   const pendingIncoming = incomingRequests.filter((r) => r.status === 'pending');
 
-  // Any authenticated collaborator in this workspace has full permission to edit and manage routines & tasks
-  const isGoalAssignedToMe = (_goalId: string) => {
-    return true;
+  // Role diagnostic log
+  useEffect(() => {
+    if (user && !isOwner) {
+      console.log('[Professional Role Diagnosis]', {
+        userId: user.uid,
+        userEmail: user.email,
+        workspaceUid,
+        isOwner,
+        workspaceClientName: workspaceProfile?.displayName || workspaceProfile?.email,
+        currentCollaboratorFound: currentCollaborator,
+        approvedOutgoingReqFound: approvedOutgoingReq,
+        computedProfessionalRole: professionalRole,
+        collaboratorsInWorkspace: workspaceProfile?.collaborators,
+      });
+    }
+  }, [user, isOwner, workspaceUid, workspaceProfile, currentCollaborator, approvedOutgoingReq, professionalRole]);
+
+  // Any authenticated collaborator in this workspace has permission to view/interact with assigned goals
+  const isGoalAssignedToMe = (goalId: string) => {
+    if (isOwner) return true;
+    if (!currentCollaborator) return true;
+    // If collaborator has no assignedGoalIds specified OR empty array (e.g. approved without restrictions), grant access to workspace goals
+    if (!currentCollaborator.assignedGoalIds || currentCollaborator.assignedGoalIds.length === 0) {
+      return true;
+    }
+    return currentCollaborator.assignedGoalIds.includes(goalId);
   };
 
-  const canEditSubcategoryTasks = (_goalId: string, _sub?: Subcategory) => {
-    return true;
+  const handleAssignGoalToMe = async (goalId: string) => {
+    if (!user || isOwner || !workspaceUid) return;
+    try {
+      const clientRef = doc(db, 'users', workspaceUid);
+      const snap = await getDoc(clientRef);
+      if (!snap.exists()) return;
+      const data = snap.data();
+      const collabs: Collaborator[] = data.collaborators || [];
+      const updated = collabs.map((c) => {
+        if (c.uid === user.uid) {
+          const prev = c.assignedGoalIds || [];
+          return {
+            ...c,
+            assignedGoalIds: Array.from(new Set([...prev, goalId])),
+          };
+        }
+        return c;
+      });
+      await updateDoc(clientRef, { collaborators: updated });
+    } catch (err) {
+      console.error('Assign goal to me error:', err);
+    }
   };
 
-  const canEditTaskRecord = (_goalId: string, _task?: TaskItem) => {
-    return true;
+  const canEditSubcategoryTasks = (goalId: string, sub?: Subcategory) => {
+    if (isOwner) return true;
+    if (!isGoalAssignedToMe(goalId)) {
+      console.log('[canEditSubcategoryTasks] Goal not assigned to collaborator:', { goalId });
+      return false;
+    }
+
+    const currentUserRole = professionalRole || null;
+    const subcategoryRole = sub?.editorRole || null;
+
+    console.log('[canEditSubcategoryTasks Comparison]', {
+      goalId,
+      subcategoryId: sub?.id,
+      subcategoryName: sub?.name,
+      currentUserRole,
+      subcategoryRole,
+      isOwner,
+    });
+
+    // If no role tag is assigned to the subcategory ("Client & Pros" / null / undefined / ""), any assigned pro can edit
+    if (!subcategoryRole || subcategoryRole.trim() === '') {
+      return true;
+    }
+
+    if (!currentUserRole) {
+      console.warn('[canEditSubcategoryTasks MISMATCH - No role found for current user]', {
+        currentUserRole,
+        subcategoryRole,
+      });
+      return false;
+    }
+
+    const matches = currentUserRole.trim().toLowerCase() === subcategoryRole.trim().toLowerCase();
+    console.log('[canEditSubcategoryTasks Result]', {
+      currentUserRole,
+      subcategoryRole,
+      matches,
+    });
+
+    return matches;
+  };
+
+  const canEditTaskRecord = (goalId: string, task?: TaskItem) => {
+    if (isOwner) return true;
+    if (!task) return true;
+    if (!task.subcategoryId) return true;
+    const goal = goals.find((g) => g.id === goalId);
+    if (!goal) return true;
+    const sub = (goal.subcategories || []).find((s) => s.id === task.subcategoryId);
+    return canEditSubcategoryTasks(goalId, sub);
   };
 
   // Computed Current Goal
@@ -692,6 +807,55 @@ export default function App() {
     }
   };
 
+  const handleExtendGoalDeadline = async (goalId: string, monthsToAdd: number = 1) => {
+    const targetGoal = goals.find((g) => g.id === goalId);
+    if (!targetGoal) return;
+
+    const count = Math.max(1, monthsToAdd);
+    const lastMonthKey =
+      targetGoal.milestones.length > 0
+        ? targetGoal.milestones[targetGoal.milestones.length - 1].monthKey
+        : targetGoal.targetDate || getCurrentMonthKey();
+
+    const newMilestones: Milestone[] = [];
+    for (let i = 1; i <= count; i++) {
+      const nextMonthKey = addMonthsToKey(lastMonthKey, i);
+      newMilestones.push({
+        id: `m-${Date.now()}-${i}`,
+        monthKey: nextMonthKey,
+        title: `Extended Focus (${formatFullMonth(nextMonthKey)})`,
+        completed: false,
+      });
+    }
+
+    const finalTargetDate = addMonthsToKey(lastMonthKey, count);
+    const updatedMilestones = [...targetGoal.milestones, ...newMilestones];
+    const updatedTargetDate = finalTargetDate > targetGoal.targetDate ? finalTargetDate : targetGoal.targetDate;
+
+    if (isDemoMode) {
+      setGoals((prev) =>
+        prev.map((g) =>
+          g.id === goalId
+            ? { ...g, targetDate: updatedTargetDate, milestones: updatedMilestones }
+            : g
+        )
+      );
+      setSuccessMessage(`Added +${count} ${count === 1 ? 'month' : 'months'} to "${targetGoal.title}"! New horizon: ${formatFullMonth(updatedTargetDate)}. Progress is progress!`);
+      return;
+    }
+
+    try {
+      await updateDoc(doc(db, 'goals', goalId), {
+        targetDate: updatedTargetDate,
+        milestones: updatedMilestones,
+      });
+      setSuccessMessage(`Added +${count} ${count === 1 ? 'month' : 'months'} to "${targetGoal.title}"! New horizon: ${formatFullMonth(updatedTargetDate)}. Progress is progress!`);
+    } catch (err) {
+      console.error('Extend goal error:', err);
+      setErrorMessage('Failed to extend goal timeline.');
+    }
+  };
+
   const handleToggleMilestone = async (goalId: string, milestoneId: string) => {
     if (!isOwner && !isGoalAssignedToMe(goalId)) return;
     const targetGoal = goals.find((g) => g.id === goalId);
@@ -746,8 +910,7 @@ export default function App() {
 
   const handleAddSubcategory = async (goalId: string, name: string, date?: string): Promise<string | null> => {
     if (!isOwner && !isGoalAssignedToMe(goalId)) {
-      setErrorMessage('You are not authorized to add subcategories to this goal.');
-      return null;
+      await handleAssignGoalToMe(goalId);
     }
     const targetGoal = goals.find((g) => g.id === goalId);
     if (!targetGoal) return null;
@@ -880,8 +1043,7 @@ export default function App() {
 
     if (!isOwner) {
       if (!isGoalAssignedToMe(goalId)) {
-        setErrorMessage('You are not assigned to edit this goal by the client.');
-        return;
+        await handleAssignGoalToMe(goalId);
       }
     }
 
@@ -1257,16 +1419,72 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen flex flex-col bg-slate-50/90 text-slate-900 relative selection:bg-emerald-100 selection:text-emerald-900 overflow-x-hidden">
-      {/* Non-intrusive ambient background layer */}
+    <div
+      className={`min-h-screen flex flex-col transition-colors duration-300 ${
+        !isOwner
+          ? 'bg-[#fffaf3] selection:bg-amber-200 selection:text-amber-950'
+          : 'bg-slate-50/90 selection:bg-emerald-100 selection:text-emerald-900'
+      } text-slate-900 relative overflow-x-hidden`}
+    >
+      {/* Non-intrusive ambient background layer with palette shift for Trainer Mode (Amber/Clay theme) */}
       <div className="fixed inset-0 pointer-events-none -z-10 overflow-hidden">
         {/* Delicate geometric micro-dot grid */}
         <div className="absolute inset-0 bg-[radial-gradient(#cbd5e1_1px,transparent_1px)] [background-size:24px_24px] opacity-40" />
         {/* Soft, low-contrast ambient color washes */}
-        <div className="absolute -top-32 right-1/4 w-[500px] h-[500px] bg-emerald-100/35 rounded-full blur-3xl" />
-        <div className="absolute top-1/2 -left-32 w-[450px] h-[450px] bg-teal-100/25 rounded-full blur-3xl" />
-        <div className="absolute bottom-10 right-10 w-[400px] h-[400px] bg-slate-200/40 rounded-full blur-3xl" />
+        <div
+          className={`absolute -top-32 right-1/4 w-[500px] h-[500px] rounded-full blur-3xl transition-all duration-700 ${
+            !isOwner ? 'bg-amber-200/40' : 'bg-emerald-100/35'
+          }`}
+        />
+        <div
+          className={`absolute top-1/2 -left-32 w-[450px] h-[450px] rounded-full blur-3xl transition-all duration-700 ${
+            !isOwner ? 'bg-orange-200/30' : 'bg-teal-100/25'
+          }`}
+        />
+        <div
+          className={`absolute bottom-10 right-10 w-[400px] h-[400px] rounded-full blur-3xl transition-all duration-700 ${
+            !isOwner ? 'bg-amber-100/40' : 'bg-slate-200/40'
+          }`}
+        />
       </div>
+
+      {/* DISTINCT TRAINER MODE COMMAND BAR AT THE VERY TOP - REFINED SOFT WARM AMBER / CLAY THEME */}
+      {!isOwner && workspaceProfile && (
+        <div className="bg-amber-50/95 text-amber-950 border-b border-amber-200/90 px-3 sm:px-6 py-2 flex items-center justify-between gap-3 shadow-xs sticky top-0 z-40 backdrop-blur-md">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <span className="w-7 h-7 rounded-lg bg-amber-100 border border-amber-300 flex items-center justify-center text-amber-800 shrink-0 shadow-2xs">
+              <Users className="w-4 h-4" />
+            </span>
+            <div className="min-w-0">
+              <div className="text-xs sm:text-sm font-medium tracking-tight truncate flex items-center gap-2">
+                <span className="bg-amber-200/80 text-amber-950 border border-amber-300 px-2 py-0.5 rounded text-[10px] uppercase font-bold tracking-wider shadow-2xs">
+                  Trainer Mode
+                </span>
+                <span className="text-amber-950 font-semibold">
+                  Managing <span className="font-bold underline decoration-amber-400">{workspaceProfile.displayName || 'Client'}</span>'s Workspace
+                </span>
+                <span className="text-amber-700 font-normal text-xs hidden md:inline">
+                  • Role: {professionalRole || 'Trainer'}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* SINGLE PRIMARY EXIT BUTTON: KEPT IN CLEAR GREEN INDICATING RETURN TO MAIN WORKSPACE */}
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              type="button"
+              onClick={() => handleSwitchWorkspace(user.uid)}
+              className="bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white font-bold text-xs px-3.5 py-1.5 rounded-xl border border-emerald-500 shadow-2xs transition flex items-center gap-1.5 cursor-pointer active:scale-95"
+              title="Return to your personal dashboard"
+            >
+              <ArrowRight className="w-3.5 h-3.5 rotate-180 text-white" />
+              <span>Exit to My Workspace</span>
+            </button>
+          </div>
+        </div>
+      )}
+
       {isDemoMode && (
         <div className="bg-emerald-700 text-white text-xs px-4 py-2 flex flex-col sm:flex-row items-center justify-between gap-2 shadow-xs">
           <div className="flex items-center gap-2">
@@ -1283,254 +1501,414 @@ export default function App() {
         </div>
       )}
 
+      {/* SUCCESS NOTIFICATION BANNER */}
+      {successMessage && (
+        <div className={`${
+          !isOwner
+            ? 'bg-amber-50/95 border-b border-amber-200/90 text-amber-950'
+            : 'bg-emerald-50/95 border-b border-emerald-200/90 text-emerald-950'
+        } backdrop-blur-md px-4 py-2.5 text-xs font-semibold flex items-center justify-between shadow-2xs animate-in fade-in duration-150`}>
+          <div className="flex items-center gap-2">
+            <Sparkles className={`w-4 h-4 ${!isOwner ? 'text-amber-600' : 'text-emerald-600'} flex-shrink-0`} />
+            <span>{successMessage}</span>
+          </div>
+          <button
+            onClick={() => setSuccessMessage(null)}
+            className={`p-1 ${!isOwner ? 'text-amber-500 hover:text-amber-800' : 'text-emerald-500 hover:text-emerald-800'} ml-4 cursor-pointer`}
+            title="Dismiss"
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      )}
+
       {/* ERROR NOTIFICATION BANNER */}
       {errorMessage && (
         <div className="bg-rose-50 border-b border-rose-200 px-4 py-2 text-xs text-rose-700 flex items-center justify-between">
           <span>{errorMessage}</span>
           <button
             onClick={() => setErrorMessage(null)}
-            className="font-bold text-rose-500 hover:text-rose-800 ml-4 cursor-pointer"
+            className="p-1 text-rose-500 hover:text-rose-800 ml-4 cursor-pointer"
+            title="Dismiss error"
           >
-            ✕
+            <X className="w-3.5 h-3.5" />
           </button>
         </div>
       )}
 
       {/* TOP NAVIGATION BAR */}
-      <header className="bg-white border-b border-slate-200 sticky top-0 z-30 shadow-xs">
-        <div className="max-w-6xl mx-auto px-3 sm:px-6 min-h-[4rem] py-2 sm:py-0 flex flex-wrap sm:flex-nowrap items-center justify-between gap-2.5">
-          {/* Logo / Brand */}
+      <header
+        className={`sticky ${
+          !isOwner && workspaceProfile ? 'top-[45px]' : 'top-0'
+        } z-30 shadow-xs transition-colors duration-200 ${
+          !isOwner
+            ? 'bg-white/95 border-b border-amber-200/90 backdrop-blur-md'
+            : 'bg-white border-b border-slate-200'
+        }`}
+      >
+        <div className="max-w-6xl mx-auto px-3 sm:px-6 h-14 sm:h-16 flex items-center justify-between gap-3">
+          {/* Logo / Brand with GoalPath vector integrated */}
           <div
             onClick={() => {
               setSelectedGoalId(null);
               setActiveTab('dashboard');
             }}
-            className="flex items-center gap-2.5 cursor-pointer select-none group flex-shrink-0"
+            className="cursor-pointer select-none group flex-shrink-0"
           >
-            <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl overflow-hidden bg-emerald-50 border border-emerald-500/20 shadow-xs flex items-center justify-center flex-shrink-0 group-hover:scale-105 transition-transform duration-200">
-              <img
-                src={goalPathLogo}
-                alt="Goal Path Logo"
-                className="w-full h-full object-cover"
-                referrerPolicy="no-referrer"
-              />
-            </div>
-            <div>
-              <div className="font-bold text-slate-900 leading-none text-sm sm:text-base">Goal Path</div>
-              <span className="text-[10px] sm:text-[11px] text-slate-400 font-medium hidden xs:inline">Daily & Monthly Alignment</span>
-            </div>
+            <GoalPathLogo size="sm" showText={true} />
           </div>
 
-          {/* Quick Workspace Switcher if connected to clients */}
-          {clientList.length > 0 && (
-            <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl text-xs font-semibold max-w-[200px] sm:max-w-none">
-              <span className="text-[11px] text-slate-500 font-medium pl-1 hidden lg:inline">
-                Workspace:
-              </span>
-              <select
-                value={workspaceUid || user.uid}
-                onChange={(e) => handleSwitchWorkspace(e.target.value)}
-                className="bg-white border border-slate-200 rounded-lg px-2 py-1 text-slate-800 text-[11px] sm:text-xs font-bold focus:outline-none focus:ring-1 focus:ring-emerald-500 cursor-pointer max-w-[150px] sm:max-w-[220px] truncate"
-              >
-                <option value={user.uid}>👤 My Personal Goals</option>
-                {clientList.map((c) => {
-                  const collab = (c.collaborators || []).find((x) => x.uid === user.uid);
-                  const roleStr = collab?.role ? ` (${collab.role})` : '';
-                  return (
-                    <option key={c.id} value={c.id || ''}>
-                      🎯 {c.displayName || c.email || 'Client'}{roleStr}
-                    </option>
-                  );
-                })}
-              </select>
-            </div>
-          )}
+          {/* Right Side Controls: Client Access + New Goal + Account Avatar in ONE Line */}
+          <div className="flex items-center gap-2 sm:gap-3 flex-shrink-0">
+            {/* Minimal Client Workspace Indicator - Single Exit is on top command bar, so no redundant exit here */}
+            {!isOwner && workspaceProfile ? (
+              <div className="flex items-center gap-1.5 bg-amber-50 border border-amber-200/90 px-2.5 py-1 rounded-xl text-xs shadow-2xs">
+                <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse shrink-0" />
+                <span
+                  className="font-bold text-amber-950 text-[11px] sm:text-xs truncate max-w-[120px] sm:max-w-[180px]"
+                  title={workspaceProfile.displayName || workspaceProfile.email || 'Client'}
+                >
+                  {workspaceProfile.displayName || workspaceProfile.email || 'Client'}
+                </span>
+                <span className="text-[10px] font-bold text-amber-800 bg-amber-100 px-1.5 py-0.5 rounded-md uppercase hidden xs:inline">
+                  {professionalRole || 'Trainer'}
+                </span>
+              </div>
+            ) : clientList.length > 0 ? (
+              <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl text-xs font-semibold">
+                <span className="text-[10px] text-slate-400 uppercase font-bold pl-1 hidden md:inline">
+                  Workspace:
+                </span>
+                <select
+                  value={workspaceUid || user.uid}
+                  onChange={(e) => handleSwitchWorkspace(e.target.value)}
+                  className="bg-white border border-slate-200 rounded-lg px-2 py-1 text-slate-800 text-[11px] sm:text-xs font-bold focus:outline-none focus:ring-1 focus:ring-emerald-500 cursor-pointer max-w-[120px] sm:max-w-[180px] truncate"
+                >
+                  <option value={user.uid}>My Workspace</option>
+                  {clientList.map((c) => {
+                    const collab = (c.collaborators || []).find((x) => x.uid === user.uid);
+                    const roleStr = collab?.role ? ` (${collab.role})` : '';
+                    return (
+                      <option key={c.id} value={c.id || ''}>
+                        Client: {c.displayName || c.email || 'Client'}{roleStr}
+                      </option>
+                    );
+                  })}
+                </select>
+              </div>
+            ) : null}
 
-          {/* View Switcher Tabs */}
-          <nav className="flex items-center bg-slate-100 p-1 rounded-xl gap-0.5 sm:gap-1 text-[11px] sm:text-xs font-semibold order-last sm:order-none w-full sm:w-auto justify-center sm:justify-start">
+            {/* Create Goal Button for Owner */}
+            {isOwner && (
+              <button
+                type="button"
+                onClick={() => setIsModalOpen(true)}
+                className="bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white font-bold text-xs sm:text-sm px-3 sm:px-4 py-1.5 sm:py-2 rounded-xl shadow-2xs transition flex items-center gap-1.5 cursor-pointer"
+              >
+                <Plus className="w-3.5 h-3.5 sm:w-4 sm:h-4 stroke-[2.5]" />
+                <span className="hidden xs:inline">New Goal</span>
+              </button>
+            )}
+
+            {/* User Account Avatar (No text sign out in header) */}
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => setIsAccountMenuOpen((prev) => !prev)}
+                className="rounded-full focus:outline-none focus:ring-2 focus:ring-emerald-500/40 cursor-pointer block"
+                title="Account Settings & Profile"
+              >
+                {user.photoURL ? (
+                  <img
+                    src={user.photoURL}
+                    alt={user.displayName || 'User'}
+                    className="w-8 h-8 rounded-full border border-slate-200 object-cover shadow-2xs hover:ring-2 hover:ring-emerald-300 transition"
+                  />
+                ) : (
+                  <div className="w-8 h-8 rounded-full bg-emerald-100 text-emerald-800 flex items-center justify-center text-xs font-bold border border-emerald-200 shadow-2xs hover:ring-2 hover:ring-emerald-300 transition">
+                    {user.email ? user.email.charAt(0).toUpperCase() : 'U'}
+                  </div>
+                )}
+              </button>
+
+              {/* Account Dropdown Menu */}
+              {isAccountMenuOpen && (
+                <>
+                  <div
+                    className="fixed inset-0 z-40"
+                    onClick={() => setIsAccountMenuOpen(false)}
+                  />
+                  <div className="absolute right-0 mt-2 w-56 bg-white border border-slate-200 rounded-2xl shadow-lg p-3 z-50 space-y-2">
+                    <div className="pb-2 border-b border-slate-100">
+                      <div className="text-xs font-bold text-slate-900 truncate">
+                        {user.displayName || 'Goal Path User'}
+                      </div>
+                      <div className="text-[11px] text-slate-500 truncate">{user.email}</div>
+                      {!isOwner && (
+                        <div className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded mt-1.5 inline-block">
+                          Active Role: {professionalRole || 'Trainer'}
+                        </div>
+                      )}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsAccountMenuOpen(false);
+                        handleSignOut();
+                      }}
+                      className="w-full text-left text-xs font-semibold text-rose-600 hover:bg-rose-50 px-2.5 py-2 rounded-xl transition flex items-center gap-2 cursor-pointer"
+                    >
+                      <LogOut className="w-3.5 h-3.5" />
+                      <span>Sign Out</span>
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      </header>
+
+      {/* VIEW SWITCHER TABS BAR */}
+      <div
+        className={`border-b py-2 px-3 sm:px-6 transition-colors duration-200 ${
+          !isOwner
+            ? 'bg-amber-50/60 border-amber-200/80'
+            : 'bg-slate-50 border-slate-200/90'
+        }`}
+      >
+        <div className="max-w-6xl mx-auto flex items-center justify-between gap-3 flex-wrap">
+          <nav
+            className={`flex items-center p-1 rounded-xl gap-1 text-xs font-semibold overflow-x-auto scrollbar-none ${
+              !isOwner ? 'bg-amber-100/70' : 'bg-slate-200/70'
+            }`}
+          >
             <button
+              type="button"
               onClick={() => {
                 setSelectedGoalId(null);
                 setActiveTab('dashboard');
               }}
-              className={`flex-1 sm:flex-initial text-center px-2.5 sm:px-3 py-1.5 rounded-lg transition cursor-pointer ${
+              className={`px-3 py-1.5 rounded-lg transition whitespace-nowrap cursor-pointer ${
                 activeTab === 'dashboard'
-                  ? 'bg-white text-slate-900 shadow-xs font-bold'
+                  ? !isOwner
+                    ? 'bg-amber-700 text-white shadow-xs font-bold'
+                    : 'bg-white text-slate-900 shadow-xs font-bold'
+                  : !isOwner
+                  ? 'text-amber-950/80 hover:text-amber-950'
                   : 'text-slate-600 hover:text-slate-900'
               }`}
             >
               All Goals ({goals.length})
             </button>
+
+            {/* TODAY'S FOCUS WITH OPTICALLY CENTERED CIRCLE */}
             <button
+              type="button"
               onClick={() => setActiveTab('today')}
-              className={`flex-1 sm:flex-initial justify-center px-2.5 sm:px-3 py-1.5 rounded-lg transition flex items-center gap-1.5 cursor-pointer ${
+              className={`px-3 py-1.5 rounded-lg transition flex items-center justify-center gap-1.5 whitespace-nowrap cursor-pointer ${
                 activeTab === 'today'
-                  ? 'bg-white text-slate-900 shadow-xs font-bold'
+                  ? !isOwner
+                    ? 'bg-amber-700 text-white shadow-xs font-bold'
+                    : 'bg-white text-slate-900 shadow-xs font-bold'
+                  : !isOwner
+                  ? 'text-amber-950/80 hover:text-amber-950'
                   : 'text-slate-600 hover:text-slate-900'
               }`}
             >
               <span>Today's Focus</span>
-              <span className="bg-emerald-100 text-emerald-800 text-[10px] px-1.5 rounded-full font-bold">
+              <span
+                className={`inline-flex items-center justify-center min-w-[20px] h-[20px] px-1 text-[11px] font-bold rounded-full leading-none shadow-2xs shrink-0 ${
+                  !isOwner
+                    ? 'bg-amber-200 text-amber-950'
+                    : 'bg-emerald-100 text-emerald-800'
+                }`}
+              >
                 {allTodayTasks.filter((t) => !t.completed).length}
               </span>
             </button>
+
             <button
+              type="button"
               onClick={() => setActiveTab('connect')}
-              className={`flex-1 sm:flex-initial justify-center px-2.5 sm:px-3 py-1.5 rounded-lg transition flex items-center gap-1.5 cursor-pointer ${
+              className={`px-3 py-1.5 rounded-lg transition flex items-center justify-center gap-1.5 whitespace-nowrap cursor-pointer ${
                 activeTab === 'connect'
-                  ? 'bg-white text-slate-900 shadow-xs font-bold'
+                  ? !isOwner
+                    ? 'bg-amber-700 text-white shadow-xs font-bold'
+                    : 'bg-white text-slate-900 shadow-xs font-bold'
+                  : !isOwner
+                  ? 'text-amber-950/80 hover:text-amber-950'
                   : 'text-slate-600 hover:text-slate-900'
               }`}
             >
               <span>Collaborate</span>
               {pendingIncoming.length > 0 && (
-                <span className="bg-amber-100 text-amber-800 text-[10px] px-1.5 rounded-full font-bold">
+                <span className="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 text-[10px] font-bold rounded-full bg-amber-100 text-amber-800 leading-none shadow-2xs shrink-0">
                   {pendingIncoming.length}
                 </span>
               )}
             </button>
           </nav>
 
-          {/* Action Buttons & User Menu */}
-          <div className="flex items-center gap-2 sm:gap-3 flex-shrink-0">
-            {!isOwner ? (
-              <button
-                type="button"
-                onClick={() => handleSwitchWorkspace(user.uid)}
-                className="bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs px-3 sm:px-3.5 py-1.5 sm:py-2 rounded-xl shadow-xs transition flex items-center gap-1.5 cursor-pointer active:scale-95 border border-emerald-600"
-                title="Exit client workspace and return to your own dashboard"
-              >
-                <span>🚪</span>
-                <span>Exit Client</span>
-              </button>
-            ) : (
-              <button
-                onClick={() => setIsModalOpen(true)}
-                className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs sm:text-sm px-3 sm:px-3.5 py-1.5 sm:py-2 rounded-xl shadow-xs transition flex items-center gap-1.5 cursor-pointer active:scale-95"
-              >
-                <span>+</span>
-                <span className="hidden xs:inline">New Goal</span>
-              </button>
-            )}
-
-            {/* User Avatar + Sign Out */}
-            <div className="flex items-center gap-1.5 sm:gap-2 pl-2 border-l border-slate-200">
-              {user.photoURL ? (
-                <img
-                  src={user.photoURL}
-                  alt={user.displayName || 'User'}
-                  className="w-7 h-7 rounded-full border border-slate-200"
-                />
-              ) : (
-                <div className="w-7 h-7 rounded-full bg-slate-200 flex items-center justify-center text-xs font-bold text-slate-700">
-                  {user.email ? user.email.charAt(0).toUpperCase() : 'U'}
-                </div>
-              )}
-
-              <button
-                onClick={handleSignOut}
-                title="Sign Out"
-                className="text-xs font-semibold text-slate-500 hover:text-rose-600 hover:bg-rose-50 px-2 py-1 sm:px-2.5 sm:py-1.5 rounded-lg transition cursor-pointer"
-              >
-                Sign Out
-              </button>
-            </div>
-          </div>
-        </div>
-      </header>
-
-      {!isOwner && workspaceProfile && (
-        <div className="bg-gradient-to-r from-slate-950 via-slate-900 to-slate-950 border-b border-emerald-500/40 text-white px-3 sm:px-6 py-3 text-xs shadow-md sticky top-16 z-20">
-          <div className="max-w-6xl mx-auto flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-            <div className="flex items-center gap-2.5 flex-wrap">
-              <span className="flex h-3 w-3 relative flex-shrink-0">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                <span className="relative inline-flex rounded-full h-3 w-3 bg-emerald-500"></span>
+          {!isOwner && workspaceProfile && (
+            <div className="text-[11px] text-amber-950 font-semibold hidden sm:flex items-center gap-1.5 bg-amber-100/80 border border-amber-300/80 px-2.5 py-1 rounded-lg">
+              <span className="w-1.5 h-1.5 rounded-full bg-amber-600 animate-pulse"></span>
+              <span>
+                Client Workspace: <strong>{workspaceProfile.displayName || 'Client'}</strong> ({professionalRole || 'Trainer'})
               </span>
-              <div className="flex items-center gap-1.5 flex-wrap">
-                <span className="font-bold text-slate-300 uppercase tracking-wider text-[11px]">
-                  Client Workspace:
-                </span>
-                <span className="bg-emerald-950/90 text-emerald-300 font-bold px-2 py-0.5 rounded-md border border-emerald-500/30">
-                  {workspaceProfile.displayName || workspaceProfile.email || 'Client'}
-                </span>
-                <span className="text-slate-400">•</span>
-                <span className="text-slate-300">
-                  Your Role: <strong className="text-emerald-400 uppercase tracking-wider font-bold">{professionalRole || 'Professional'}</strong>
-                </span>
-              </div>
             </div>
-            <button
-              type="button"
-              onClick={() => handleSwitchWorkspace(user.uid)}
-              className="w-full sm:w-auto bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-2 rounded-xl font-bold transition cursor-pointer text-xs flex items-center justify-center gap-2 shadow-xs border border-emerald-400/50 active:scale-95"
-            >
-              <span>🚪</span>
-              <span>Exit Client Workspace (Back to My Account)</span>
-            </button>
-          </div>
+          )}
         </div>
-      )}
+      </div>
 
       {/* MAIN CONTAINER */}
       <main className="max-w-6xl mx-auto px-4 sm:px-6 py-8 flex-1 w-full relative z-10">
         {dataLoading && activeTab !== 'connect' ? (
           <div className="text-center py-20">
-            <div className="w-8 h-8 border-2 border-emerald-600 border-t-transparent rounded-full animate-spin mx-auto mb-3"></div>
-            <span className="text-xs font-semibold text-slate-400">Loading your goals from cloud...</span>
+            <div
+              className={`w-8 h-8 border-2 ${
+                !isOwner ? 'border-amber-600' : 'border-emerald-600'
+              } border-t-transparent rounded-full animate-spin mx-auto mb-3`}
+            ></div>
+            <span className="text-xs font-semibold text-slate-400">Loading goals from cloud...</span>
           </div>
         ) : (
           <>
             {/* VIEW 1: ALL GOALS DASHBOARD */}
             {activeTab === 'dashboard' && (
               <div className="space-y-6">
-                {/* Dashboard Metrics Hero Banner */}
-                <div className="relative overflow-hidden bg-slate-900 border border-slate-800 rounded-3xl p-6 sm:p-8 shadow-sm text-white">
-                  {/* Filling Hero Background Image */}
+                {/* Dashboard Metrics Hero Banner - Frosted Glass Window */}
+                <div
+                  className={`relative overflow-hidden rounded-3xl p-6 sm:p-8 shadow-2xl text-white transition-all duration-300 border border-purple-200/50 ring-1 ring-purple-100/40 bg-slate-950/40 backdrop-blur-2xl group ${
+                    !isOwner
+                      ? 'shadow-purple-950/20'
+                      : 'shadow-slate-950/20'
+                  }`}
+                >
+                  {/* Filling Hero Background Image visible through glass */}
                   <img
                     src={goalPathHero}
                     alt="Goal Path Horizon"
-                    className="absolute inset-0 w-full h-full object-cover object-right opacity-35 select-none pointer-events-none"
+                    className="absolute inset-0 w-full h-full object-cover object-center opacity-65 select-none pointer-events-none scale-100 group-hover:scale-105 transition-transform duration-700 ease-out"
                     referrerPolicy="no-referrer"
                   />
-                  {/* Smooth Gradient Overlay for optimal legibility */}
-                  <div className="absolute inset-0 bg-gradient-to-r from-slate-950 via-slate-950/85 to-transparent pointer-events-none" />
+                  {/* Frosted Glass Overlay with subtle light-purple specular shimmer */}
+                  <div className="absolute inset-0 pointer-events-none bg-gradient-to-r from-slate-950/80 via-slate-900/55 to-purple-950/45 backdrop-blur-xs" />
+                  <div className="absolute inset-0 pointer-events-none bg-gradient-to-b from-white/15 via-transparent to-purple-900/20" />
 
                   {/* Content Container */}
                   <div className="relative z-10 flex flex-col lg:flex-row lg:items-center justify-between gap-6">
                     <div className="max-w-xl">
-                      <div className="flex items-center gap-2 mb-2">
-                        <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-300 bg-emerald-950/80 border border-emerald-500/30 px-2.5 py-0.5 rounded-md">
-                          Cloud Synced Roadmap
-                        </span>
-                        <span className="text-xs text-slate-300">
-                          Horizon & Daily Action
-                        </span>
-                      </div>
-                      <h1 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">
-                        Transform Vision Into Milestones
-                      </h1>
-                      <p className="text-slate-300 text-xs sm:text-sm mt-1.5 leading-relaxed">
-                        Signed in as <span className="font-semibold text-white">{user.displayName || user.email}</span>. Break long-term ambition down into actionable monthly milestones and daily wins.
-                      </p>
+                      {!isOwner && workspaceProfile ? (
+                        <>
+                          <div className="flex items-center gap-2 mb-2 flex-wrap">
+                            <span className="text-[11px] font-bold uppercase tracking-wider text-purple-200 bg-purple-900/80 border border-purple-400/50 px-2.5 py-0.5 rounded-md shadow-2xs">
+                              Trainer Command Console
+                            </span>
+                            <span className="text-xs text-purple-200 font-medium">
+                              Active Role: {professionalRole || 'Trainer'}
+                            </span>
+                          </div>
+                          <h1 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight drop-shadow-xs">
+                            Managing {workspaceProfile.displayName || 'Client'}'s Program
+                          </h1>
+                          <p className="text-purple-100/90 text-xs sm:text-sm mt-1.5 leading-relaxed drop-shadow-2xs">
+                            You are in client workspace mode. Design routine subcategories, configure daily tasks, and schedule milestones. All changes sync directly to {workspaceProfile.displayName || 'your client'}'s timeline.
+                          </p>
+                        </>
+                      ) : (
+                        <>
+                          <div className="flex items-center gap-2 mb-2">
+                            <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-300 bg-emerald-950/80 border border-emerald-400/40 px-2.5 py-0.5 rounded-md shadow-2xs">
+                              Cloud Synced Roadmap
+                            </span>
+                            <span className="text-xs text-slate-200">
+                              Horizon &amp; Daily Action
+                            </span>
+                          </div>
+                          <h1 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight drop-shadow-xs">
+                            Transform Vision Into Milestones
+                          </h1>
+                          <p className="text-slate-200 text-xs sm:text-sm mt-1.5 leading-relaxed drop-shadow-2xs">
+                            Signed in as <span className="font-semibold text-white">{user.displayName || user.email}</span>. Break long-term ambition down into actionable monthly milestones and daily wins.
+                          </p>
+
+                          <div className="mt-3.5 flex items-center gap-2.5 flex-wrap">
+                            <button
+                              type="button"
+                              onClick={() => setIsModalOpen(true)}
+                              className="inline-flex items-center gap-2 bg-white/20 hover:bg-white/30 active:bg-white/40 text-white font-bold text-xs sm:text-sm px-4 py-2 rounded-xl border border-white/35 hover:border-purple-300/80 backdrop-blur-md transition shadow-md cursor-pointer active:scale-95"
+                            >
+                              <Plus className="w-4 h-4 text-emerald-300" />
+                              <span>Create New Goal Path</span>
+                            </button>
+                          </div>
+                        </>
+                      )}
                     </div>
 
-                    {/* Metrics Stat Cards with Frosted Glass look */}
+                    {/* Highly Readable & Clickable Glassy Stat Cards */}
                     <div className="grid grid-cols-3 gap-2.5 sm:gap-3.5 flex-shrink-0">
-                      <div className="bg-white/10 backdrop-blur-md border border-white/15 rounded-2xl p-3 sm:px-4 sm:py-3 text-center sm:text-left">
+                      {/* Stat 1: Goals */}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const el = document.getElementById('goals-grid');
+                          if (el) el.scrollIntoView({ behavior: 'smooth' });
+                        }}
+                        className="backdrop-blur-xl bg-white/15 hover:bg-white/25 active:bg-white/30 border border-white/25 hover:border-purple-300/80 ring-1 ring-white/15 rounded-2xl p-3 sm:px-4 sm:py-3.5 transition-all duration-200 cursor-pointer shadow-lg hover:shadow-xl hover:-translate-y-0.5 active:scale-95 group/card select-none text-center sm:text-left"
+                        title="Click to view all goals"
+                      >
                         <div className="text-xl sm:text-2xl font-black text-white">{goals.length}</div>
-                        <div className="text-[11px] text-slate-300 font-medium">Active Goals</div>
-                      </div>
-                      <div className="bg-white/10 backdrop-blur-md border border-white/15 rounded-2xl p-3 sm:px-4 sm:py-3 text-center sm:text-left">
-                        <div className="text-xl sm:text-2xl font-black text-emerald-400">
+                        <div className={`text-[11px] font-medium ${!isOwner ? 'text-purple-200' : 'text-slate-200'}`}>
+                          {!isOwner ? 'Client Goals' : 'Active Goals'}
+                        </div>
+                        <div className="text-[9px] font-semibold text-purple-200/80 group-hover/card:text-white flex items-center justify-center sm:justify-start gap-0.5 mt-1 transition">
+                          <span>View Grid</span>
+                          <ArrowRight className="w-2.5 h-2.5 group-hover/card:translate-x-0.5 transition-transform" />
+                        </div>
+                      </button>
+
+                      {/* Stat 2: Tasks Today */}
+                      <button
+                        type="button"
+                        onClick={() => setActiveTab('today')}
+                        className="backdrop-blur-xl bg-white/15 hover:bg-white/25 active:bg-white/30 border border-white/25 hover:border-purple-300/80 ring-1 ring-white/15 rounded-2xl p-3 sm:px-4 sm:py-3.5 transition-all duration-200 cursor-pointer shadow-lg hover:shadow-xl hover:-translate-y-0.5 active:scale-95 group/card select-none text-center sm:text-left"
+                        title="Click to switch to Today's Focus"
+                      >
+                        <div className="text-xl sm:text-2xl font-black text-emerald-300">
                           {allTodayTasks.filter((t) => t.completed).length}/{allTodayTasks.length}
                         </div>
-                        <div className="text-[11px] text-slate-300 font-medium">Tasks Today</div>
-                      </div>
-                      <div className="bg-white/10 backdrop-blur-md border border-white/15 rounded-2xl p-3 sm:px-4 sm:py-3 text-center sm:text-left">
+                        <div className={`text-[11px] font-medium ${!isOwner ? 'text-purple-200' : 'text-slate-200'}`}>
+                          Tasks Today
+                        </div>
+                        <div className="text-[9px] font-semibold text-purple-200/80 group-hover/card:text-white flex items-center justify-center sm:justify-start gap-0.5 mt-1 transition">
+                          <span>Focus Mode</span>
+                          <ArrowRight className="w-2.5 h-2.5 group-hover/card:translate-x-0.5 transition-transform" />
+                        </div>
+                      </button>
+
+                      {/* Stat 3: Progress */}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (goals.length > 0) {
+                            setSelectedGoalId(goals[0].id);
+                            setActiveTab('detail');
+                          }
+                        }}
+                        className="backdrop-blur-xl bg-white/15 hover:bg-white/25 active:bg-white/30 border border-white/25 hover:border-purple-300/80 ring-1 ring-white/15 rounded-2xl p-3 sm:px-4 sm:py-3.5 transition-all duration-200 cursor-pointer shadow-lg hover:shadow-xl hover:-translate-y-0.5 active:scale-95 group/card select-none text-center sm:text-left"
+                        title="Click to view progress roadmap"
+                      >
                         <div className="text-xl sm:text-2xl font-black text-white">{overallProgress}%</div>
-                        <div className="text-[11px] text-slate-300 font-medium">Progress</div>
-                      </div>
+                        <div className={`text-[11px] font-medium ${!isOwner ? 'text-purple-200' : 'text-slate-200'}`}>
+                          Progress
+                        </div>
+                        <div className="text-[9px] font-semibold text-purple-200/80 group-hover/card:text-white flex items-center justify-center sm:justify-start gap-0.5 mt-1 transition">
+                          <span>Roadmap</span>
+                          <ArrowRight className="w-2.5 h-2.5 group-hover/card:translate-x-0.5 transition-transform" />
+                        </div>
+                      </button>
                     </div>
                   </div>
                 </div>
@@ -1584,7 +1962,7 @@ export default function App() {
                                 {client.email}
                               </p>
                               <div className="text-xs text-slate-300 mt-2.5 flex items-center gap-1.5 font-medium">
-                                <span>🎯</span>
+                                <Target className="w-3.5 h-3.5 text-emerald-400" />
                                 <span>
                                   {assignedCount === 'All'
                                     ? 'All Goals Assigned'
@@ -1599,7 +1977,7 @@ export default function App() {
                               className="w-full bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold py-2 px-3 rounded-lg shadow-2xs transition cursor-pointer flex items-center justify-center gap-1.5 active:scale-98"
                             >
                               <span>Open Roadmap & Edit Subcategories</span>
-                              <span>→</span>
+                              <ArrowRight className="w-3.5 h-3.5" />
                             </button>
                           </div>
                         );
@@ -1608,17 +1986,70 @@ export default function App() {
                   </div>
                 )}
 
+                {/* Professional Next Steps Guide if inside a client's workspace - Amber/Clay Theme */}
+                {!isOwner && workspaceProfile && (
+                  <div className="bg-gradient-to-r from-amber-600/10 via-orange-600/5 to-amber-600/10 border border-amber-300/90 rounded-2xl p-4 sm:p-5 shadow-xs">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3">
+                      <div className="flex items-center gap-2">
+                        <span className="text-[11px] font-bold uppercase tracking-wider text-amber-950 bg-amber-100 px-2.5 py-0.5 rounded-md flex items-center gap-1 border border-amber-300">
+                          <Sparkles className="w-3 h-3 text-amber-700" />
+                          <span>Trainer Next Steps</span>
+                        </span>
+                        <span className="text-xs font-bold text-amber-950">
+                          Managing {workspaceProfile.displayName || 'Client'}'s Program
+                        </span>
+                      </div>
+                      <span className="text-[11px] text-amber-900 font-bold bg-white px-2 py-0.5 rounded border border-amber-200">
+                        Role: {professionalRole || 'Trainer'}
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                      <div className="bg-white/95 border border-amber-200/80 rounded-xl p-3 shadow-2xs">
+                        <div className="text-[11px] font-bold text-amber-900 uppercase tracking-wider">
+                          1 • Select a Goal
+                        </div>
+                        <p className="text-xs text-slate-600 mt-1">
+                          Click any client goal card below to view their monthly horizon and daily routine.
+                        </p>
+                      </div>
+
+                      <div className="bg-white/95 border border-amber-200/80 rounded-xl p-3 shadow-2xs">
+                        <div className="text-[11px] font-bold text-amber-900 uppercase tracking-wider">
+                          2 • Contextual Presets
+                        </div>
+                        <p className="text-xs text-slate-600 mt-1">
+                          Pick tailored routine presets (e.g. Budget & Accounts for Finance, Drills for Sports) or create custom subcategories.
+                        </p>
+                      </div>
+
+                      <div className="bg-white/95 border border-amber-200/80 rounded-xl p-3 shadow-2xs">
+                        <div className="text-[11px] font-bold text-amber-900 uppercase tracking-wider">
+                          3 • Configure & Schedule
+                        </div>
+                        <p className="text-xs text-slate-600 mt-1">
+                          Assign tasks, add target quantities, and track their monthly milestone progress.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
                 {/* Filter and Search Bar */}
-                <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
+                <div id="goals-grid" className="flex flex-col sm:flex-row items-center justify-between gap-3 scroll-mt-24">
                   <div className="relative w-full sm:w-72">
+                    <Search className="absolute left-2.5 top-2.5 text-slate-400 w-3.5 h-3.5" />
                     <input
                       type="text"
                       placeholder="Search goals or descriptions..."
                       value={searchQuery}
                       onChange={(e) => setSearchQuery(e.target.value)}
-                      className="w-full text-xs bg-white border border-slate-200 rounded-xl pl-8 pr-3 py-2 text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600"
+                      className={`w-full text-xs bg-white border rounded-xl pl-8 pr-3 py-2 text-slate-800 placeholder-slate-400 focus:outline-none ${
+                        !isOwner
+                          ? 'border-purple-200 focus:ring-2 focus:ring-purple-500/20 focus:border-purple-600'
+                          : 'border-slate-200 focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600'
+                      }`}
                     />
-                    <span className="absolute left-2.5 top-2.5 text-slate-400 text-xs">🔍</span>
                   </div>
 
                   <div className="flex items-center gap-2 w-full sm:w-auto overflow-x-auto pb-1">
@@ -1629,7 +2060,11 @@ export default function App() {
                         onClick={() => setSelectedCategory(cat)}
                         className={`text-xs px-3 py-1 rounded-full font-medium capitalize whitespace-nowrap transition cursor-pointer ${
                           selectedCategory === cat
-                            ? 'bg-slate-900 text-white'
+                            ? !isOwner
+                              ? 'bg-purple-800 text-white shadow-2xs'
+                              : 'bg-slate-900 text-white'
+                            : !isOwner
+                            ? 'bg-white text-purple-900/80 border border-purple-200 hover:bg-purple-50'
                             : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50'
                         }`}
                       >
@@ -1642,7 +2077,15 @@ export default function App() {
                 {/* Goals Grid */}
                 {filteredGoals.length === 0 ? (
                   <div className="text-center bg-white border border-slate-200 rounded-2xl p-12">
-                    <div className="text-4xl mb-2">🎯</div>
+                    <div
+                      className={`w-14 h-14 rounded-2xl flex items-center justify-center mx-auto mb-3 shadow-2xs ${
+                        !isOwner
+                          ? 'bg-amber-50 text-amber-700 border border-amber-300'
+                          : 'bg-emerald-50 text-emerald-600 border border-emerald-200'
+                      }`}
+                    >
+                      <Target className="w-7 h-7" />
+                    </div>
                     <h3 className="text-base font-semibold text-slate-800">No matching goals found</h3>
                     <p className="text-slate-400 text-sm max-w-sm mx-auto mt-1 mb-5">
                       {searchQuery
@@ -1654,9 +2097,10 @@ export default function App() {
                     {isOwner && (
                       <button
                         onClick={() => setIsModalOpen(true)}
-                        className="bg-emerald-600 hover:bg-emerald-700 text-white font-medium text-xs px-4 py-2 rounded-xl cursor-pointer"
+                        className="bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white font-bold text-sm px-5 py-2.5 rounded-xl shadow-sm transition flex items-center gap-2 mx-auto cursor-pointer"
                       >
-                        + Create New Goal
+                        <Plus className="w-4 h-4 stroke-[2.5]" />
+                        <span>Create Your First Goal</span>
                       </button>
                     )}
                   </div>
@@ -1685,14 +2129,22 @@ export default function App() {
                             setActiveTab('detail');
                           }}
                           className={`group bg-white border rounded-2xl p-5 hover:shadow-md transition-all duration-200 cursor-pointer flex flex-col justify-between ${
-                            !isOwner && isAssigned
-                              ? 'border-emerald-300 ring-2 ring-emerald-500/15 shadow-2xs'
+                            !isOwner
+                              ? isAssigned
+                                ? 'border-amber-300 ring-2 ring-amber-500/20 shadow-2xs hover:border-amber-500'
+                                : 'border-amber-200/80 hover:border-amber-400'
                               : 'border-slate-200/90 hover:border-emerald-500/40'
                           }`}
                         >
                           <div>
                             <div className="flex items-center justify-between gap-2 mb-2">
-                              <span className="text-[11px] font-semibold text-emerald-700 bg-emerald-50 border border-emerald-100 px-2 py-0.5 rounded-md">
+                              <span
+                                className={`text-[11px] font-semibold px-2 py-0.5 rounded-md border ${
+                                  !isOwner
+                                    ? 'text-amber-950 bg-amber-100/90 border-amber-300'
+                                    : 'text-emerald-700 bg-emerald-50 border-emerald-100'
+                                }`}
+                              >
                                 {goal.category || 'General'}
                               </span>
                               <span className="text-xs font-medium text-slate-400">
@@ -1700,7 +2152,11 @@ export default function App() {
                               </span>
                             </div>
 
-                            <h3 className="font-bold text-slate-900 text-base group-hover:text-emerald-700 transition-colors line-clamp-1 mb-1">
+                            <h3
+                              className={`font-bold text-slate-900 text-base transition-colors line-clamp-1 mb-1 ${
+                                !isOwner ? 'group-hover:text-amber-800' : 'group-hover:text-emerald-700'
+                              }`}
+                            >
                               {goal.title}
                             </h3>
 
@@ -1716,13 +2172,14 @@ export default function App() {
                                   return (
                                     <>
                                       <span
-                                        className={`text-[10px] font-semibold px-2 py-0.5 rounded-md border ${
+                                        className={`text-[10px] font-semibold px-2 py-0.5 rounded-md border flex items-center gap-1 ${
                                           isAssigned
                                             ? 'text-emerald-800 bg-emerald-50 border-emerald-200'
                                             : 'text-slate-500 bg-slate-100 border-slate-200'
                                         }`}
                                       >
-                                        👥 {assigned.length}/{profile.collaborators.length} Pros
+                                        <Users className="w-3 h-3" />
+                                        <span>{assigned.length}/{profile.collaborators.length} Pros</span>
                                       </span>
 
                                       <button
@@ -1737,7 +2194,17 @@ export default function App() {
                                             : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50 hover:text-slate-900'
                                         }`}
                                       >
-                                        <span>{isAssigned ? '✓ Assigned' : '+ Assign Pro'}</span>
+                                        {isAssigned ? (
+                                          <>
+                                            <Check className="w-3 h-3 text-emerald-600" />
+                                            <span>Assigned</span>
+                                          </>
+                                        ) : (
+                                          <>
+                                            <Plus className="w-3 h-3" />
+                                            <span>Assign Pro</span>
+                                          </>
+                                        )}
                                       </button>
                                     </>
                                   );
@@ -1748,13 +2215,13 @@ export default function App() {
                             {!isOwner && (
                               <div className="mb-2.5">
                                 {isAssigned ? (
-                                  <div className="flex items-center gap-1.5 text-[11px] font-bold text-emerald-800 bg-emerald-50 border border-emerald-200 px-2.5 py-1 rounded-lg">
-                                    <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                                  <div className="flex items-center gap-1.5 text-[11px] font-bold text-amber-950 bg-amber-50 border border-amber-300 px-2.5 py-1 rounded-lg">
+                                    <span className="w-2 h-2 rounded-full bg-amber-600 animate-pulse" />
                                     <span>Assigned Session ({professionalRole || 'Trainer'})</span>
                                   </div>
                                 ) : (
                                   <div className="flex items-center gap-1.5 text-[11px] font-semibold text-slate-500 bg-slate-100 border border-slate-200 px-2.5 py-1 rounded-lg">
-                                    <span>🔒</span>
+                                    <Lock className="w-3 h-3 text-slate-400" />
                                     <span>Read-only (Not assigned to your role)</span>
                                   </div>
                                 )}
@@ -1776,7 +2243,9 @@ export default function App() {
                               <div className="text-xs font-medium text-slate-800 flex items-start gap-2">
                                 <span
                                   className={`w-2 h-2 rounded-full mt-1 flex-shrink-0 ${
-                                    curMilestone?.completed ? 'bg-emerald-500' : 'bg-amber-500'
+                                    curMilestone?.completed
+                                      ? !isOwner ? 'bg-amber-600' : 'bg-emerald-500'
+                                      : 'bg-amber-500'
                                   }`}
                                 />
                                 <span
@@ -1809,14 +2278,24 @@ export default function App() {
                             {!isOwner && (
                               <div className="pt-1.5">
                                 {isAssigned ? (
-                                  <div className="w-full bg-emerald-50 text-emerald-800 border border-emerald-300 font-semibold text-xs py-2 px-3 rounded-xl flex items-center justify-center gap-1.5 group-hover:bg-emerald-600 group-hover:text-white transition shadow-2xs">
-                                    <span>✏️ Edit Subcategories & Routines</span>
-                                    <span>→</span>
+                                  <div className="w-full bg-amber-50 text-amber-950 border border-amber-300 font-semibold text-xs py-2 px-3 rounded-xl flex items-center justify-center gap-1.5 group-hover:bg-amber-600 group-hover:text-white transition shadow-2xs">
+                                    <Edit2 className="w-3.5 h-3.5" />
+                                    <span>Edit Subcategories & Routines</span>
+                                    <ArrowRight className="w-3.5 h-3.5" />
                                   </div>
                                 ) : (
-                                  <div className="w-full bg-slate-50 text-slate-400 text-xs py-1.5 px-3 rounded-xl text-center font-medium">
-                                    🔒 View Only
-                                  </div>
+                                  <button
+                                    type="button"
+                                    onClick={async (e) => {
+                                      e.stopPropagation();
+                                      await handleAssignGoalToMe(goal.id);
+                                    }}
+                                    className="w-full bg-amber-50 hover:bg-amber-100 text-amber-950 text-xs py-2 px-3 rounded-xl text-center font-bold flex items-center justify-center gap-1.5 border border-amber-300 transition cursor-pointer active:scale-98"
+                                    title="Click to enable routine planning access for this goal"
+                                  >
+                                    <Plus className="w-3.5 h-3.5" />
+                                    <span>Enable Access to Edit</span>
+                                  </button>
                                 )}
                               </div>
                             )}
@@ -1880,8 +2359,8 @@ export default function App() {
                   </div>
                 ) : allTodayTasks.length === 0 ? (
                   <div className="bg-white border border-slate-200 rounded-3xl p-10 text-center space-y-4">
-                    <div className="w-12 h-12 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center mx-auto text-xl font-bold">
-                      ✓
+                    <div className="w-12 h-12 rounded-2xl bg-emerald-50 text-emerald-600 border border-emerald-200 flex items-center justify-center mx-auto shadow-2xs">
+                      <CheckCircle2 className="w-6 h-6" />
                     </div>
                     <div>
                       <h3 className="text-base font-bold text-slate-800">No Tasks Scheduled for Today</h3>
@@ -1897,9 +2376,10 @@ export default function App() {
                             setSelectedGoalId(g.id);
                             setActiveTab('detail');
                           }}
-                          className="px-3.5 py-1.5 bg-slate-50 hover:bg-emerald-50 hover:border-emerald-300 border border-slate-200 text-slate-700 hover:text-emerald-800 text-xs font-semibold rounded-xl transition cursor-pointer"
+                          className="px-3.5 py-1.5 bg-slate-50 hover:bg-emerald-50 hover:border-emerald-300 border border-slate-200 text-slate-700 hover:text-emerald-800 text-xs font-semibold rounded-xl transition cursor-pointer flex items-center gap-1.5"
                         >
-                          → {g.title}
+                          <ArrowRight className="w-3 h-3 text-emerald-600" />
+                          <span>{g.title}</span>
                         </button>
                       ))}
                     </div>
@@ -1993,7 +2473,17 @@ export default function App() {
                                           }}
                                           className="text-emerald-700 hover:text-emerald-800 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 text-[11px] font-bold px-2 py-0.5 rounded-md transition cursor-pointer"
                                         >
-                                          {isAddingTask ? '✕ Cancel' : '+ Add Task'}
+                                          {isAddingTask ? (
+                                            <span className="flex items-center gap-1">
+                                              <X className="w-3 h-3" />
+                                              <span>Cancel</span>
+                                            </span>
+                                          ) : (
+                                            <span className="flex items-center gap-1">
+                                              <Plus className="w-3 h-3" />
+                                              <span>Add Task</span>
+                                            </span>
+                                          )}
                                         </button>
                                       )}
                                     </div>
@@ -2165,7 +2655,7 @@ export default function App() {
                                                     className="text-slate-400 hover:text-emerald-700 p-1 text-xs transition cursor-pointer"
                                                     title="Edit task text or priority"
                                                   >
-                                                    ✏️
+                                                    <Edit2 className="w-3.5 h-3.5" />
                                                   </button>
                                                   <button
                                                     type="button"
@@ -2173,7 +2663,7 @@ export default function App() {
                                                     className="text-slate-300 hover:text-rose-500 p-1 text-xs transition cursor-pointer"
                                                     title="Delete task"
                                                   >
-                                                    ✕
+                                                    <Trash2 className="w-3.5 h-3.5" />
                                                   </button>
                                                 </>
                                               )}
@@ -2235,7 +2725,7 @@ export default function App() {
                                             className="text-slate-300 hover:text-rose-500 p-0.5 text-xs transition cursor-pointer"
                                             title="Delete task"
                                           >
-                                            ✕
+                                            <Trash2 className="w-3.5 h-3.5" />
                                           </button>
                                         )}
                                       </div>
@@ -2320,19 +2810,24 @@ export default function App() {
             {activeTab === 'detail' && currentGoal && (
               <div className="space-y-6">
                 {/* Top Goal Bar */}
-                <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-xs">
+                <div
+                  className={`bg-white border rounded-2xl p-6 shadow-xs transition-colors duration-200 ${
+                    !isOwner ? 'border-purple-200/90 shadow-purple-950/5' : 'border-purple-200/80'
+                  }`}
+                >
                   <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
                     <div className="flex-1 min-w-0">
                       {isEditingGoalHeader ? (
-                        <div className="bg-slate-50 border border-emerald-300 rounded-xl p-4 space-y-3">
+                        <div className="bg-purple-50/40 border border-purple-200 rounded-xl p-4 space-y-3">
                           <div className="flex items-center justify-between">
                             <h3 className="text-sm font-bold text-slate-800">Edit Goal Details</h3>
                             <button
                               type="button"
                               onClick={() => setIsEditingGoalHeader(false)}
-                              className="text-xs text-slate-500 hover:text-slate-700"
+                              className="text-xs text-slate-500 hover:text-slate-700 flex items-center gap-1 cursor-pointer"
                             >
-                              ✕ Cancel
+                              <X className="w-3.5 h-3.5" />
+                              <span>Cancel</span>
                             </button>
                           </div>
                           <div>
@@ -2341,7 +2836,7 @@ export default function App() {
                               type="text"
                               value={editGoalTitle}
                               onChange={(e) => setEditGoalTitle(e.target.value)}
-                              className="w-full text-sm bg-white border border-slate-300 rounded-lg px-3 py-2 text-slate-800 font-semibold focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                              className="w-full text-sm bg-white border border-slate-300 rounded-lg px-3 py-2 text-slate-800 font-semibold focus:outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-purple-600"
                             />
                           </div>
                           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -2351,7 +2846,7 @@ export default function App() {
                                 type="text"
                                 value={editGoalCategory}
                                 onChange={(e) => setEditGoalCategory(e.target.value)}
-                                className="w-full text-xs bg-white border border-slate-300 rounded-lg px-3 py-1.5 text-slate-800"
+                                className="w-full text-xs bg-white border border-slate-300 rounded-lg px-3 py-1.5 text-slate-800 focus:outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-purple-600"
                               />
                             </div>
                             <div>
@@ -2360,7 +2855,7 @@ export default function App() {
                                 type="text"
                                 value={editGoalDesc}
                                 onChange={(e) => setEditGoalDesc(e.target.value)}
-                                className="w-full text-xs bg-white border border-slate-300 rounded-lg px-3 py-1.5 text-slate-800"
+                                className="w-full text-xs bg-white border border-slate-300 rounded-lg px-3 py-1.5 text-slate-800 focus:outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-purple-600"
                                 placeholder="Goal description..."
                               />
                             </div>
@@ -2377,14 +2872,14 @@ export default function App() {
                                 });
                                 setIsEditingGoalHeader(false);
                               }}
-                              className="px-4 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold transition shadow-xs cursor-pointer"
+                              className="px-4 py-1.5 bg-purple-700 hover:bg-purple-800 text-white rounded-lg text-xs font-bold transition shadow-xs cursor-pointer active:scale-95"
                             >
                               Save Changes
                             </button>
                             <button
                               type="button"
                               onClick={() => setIsEditingGoalHeader(false)}
-                              className="px-3 py-1.5 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-lg text-xs font-medium cursor-pointer"
+                              className="px-3 py-1.5 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-lg text-xs font-medium cursor-pointer active:scale-95"
                             >
                               Cancel
                             </button>
@@ -2398,14 +2893,26 @@ export default function App() {
                                 setSelectedGoalId(null);
                                 setActiveTab('dashboard');
                               }}
-                              className="text-xs font-semibold text-slate-500 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 px-2.5 py-1 rounded-lg transition cursor-pointer"
+                              className="text-xs font-semibold text-emerald-700 hover:text-emerald-800 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 px-2.5 py-1 rounded-lg transition cursor-pointer shadow-2xs flex items-center gap-1"
                             >
                               ← Back to Dashboard
                             </button>
-                            <span className="text-xs font-semibold text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-lg border border-emerald-100">
+                            <span
+                              className={`text-xs font-semibold px-2.5 py-1 rounded-lg border ${
+                                isOwner
+                                  ? 'text-purple-900 bg-purple-100/90 border-purple-200'
+                                  : 'text-amber-950 bg-amber-100/90 border-amber-300'
+                              }`}
+                            >
                               {currentGoal.category || 'General'}
                             </span>
-                            <span className="text-xs font-semibold text-slate-600 bg-slate-100 px-2.5 py-1 rounded-lg">
+                            <span
+                              className={`text-xs font-semibold px-2.5 py-1 rounded-lg border ${
+                                isOwner
+                                  ? 'text-purple-800 bg-purple-50 border-purple-100'
+                                  : 'text-amber-900 bg-amber-50 border-amber-200'
+                              }`}
+                            >
                               Target: {formatFullMonth(currentGoal.targetDate)}
                             </span>
                             {(isOwner || isGoalAssignedToMe(currentGoal.id)) && (
@@ -2417,10 +2924,14 @@ export default function App() {
                                   setEditGoalDesc(currentGoal.description || '');
                                   setIsEditingGoalHeader(true);
                                 }}
-                                className="text-xs font-semibold text-slate-600 hover:text-emerald-700 bg-slate-50 hover:bg-emerald-50 border border-slate-200 hover:border-emerald-300 px-2.5 py-1 rounded-lg transition cursor-pointer flex items-center gap-1 shadow-2xs"
+                                className={`text-xs font-semibold px-2.5 py-1 rounded-lg transition cursor-pointer flex items-center gap-1 shadow-2xs border ${
+                                  isOwner
+                                    ? 'text-purple-900 hover:text-purple-950 bg-purple-50 hover:bg-purple-100 border-purple-200'
+                                    : 'text-amber-950 hover:text-amber-900 bg-amber-50 hover:bg-amber-100 border-amber-300'
+                                }`}
                                 title="Edit Goal Details"
                               >
-                                <span>✏️</span>
+                                <Edit2 className={`w-3.5 h-3.5 ${isOwner ? 'text-purple-700' : 'text-amber-700'}`} />
                                 <span>Edit Goal</span>
                               </button>
                             )}
@@ -2436,18 +2947,29 @@ export default function App() {
 
                       {!isOwner && (
                         <div
-                          className={`mt-3 p-3 rounded-xl border flex items-center gap-2.5 text-xs font-semibold ${
+                          className={`mt-3 p-3.5 rounded-xl border flex items-center justify-between gap-2.5 text-xs font-semibold flex-wrap ${
                             isGoalAssignedToMe(currentGoal.id)
-                              ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
-                              : 'bg-amber-50 border-amber-200 text-amber-800'
+                              ? 'bg-amber-50/90 border-amber-300 text-amber-950 shadow-2xs'
+                              : 'bg-amber-50/80 border-amber-300 text-amber-900'
                           }`}
                         >
-                          <span>{isGoalAssignedToMe(currentGoal.id) ? '🟢' : '🔒'}</span>
-                          <span>
-                            {isGoalAssignedToMe(currentGoal.id)
-                              ? `You are assigned to this goal as ${professionalRole}. You can add subcategories, schedule routines, and manage tasks.`
-                              : `Read-Only: This goal has not been assigned to you by the client.`}
-                          </span>
+                          <div className="flex items-center gap-2">
+                            <ShieldCheck className="w-4 h-4 text-amber-600 flex-shrink-0" />
+                            <span>
+                              {isGoalAssignedToMe(currentGoal.id)
+                                ? `Trainer Active Mode: Managing ${workspaceProfile?.displayName || 'Client'}'s roadmap as ${professionalRole || 'Professional'}. Routine subcategories and daily tasks sync directly to their view.`
+                                : `Editing access not yet enabled for this goal.`}
+                            </span>
+                          </div>
+                          {!isGoalAssignedToMe(currentGoal.id) && (
+                            <button
+                              type="button"
+                              onClick={async () => await handleAssignGoalToMe(currentGoal.id)}
+                              className="bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs px-3 py-1.5 rounded-lg transition shadow-2xs cursor-pointer active:scale-98"
+                            >
+                              Enable Routine Access
+                            </button>
+                          )}
                         </div>
                       )}
 
@@ -2466,19 +2988,20 @@ export default function App() {
                             return assigned.map((c) => (
                               <span
                                 key={c.uid}
-                                className="inline-flex items-center gap-1 bg-emerald-50 border border-emerald-200 text-emerald-800 font-semibold px-2 py-0.5 rounded-md text-[11px]"
+                                className="inline-flex items-center gap-1 bg-purple-50 border border-purple-200 text-purple-900 font-semibold px-2 py-0.5 rounded-md text-[11px]"
                               >
                                 <span>{c.name || c.email || 'Pro'}</span>
-                                <span className="text-emerald-600 font-normal">({c.role})</span>
+                                <span className="text-purple-700 font-normal">({c.role})</span>
                               </span>
                             ));
                           })()}
                           <button
                             type="button"
                             onClick={() => setManagingAssignedGoal(currentGoal)}
-                            className="text-xs font-semibold text-emerald-700 hover:text-emerald-800 hover:bg-emerald-50 px-2.5 py-1 rounded-lg border border-emerald-200 transition cursor-pointer"
+                            className="text-xs font-semibold text-purple-900 hover:text-purple-950 hover:bg-purple-100/70 bg-purple-50 px-2.5 py-1 rounded-lg border border-purple-200 transition cursor-pointer flex items-center gap-1"
                           >
-                            ⚙️ Manage Access
+                            <Settings className="w-3 h-3 text-purple-700" />
+                            <span>Manage Access</span>
                           </button>
                         </div>
                       )}
@@ -2490,10 +3013,10 @@ export default function App() {
                           {profile?.collaborators && profile.collaborators.length > 0 && (
                             <button
                               onClick={() => setManagingAssignedGoal(currentGoal)}
-                              className="text-xs text-slate-700 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 border border-slate-200 px-3.5 py-1.5 rounded-xl transition font-semibold cursor-pointer flex items-center gap-1.5 shadow-2xs"
+                              className="text-xs text-purple-950 hover:text-purple-950 bg-purple-50/60 hover:bg-purple-100 border border-purple-200 px-3.5 py-1.5 rounded-xl transition font-semibold cursor-pointer flex items-center gap-1.5 shadow-2xs"
                               title="Manage assigned professionals"
                             >
-                              <span>👥</span>
+                              <Users className="w-3.5 h-3.5 text-purple-700" />
                               <span>
                                 {profile.collaborators.filter((c) =>
                                   c.assignedGoalIds !== undefined
@@ -2506,11 +3029,12 @@ export default function App() {
                             </button>
                           )}
                           <button
-                            onClick={() => handleGiveUpGoal(currentGoal.id)}
+                            type="button"
+                            onClick={() => setGiveUpTargetGoal(currentGoal)}
                             className="text-xs text-rose-600 hover:text-rose-700 hover:bg-rose-50 border border-rose-200 px-3.5 py-1.5 rounded-xl transition font-semibold cursor-pointer flex items-center gap-1.5 shadow-2xs"
                             title="Give up on this goal"
                           >
-                            <span>🏳️</span>
+                            <Flag className="w-3.5 h-3.5 text-rose-500" />
                             <span>Give Up</span>
                           </button>
                         </>
@@ -2546,6 +3070,7 @@ export default function App() {
                   <div className="lg:col-span-6 space-y-6">
                     <MonthlyMilestoneSection
                       goal={currentGoal}
+                      isOwner={isOwner}
                       readOnly={!isOwner && !isGoalAssignedToMe(currentGoal.id)}
                       selectedMonthKey={selectedGoalMonth}
                       onSelectMonth={setSelectedGoalMonth}
@@ -2609,6 +3134,23 @@ export default function App() {
         goal={managingAssignedGoal}
         collaborators={profile?.collaborators || []}
         onSave={handleSaveGoalCollaboratorAssignments}
+      />
+
+      {/* GIVE UP MOTIVATIONAL INTERVENTION MODAL */}
+      <GiveUpInterventionModal
+        isOpen={!!giveUpTargetGoal}
+        onClose={() => setGiveUpTargetGoal(null)}
+        goal={giveUpTargetGoal}
+        onConfirmGiveUp={async () => {
+          if (giveUpTargetGoal) {
+            const idToDelete = giveUpTargetGoal.id;
+            setGiveUpTargetGoal(null);
+            await handleGiveUpGoal(idToDelete);
+          }
+        }}
+        onExtendGoalDeadline={async (goalId, monthsToAdd) => {
+          await handleExtendGoalDeadline(goalId, monthsToAdd);
+        }}
       />
     </div>
   );

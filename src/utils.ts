@@ -38,6 +38,39 @@ export const generateMonthRange = (startKey: string, targetKey: string): string[
   return months;
 };
 
+export const GOAL_CATEGORIES = [
+  'Career',
+  'Business',
+  'Health',
+  'Fitness',
+  'Finance & Wealth',
+  'Learning & Skills',
+  'Creative Writing',
+] as const;
+
+export type GoalCategory = (typeof GOAL_CATEGORIES)[number];
+
+export const addMonthsToKey = (baseMonthKey: string, monthsToAdd: number): string => {
+  const [yearStr, monthStr] = baseMonthKey.split('-');
+  let y = parseInt(yearStr, 10);
+  let m = parseInt(monthStr, 10) + monthsToAdd;
+  while (m > 12) {
+    m -= 12;
+    y += 1;
+  }
+  while (m < 1) {
+    m += 12;
+    y -= 1;
+  }
+  return `${y}-${String(m).padStart(2, '0')}`;
+};
+
+export const getMonthsDifference = (startKey: string, endKey: string): number => {
+  const [startY, startM] = startKey.split('-').map(Number);
+  const [endY, endM] = endKey.split('-').map(Number);
+  return (endY - startY) * 12 + (endM - startM);
+};
+
 export const PROFESSIONAL_ROLES = ['Trainer', 'Dietitian', 'Doctor'] as const;
 const CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 
