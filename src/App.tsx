@@ -4,6 +4,7 @@
  */
 
 import { useState, useEffect, useMemo, useRef } from 'react';
+import type { ElementType, TouchEvent as ReactTouchEvent } from 'react';
 import {
   User,
   signInWithPopup,
@@ -44,6 +45,9 @@ import {
   ArrowRight,
   Sparkles,
   Briefcase,
+  ListChecks,
+  CalendarCheck,
+  UsersRound,
 } from 'lucide-react';
 
 import { auth, db, googleProvider } from './firebase';
@@ -709,6 +713,99 @@ export default function App() {
         }))
     );
   }, [goals, todayDate]);
+
+  // The tabs reachable from the phone tab bar, in swipe order.
+  type NavTab = {
+    key: 'dashboard' | 'today' | 'connect' | 'professional';
+    label: string;
+    Icon: ElementType;
+    badge: number;
+  };
+
+  const openTaskCount = allTodayTasks.filter((t) => !t.completed).length;
+
+  const navTabs = useMemo<NavTab[]>(() => {
+    const tabs: NavTab[] = [
+      { key: 'dashboard', label: 'Goals', Icon: ListChecks, badge: 0 },
+      { key: 'today', label: 'Today', Icon: CalendarCheck, badge: openTaskCount },
+      { key: 'connect', label: 'Connect', Icon: UsersRound, badge: pendingIncoming.length },
+    ];
+    if (isOwner && profile?.persona === 'professional') {
+      tabs.push({ key: 'professional', label: 'Profile', Icon: Briefcase, badge: 0 });
+    }
+    return tabs;
+  }, [isOwner, profile?.persona, openTaskCount, pendingIncoming.length]);
+
+  const isTabActive = (key: NavTab['key']) =>
+    activeTab === key || (key === 'dashboard' && activeTab === 'detail');
+
+  // Swiping left or right across the content moves to the next or previous tab.
+  // A gesture that starts inside a horizontally scrolling strip (the day picker,
+  // the month chips) is ignored so those keep scrolling the way they should.
+  const swipeRef = useRef<{ x: number; y: number; blocked: boolean } | null>(null);
+
+  const handleTouchStart = (e: ReactTouchEvent<HTMLElement>) => {
+    const touch = e.touches[0];
+    let node = e.target as HTMLElement | null;
+    let blocked = false;
+    while (node && node !== e.currentTarget) {
+      if (node.scrollWidth > node.clientWidth + 4) {
+        blocked = true;
+        break;
+      }
+      node = node.parentElement;
+    }
+    swipeRef.current = { x: touch.clientX, y: touch.clientY, blocked };
+  };
+
+  const handleTouchEnd = (e: ReactTouchEvent<HTMLElement>) => {
+    const start = swipeRef.current;
+    swipeRef.current = null;
+    if (!start || start.blocked) return;
+
+    const touch = e.changedTouches[0];
+    const dx = touch.clientX - start.x;
+    const dy = touch.clientY - start.y;
+    // Needs a deliberate sideways drag, not a vertical scroll or a small nudge.
+    if (Math.abs(dx) < 60 || Math.abs(dx) < Math.abs(dy) * 1.5) return;
+
+    const currentKey = activeTab === 'detail' ? 'dashboard' : activeTab;
+    const index = navTabs.findIndex((tab) => tab.key === currentKey);
+    if (index === -1) return;
+
+    const next = dx < 0 ? index + 1 : index - 1;
+    if (next < 0 || next >= navTabs.length) return;
+    setActiveTab(navTabs[next].key);
+  };
+
+  // One button in the phone tab bar.
+  const renderNavButton = ({ key, label, Icon, badge }: NavTab) => {
+    const active = isTabActive(key);
+    return (
+      <button
+        key={key}
+        type="button"
+        onClick={() => setActiveTab(key)}
+        aria-label={label}
+        aria-current={active ? 'page' : undefined}
+        className={`flex-1 min-w-0 flex flex-col items-center justify-center gap-0.5 py-1.5 rounded-full transition cursor-pointer relative ${
+          active
+            ? !isOwner
+              ? 'bg-blue-50 text-blue-800'
+              : 'bg-purple-50 text-purple-800'
+            : 'text-slate-400 hover:text-slate-600'
+        }`}
+      >
+        <Icon className="w-5 h-5" />
+        <span className="text-[10px] font-bold leading-none">{label}</span>
+        {badge > 0 && (
+          <span className="absolute top-0.5 right-1/4 min-w-[15px] h-[15px] px-1 rounded-full bg-rose-500 text-white text-[9px] font-bold flex items-center justify-center leading-none">
+            {badge}
+          </span>
+        )}
+      </button>
+    );
+  };
 
   const masterDateTasks = useMemo(() => {
     return goals.flatMap((g) =>
@@ -1821,7 +1918,7 @@ export default function App() {
 
       {/* VIEW SWITCHER TABS BAR */}
       <div
-        className={`border-b py-1.5 sm:py-2 px-2.5 sm:px-6 transition-colors duration-200 ${
+        className={`hidden sm:block border-b py-1.5 sm:py-2 px-2.5 sm:px-6 transition-colors duration-200 ${
           !isOwner
             ? 'bg-blue-50/60 border-blue-200/80'
             : 'bg-slate-50 border-slate-200/90'
@@ -1926,7 +2023,9 @@ export default function App() {
       {/* MAIN CONTAINER */}
       <main
         ref={contentRef}
-        className="max-w-6xl mx-auto px-3 sm:px-6 py-5 sm:py-8 flex-1 w-full relative z-10"
+        onTouchStart={handleTouchStart}
+        onTouchEnd={handleTouchEnd}
+        className="max-w-6xl mx-auto px-3 sm:px-6 pt-5 pb-28 sm:py-8 flex-1 w-full relative z-10"
       >
         {dataLoading && activeTab !== 'connect' && activeTab !== 'professional' ? (
           <div className="text-center py-20">
@@ -3316,6 +3415,31 @@ export default function App() {
           await handleExtendGoalDeadline(goalId, monthsToAdd);
         }}
       />
+
+      {/* PHONE TAB BAR: a floating pill that stays on screen while you scroll */}
+      <nav className="sm:hidden fixed bottom-0 inset-x-0 z-40 px-3 pb-3 pointer-events-none">
+        <div
+          className={`mx-auto max-w-md flex items-center justify-between gap-0.5 rounded-full border shadow-lg backdrop-blur-md px-1.5 py-1.5 pointer-events-auto ${
+            !isOwner ? 'bg-white/95 border-blue-200' : 'bg-white/95 border-slate-200'
+          }`}
+        >
+          {navTabs.slice(0, 2).map(renderNavButton)}
+
+          {isOwner && (
+            <button
+              type="button"
+              onClick={() => setIsModalOpen(true)}
+              aria-label="New Goal"
+              title="New Goal"
+              className="-mt-6 w-12 h-12 shrink-0 rounded-full bg-emerald-600 hover:bg-emerald-700 text-white shadow-lg ring-4 ring-white flex items-center justify-center transition cursor-pointer active:scale-95"
+            >
+              <Plus className="w-5 h-5 stroke-[2.5]" />
+            </button>
+          )}
+
+          {navTabs.slice(2).map(renderNavButton)}
+        </div>
+      </nav>
 
       {/* FIRST-RUN QUESTION: asked once, changeable later from the account menu */}
       <PersonaPrompt
