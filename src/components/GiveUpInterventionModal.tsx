@@ -70,8 +70,8 @@ export const GiveUpInterventionModal: React.FC<GiveUpInterventionModalProps> = (
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-md flex items-center justify-center p-3 sm:p-5 overflow-y-auto animate-in fade-in duration-200">
-      <div className="bg-white/95 backdrop-blur-2xl border border-slate-200 ring-1 ring-slate-100 rounded-3xl max-w-lg w-full shadow-2xl overflow-hidden transition-all text-slate-800 my-auto">
+    <div className="fixed inset-0 z-50 bg-slate-900/45 backdrop-blur-md flex items-center justify-center p-3 sm:p-5 overflow-y-auto fade">
+      <div className="glass rounded-3xl pop max-w-lg w-full shadow-2xl overflow-hidden transition-all text-slate-800 my-auto">
         
         {/* Top Header */}
         <div className="bg-gradient-to-r from-emerald-50/80 via-white to-emerald-50/80 border-b border-emerald-100 px-5 sm:px-6 py-4 flex items-center justify-between gap-3">

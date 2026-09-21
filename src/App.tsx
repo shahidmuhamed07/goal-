@@ -3,8 +3,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { useState, useEffect, useMemo, useRef } from 'react';
-import type { ElementType, TouchEvent as ReactTouchEvent } from 'react';
+import { useState, useEffect, useMemo, useRef, useCallback, useLayoutEffect } from 'react';
+import type { ElementType } from 'react';
 import {
   User,
   signInWithPopup,
@@ -90,9 +90,51 @@ import { CollaboratorsPanel } from './components/CollaboratorsPanel';
 import { CreateGoalModal } from './components/CreateGoalModal';
 import { GoalAssignmentModal } from './components/GoalAssignmentModal';
 import { GiveUpInterventionModal } from './components/GiveUpInterventionModal';
+
 import { ProfessionalProfilePanel } from './components/ProfessionalProfilePanel';
 import { PersonaPrompt } from './components/PersonaPrompt';
 import goalPathHero from './assets/images/goal_path_hero_1787491145015.jpg';
+
+/**
+ * Slides a pill behind the active item of a segmented control.
+ *
+ * The track is measured from the live DOM rather than from fixed widths, so it
+ * lands exactly on the active tab whatever the label, badge or viewport is.
+ */
+function useSegmentedTrack(activeKey: string) {
+  const [node, setNode] = useState<HTMLElement | null>(null);
+  const [track, setTrack] = useState({ x: 0, width: 0, ready: false });
+
+  const ref = useCallback((element: HTMLElement | null) => setNode(element), []);
+
+  const measure = useCallback(() => {
+    if (!node) return;
+    const active = node.querySelector<HTMLElement>('[data-active="true"]');
+    if (!active) return;
+    const next = { x: active.offsetLeft, width: active.offsetWidth, ready: true };
+    setTrack((prev) =>
+      prev.x === next.x && prev.width === next.width && prev.ready ? prev : next
+    );
+  }, [node]);
+
+  useLayoutEffect(() => {
+    measure();
+    if (!node) return;
+
+    // Labels, badges and fonts all move the target, so watch the bar itself.
+    const observer = new ResizeObserver(measure);
+    observer.observe(node);
+    window.addEventListener('resize', measure);
+    if (document.fonts?.ready) void document.fonts.ready.then(measure);
+
+    return () => {
+      observer.disconnect();
+      window.removeEventListener('resize', measure);
+    };
+  }, [node, measure, activeKey]);
+
+  return { ref, track };
+}
 
 /** Maps a Firestore goal document onto the shape the interface uses. */
 const mapGoalDoc = (id: string, data: Record<string, unknown>): Goal => ({
@@ -109,6 +151,23 @@ const mapGoalDoc = (id: string, data: Record<string, unknown>): Goal => ({
   viewerUids: Array.isArray(data.viewerUids) ? (data.viewerUids as string[]) : undefined,
   editorUids: Array.isArray(data.editorUids) ? (data.editorUids as string[]) : undefined,
 });
+
+/**
+ * One palette colour per category. A goal grid of identical white cards tells
+ * you nothing at a glance; the accent strip is what makes each row scannable.
+ */
+const CATEGORY_ACCENTS: Record<string, string> = {
+  Career: 'from-blue-400 to-blue-600',
+  Business: 'from-purple-400 to-purple-600',
+  Health: 'from-emerald-300 to-emerald-500',
+  Fitness: 'from-violet-400 to-violet-600',
+  'Finance & Wealth': 'from-teal-300 to-teal-500',
+  'Learning & Skills': 'from-indigo-400 to-indigo-600',
+  'Creative Writing': 'from-pink-300 to-pink-500',
+};
+
+const categoryAccent = (category?: string): string =>
+  CATEGORY_ACCENTS[(category || '').trim()] || 'from-purple-400 to-purple-600';
 
 async function ensureUserProfile(firebaseUser: User) {
   const userRef = doc(db, 'users', firebaseUser.uid);
@@ -171,6 +230,8 @@ export default function App() {
 
   // UI View State
   const [activeTab, setActiveTab] = useState<'dashboard' | 'today' | 'detail' | 'connect' | 'professional'>('dashboard');
+  // Which side the next view slides in from: 1 = from the right, -1 = from the left.
+  const [tabDirection, setTabDirection] = useState<1 | -1>(1);
   const [savingPersona, setSavingPersona] = useState(false);
   const [personaPromptDismissed, setPersonaPromptDismissed] = useState(false);
   const [personaPickerOpen, setPersonaPickerOpen] = useState(false);
@@ -525,7 +586,7 @@ export default function App() {
     }, 300);
   };
 
-  /** Slides the current view out, swaps the tab, then slides the new one in. */
+  /** Slides the current view out, swaps the tab, then lets the new one glide in. */
   const commitSwipe = (step: number) => {
     const target = swipeTarget(step);
     if (!target || swipe.current.locked) return;
@@ -533,13 +594,20 @@ export default function App() {
     const element = contentRef.current;
     if (element) element.style.willChange = 'transform, opacity';
 
-    paintContent(step === 1 ? -64 : 64, 0.3, 'transform 130ms ease-in, opacity 130ms ease-in');
+    paintContent(
+      step === 1 ? -58 : 58,
+      0.22,
+      'transform 140ms cubic-bezier(0.4, 0, 1, 1), opacity 140ms ease-in'
+    );
     window.setTimeout(() => {
+      setTabDirection(step === 1 ? 1 : -1);
       setSelectedGoalId(null);
       setActiveTab(target);
-      paintContent(step === 1 ? 64 : -64, 0.3, 'none');
+      window.scrollTo({ top: 0, behavior: 'auto' });
+      // The incoming panel animates itself, so release the wrapper first.
+      paintContent(0, 1, 'none');
       window.requestAnimationFrame(() => settleContent());
-    }, 140);
+    }, 150);
   };
 
   useEffect(() => {
@@ -717,66 +785,53 @@ export default function App() {
   // The tabs reachable from the phone tab bar, in swipe order.
   type NavTab = {
     key: 'dashboard' | 'today' | 'connect' | 'professional';
+    /** Short label for the phone bar. */
     label: string;
+    /** Full label for the wide view switcher. */
+    longLabel: string;
     Icon: ElementType;
     badge: number;
+    /** Shown as a quiet count next to the label, when it means something. */
+    count?: number;
   };
 
   const openTaskCount = allTodayTasks.filter((t) => !t.completed).length;
 
   const navTabs = useMemo<NavTab[]>(() => {
     const tabs: NavTab[] = [
-      { key: 'dashboard', label: 'Goals', Icon: ListChecks, badge: 0 },
-      { key: 'today', label: 'Today', Icon: CalendarCheck, badge: openTaskCount },
-      { key: 'connect', label: 'Connect', Icon: UsersRound, badge: pendingIncoming.length },
+      { key: 'dashboard', label: 'Goals', longLabel: 'All Goals', Icon: ListChecks, badge: 0, count: goals.length },
+      { key: 'today', label: 'Today', longLabel: "Today's Focus", Icon: CalendarCheck, badge: openTaskCount },
+      { key: 'connect', label: 'Connect', longLabel: 'Collaborate', Icon: UsersRound, badge: pendingIncoming.length },
     ];
     if (isOwner && profile?.persona === 'professional') {
-      tabs.push({ key: 'professional', label: 'Profile', Icon: Briefcase, badge: 0 });
+      tabs.push({ key: 'professional', label: 'Profile', longLabel: 'Professional', Icon: Briefcase, badge: 0 });
     }
     return tabs;
-  }, [isOwner, profile?.persona, openTaskCount, pendingIncoming.length]);
+  }, [isOwner, profile?.persona, openTaskCount, pendingIncoming.length, goals.length]);
 
   const isTabActive = (key: NavTab['key']) =>
     activeTab === key || (key === 'dashboard' && activeTab === 'detail');
 
-  // Swiping left or right across the content moves to the next or previous tab.
-  // A gesture that starts inside a horizontally scrolling strip (the day picker,
-  // the month chips) is ignored so those keep scrolling the way they should.
-  const swipeRef = useRef<{ x: number; y: number; blocked: boolean } | null>(null);
-
-  const handleTouchStart = (e: ReactTouchEvent<HTMLElement>) => {
-    const touch = e.touches[0];
-    let node = e.target as HTMLElement | null;
-    let blocked = false;
-    while (node && node !== e.currentTarget) {
-      if (node.scrollWidth > node.clientWidth + 4) {
-        blocked = true;
-        break;
-      }
-      node = node.parentElement;
+  /**
+   * Every tab change funnels through here: the bar, the phone bar and the
+   * dashboard stat cards. Doing it in one place keeps the slide direction and
+   * the scroll position in step, and makes a single gesture worth one tab.
+   */
+  const selectTab = (key: NavTab['key']) => {
+    const from = activeTab === 'detail' ? 'dashboard' : activeTab;
+    const fromIndex = navTabs.findIndex((tab) => tab.key === from);
+    const toIndex = navTabs.findIndex((tab) => tab.key === key);
+    if (fromIndex !== -1 && toIndex !== -1 && fromIndex !== toIndex) {
+      setTabDirection(toIndex > fromIndex ? 1 : -1);
     }
-    swipeRef.current = { x: touch.clientX, y: touch.clientY, blocked };
+    setSelectedGoalId(null);
+    setActiveTab(key);
+    window.scrollTo({ top: 0, behavior: 'auto' });
   };
 
-  const handleTouchEnd = (e: ReactTouchEvent<HTMLElement>) => {
-    const start = swipeRef.current;
-    swipeRef.current = null;
-    if (!start || start.blocked) return;
-
-    const touch = e.changedTouches[0];
-    const dx = touch.clientX - start.x;
-    const dy = touch.clientY - start.y;
-    // Needs a deliberate sideways drag, not a vertical scroll or a small nudge.
-    if (Math.abs(dx) < 60 || Math.abs(dx) < Math.abs(dy) * 1.5) return;
-
-    const currentKey = activeTab === 'detail' ? 'dashboard' : activeTab;
-    const index = navTabs.findIndex((tab) => tab.key === currentKey);
-    if (index === -1) return;
-
-    const next = dx < 0 ? index + 1 : index - 1;
-    if (next < 0 || next >= navTabs.length) return;
-    setActiveTab(navTabs[next].key);
-  };
+  // The pill that glides between tabs, measured separately for each bar.
+  const desktopNav = useSegmentedTrack(activeTab);
+  const phoneNav = useSegmentedTrack(activeTab);
 
   // One button in the phone tab bar.
   const renderNavButton = ({ key, label, Icon, badge }: NavTab) => {
@@ -785,21 +840,19 @@ export default function App() {
       <button
         key={key}
         type="button"
-        onClick={() => setActiveTab(key)}
+        onClick={() => selectTab(key)}
         aria-label={label}
         aria-current={active ? 'page' : undefined}
-        className={`flex-1 min-w-0 flex flex-col items-center justify-center gap-0.5 py-1.5 rounded-full transition cursor-pointer relative ${
-          active
-            ? !isOwner
-              ? 'bg-blue-50 text-blue-800'
-              : 'bg-purple-50 text-purple-800'
-            : 'text-slate-400 hover:text-slate-600'
-        }`}
+        data-active={active}
+        style={{ gap: '2px' }}
+        className="segmented-tab flex-1 min-w-0 flex-col py-2 cursor-pointer"
       >
-        <Icon className="w-5 h-5" />
+        <Icon
+          className={`w-5 h-5 transition-transform duration-300 ${active ? 'scale-110' : ''}`}
+        />
         <span className="text-[10px] font-bold leading-none">{label}</span>
         {badge > 0 && (
-          <span className="absolute top-0.5 right-1/4 min-w-[15px] h-[15px] px-1 rounded-full bg-rose-500 text-white text-[9px] font-bold flex items-center justify-center leading-none">
+          <span className="absolute top-0.5 right-1/4 min-w-[15px] h-[15px] px-1 rounded-full bg-rose-500 text-white text-[9px] font-bold flex items-center justify-center leading-none shadow-2xs">
             {badge}
           </span>
         )}
@@ -1674,35 +1727,20 @@ export default function App() {
     <div
       className={`min-h-screen flex flex-col transition-colors duration-300 ${
         !isOwner
-          ? 'bg-[#f4f8ff] selection:bg-blue-200 selection:text-blue-950'
-          : 'bg-slate-50/90 selection:bg-emerald-100 selection:text-emerald-900'
+          ? 'selection:bg-blue-200 selection:text-blue-950'
+          : 'selection:bg-emerald-100 selection:text-emerald-900'
       } text-slate-900 relative overflow-x-hidden`}
     >
-      {/* Ambient background wash, cool blue while a professional works in a client's workspace */}
+      {/* The canvas gradient lives on the body; this only adds the fine dot grid
+          so the glass surfaces have something to sit on. */}
       <div className="fixed inset-0 pointer-events-none -z-10 overflow-hidden">
-        {/* Delicate geometric micro-dot grid */}
-        <div className="absolute inset-0 bg-[radial-gradient(#cbd5e1_1px,transparent_1px)] [background-size:24px_24px] opacity-40" />
-        {/* Soft, low-contrast ambient color washes */}
-        <div
-          className={`absolute -top-32 right-1/4 w-[500px] h-[500px] rounded-full blur-3xl transition-all duration-700 ${
-            !isOwner ? 'bg-blue-200/40' : 'bg-emerald-100/35'
-          }`}
-        />
-        <div
-          className={`absolute top-1/2 -left-32 w-[450px] h-[450px] rounded-full blur-3xl transition-all duration-700 ${
-            !isOwner ? 'bg-sky-200/30' : 'bg-teal-100/25'
-          }`}
-        />
-        <div
-          className={`absolute bottom-10 right-10 w-[400px] h-[400px] rounded-full blur-3xl transition-all duration-700 ${
-            !isOwner ? 'bg-blue-100/40' : 'bg-slate-200/40'
-          }`}
-        />
+        <div className="absolute inset-0 bg-[radial-gradient(#ffffff_1px,transparent_1px)] [background-size:26px_26px] opacity-35" />
       </div>
 
-      {/* DISTINCT TRAINER MODE COMMAND BAR AT THE VERY TOP - REFINED SOFT WARM blue / CLAY THEME */}
+      {/* TRAINER MODE COMMAND BAR: Hoki glass so working in someone else's
+          workspace never looks like your own. */}
       {!isOwner && workspaceProfile && (
-        <div className="bg-blue-50/95 text-blue-950 border-b border-blue-200/90 px-2.5 sm:px-6 py-1.5 sm:py-2 min-h-[40px] sm:min-h-[44px] flex items-center justify-between gap-2 sm:gap-3 shadow-xs sticky top-0 z-40 backdrop-blur-md">
+        <div className="glass-hoki text-blue-950 px-2.5 sm:px-6 py-1.5 sm:py-2 min-h-[40px] sm:min-h-[44px] flex items-center justify-between gap-2 sm:gap-3 sticky top-0 z-40">
           <div className="min-w-0 flex items-center gap-2 text-xs sm:text-sm font-medium tracking-tight truncate">
             <span className="bg-blue-200/80 text-blue-950 border border-blue-300 px-2 py-0.5 rounded text-[10px] uppercase font-bold tracking-wider shadow-2xs shrink-0">
               Trainer Mode
@@ -1772,18 +1810,14 @@ export default function App() {
       <header
         className={`sticky ${
           !isOwner && workspaceProfile ? 'top-[40px] sm:top-[45px]' : 'top-0'
-        } z-30 shadow-xs transition-colors duration-200 ${
-          !isOwner
-            ? 'bg-white/95 border-b border-blue-200/90 backdrop-blur-md'
-            : 'bg-white border-b border-slate-200'
-        }`}
+        } z-30 glass transition-colors duration-200`}
       >
         <div className="max-w-6xl mx-auto px-2.5 sm:px-6 h-12 sm:h-16 flex items-center justify-between gap-2 sm:gap-3">
           {/* Logo / Brand with GoalPath vector integrated */}
           <div
             onClick={() => {
               setSelectedGoalId(null);
-              setActiveTab('dashboard');
+              selectTab('dashboard');
             }}
             className="cursor-pointer select-none group flex-shrink-0"
           >
@@ -1917,114 +1951,65 @@ export default function App() {
       </header>
 
       {/* VIEW SWITCHER TABS BAR */}
-      <div
-        className={`hidden sm:block border-b py-1.5 sm:py-2 px-2.5 sm:px-6 transition-colors duration-200 ${
-          !isOwner
-            ? 'bg-blue-50/60 border-blue-200/80'
-            : 'bg-slate-50 border-slate-200/90'
-        }`}
-      >
-        <div className="max-w-6xl mx-auto flex items-center justify-between gap-2 sm:gap-3 flex-wrap">
+      <div className="hidden sm:block px-2.5 sm:px-6 py-2 sm:py-3">
+        <div className="max-w-6xl mx-auto flex items-center justify-between gap-3">
           <nav
-            className={`flex items-center p-0.5 sm:p-1 rounded-xl gap-0.5 sm:gap-1 text-[11px] sm:text-xs font-semibold overflow-x-auto max-w-full [scrollbar-width:none] [&::-webkit-scrollbar]:hidden ${
-              !isOwner ? 'bg-blue-100/70' : 'bg-slate-200/70'
-            }`}
+            ref={desktopNav.ref}
+            data-tone={!isOwner ? 'warm' : 'cool'}
+            className="segmented text-xs sm:text-sm font-semibold"
+            aria-label="Views"
           >
-            <button
-              type="button"
-              onClick={() => {
-                setSelectedGoalId(null);
-                setActiveTab('dashboard');
+            <span
+              className="segmented-track"
+              aria-hidden="true"
+              style={{
+                transform: `translateX(${desktopNav.track.x}px)`,
+                width: desktopNav.track.width,
+                opacity: desktopNav.track.ready ? 1 : 0,
               }}
-              className={`px-2 py-1 sm:px-3 sm:py-1.5 rounded-lg transition whitespace-nowrap cursor-pointer ${
-                activeTab === 'dashboard'
-                  ? !isOwner
-                    ? 'bg-blue-700 text-white shadow-xs font-bold'
-                    : 'bg-white text-slate-900 shadow-xs font-bold'
-                  : !isOwner
-                  ? 'text-blue-950/80 hover:text-blue-950'
-                  : 'text-slate-600 hover:text-slate-900'
-              }`}
-            >
-              <span className="hidden sm:inline">All Goals ({goals.length})</span>
-              <span className="sm:hidden">Goals ({goals.length})</span>
-            </button>
-
-            {/* TODAY'S FOCUS WITH OPTICALLY CENTERED CIRCLE */}
-            <button
-              type="button"
-              onClick={() => setActiveTab('today')}
-              className={`px-2 py-1 sm:px-3 sm:py-1.5 rounded-lg transition flex items-center justify-center gap-1 sm:gap-1.5 whitespace-nowrap cursor-pointer ${
-                activeTab === 'today'
-                  ? !isOwner
-                    ? 'bg-blue-700 text-white shadow-xs font-bold'
-                    : 'bg-white text-slate-900 shadow-xs font-bold'
-                  : !isOwner
-                  ? 'text-blue-950/80 hover:text-blue-950'
-                  : 'text-slate-600 hover:text-slate-900'
-              }`}
-            >
-              <span className="hidden sm:inline">Today's Focus</span>
-              <span className="sm:hidden">Today</span>
-              <span
-                className={`inline-flex items-center justify-center min-w-[17px] h-[17px] sm:min-w-[20px] sm:h-[20px] px-1 text-[10px] sm:text-[11px] font-bold rounded-full leading-none shadow-2xs shrink-0 ${
-                  !isOwner
-                    ? 'bg-blue-200 text-blue-950'
-                    : 'bg-emerald-100 text-emerald-800'
-                }`}
-              >
-                {allTodayTasks.filter((t) => !t.completed).length}
-              </span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setActiveTab('connect')}
-              className={`px-2 py-1 sm:px-3 sm:py-1.5 rounded-lg transition flex items-center justify-center gap-1 sm:gap-1.5 whitespace-nowrap cursor-pointer ${
-                activeTab === 'connect'
-                  ? !isOwner
-                    ? 'bg-blue-700 text-white shadow-xs font-bold'
-                    : 'bg-white text-slate-900 shadow-xs font-bold'
-                  : !isOwner
-                  ? 'text-blue-950/80 hover:text-blue-950'
-                  : 'text-slate-600 hover:text-slate-900'
-              }`}
-            >
-              <span className="hidden sm:inline">Collaborate</span>
-              <span className="sm:hidden">Connect</span>
-              {pendingIncoming.length > 0 && (
-                <span className="inline-flex items-center justify-center min-w-[17px] h-[17px] sm:min-w-[18px] sm:h-[18px] px-1 text-[10px] font-bold rounded-full bg-blue-100 text-blue-800 leading-none shadow-2xs shrink-0">
-                  {pendingIncoming.length}
-                </span>
-              )}
-            </button>
-
-            {/* Only professionals see their own profile tab, and only in their own workspace */}
-            {isOwner && profile?.persona === 'professional' && (
-              <button
-                type="button"
-                onClick={() => setActiveTab('professional')}
-                className={`px-2 py-1 sm:px-3 sm:py-1.5 rounded-lg transition flex items-center justify-center gap-1 sm:gap-1.5 whitespace-nowrap cursor-pointer ${
-                  activeTab === 'professional'
-                    ? 'bg-white text-slate-900 shadow-xs font-bold'
-                    : 'text-slate-600 hover:text-slate-900'
-                }`}
-              >
-                <Briefcase className="w-3.5 h-3.5 hidden sm:block" />
-                <span className="hidden sm:inline">Professional</span>
-                <span className="sm:hidden">Profile</span>
-              </button>
-            )}
+            />
+            {navTabs.map(({ key, longLabel, Icon, badge, count }) => {
+              const active = isTabActive(key);
+              return (
+                <button
+                  key={key}
+                  type="button"
+                  role="tab"
+                  aria-selected={active}
+                  data-active={active}
+                  onClick={() => selectTab(key)}
+                  className="segmented-tab px-3.5 py-2 cursor-pointer"
+                >
+                  <Icon className="w-4 h-4 shrink-0" />
+                  <span>{longLabel}</span>
+                  {typeof count === 'number' && count > 0 && (
+                    <span
+                      className={`text-[11px] font-bold tabular-nums ${
+                        active ? 'text-white/75' : 'text-slate-400'
+                      }`}
+                    >
+                      {count}
+                    </span>
+                  )}
+                  {badge > 0 && (
+                    <span
+                      className={`inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 text-[10px] font-bold rounded-full leading-none shrink-0 ${
+                        active ? 'bg-white/25 text-white' : 'bg-purple-100 text-purple-800'
+                      }`}
+                    >
+                      {badge}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
           </nav>
-
         </div>
       </div>
 
       {/* MAIN CONTAINER */}
       <main
         ref={contentRef}
-        onTouchStart={handleTouchStart}
-        onTouchEnd={handleTouchEnd}
         className="max-w-6xl mx-auto px-3 sm:px-6 pt-5 pb-28 sm:py-8 flex-1 w-full relative z-10"
       >
         {dataLoading && activeTab !== 'connect' && activeTab !== 'professional' ? (
@@ -2037,7 +2022,7 @@ export default function App() {
             <span className="text-xs font-semibold text-slate-400">Loading goals from cloud...</span>
           </div>
         ) : (
-          <>
+          <div key={activeTab} className="tab-panel" data-dir={tabDirection}>
             {/* VIEW 1: ALL GOALS DASHBOARD */}
             {activeTab === 'dashboard' && (
               <div className="space-y-6">
@@ -2075,22 +2060,22 @@ export default function App() {
                   <>
                 {/* Dashboard Metrics Hero Banner - Frosted Glass Window */}
                 <div
-                  className={`relative overflow-hidden rounded-2xl p-3.5 sm:p-4 shadow-lg text-white transition-all duration-300 border border-purple-200/50 ring-1 ring-purple-100/40 bg-slate-950/40 backdrop-blur-2xl group ${
+                  className={`rise sheen relative overflow-hidden rounded-2xl p-3.5 sm:p-4 shadow-lg text-white transition-all duration-300 border border-white/25 ring-1 ring-white/15 bg-slate-950/40 backdrop-blur-2xl group ${
                     !isOwner
-                      ? 'shadow-purple-950/20'
-                      : 'shadow-slate-950/20'
+                      ? 'shadow-blue-950/25'
+                      : 'shadow-purple-950/25'
                   }`}
                 >
                   {/* Filling Hero Background Image visible through glass */}
                   <img
                     src={goalPathHero}
                     alt="Goal Path Horizon"
-                    className="absolute inset-0 w-full h-full object-cover object-center opacity-65 select-none pointer-events-none scale-100 group-hover:scale-105 transition-transform duration-700 ease-out"
+                    className="absolute inset-0 w-full h-full object-cover object-center opacity-25 select-none pointer-events-none scale-100 group-hover:scale-105 transition-transform duration-700 ease-out"
                     referrerPolicy="no-referrer"
                   />
-                  {/* Frosted Glass Overlay with subtle light-purple specular shimmer */}
-                  <div className="absolute inset-0 pointer-events-none bg-gradient-to-r from-slate-950/80 via-slate-900/55 to-purple-950/45 backdrop-blur-xs" />
-                  <div className="absolute inset-0 pointer-events-none bg-gradient-to-b from-white/15 via-transparent to-purple-900/20" />
+                  {/* The one saturated surface in the product: Crayola into Hoki */}
+                  <div className="absolute inset-0 pointer-events-none bg-gradient-to-r from-purple-700/90 via-purple-600/75 to-blue-600/75" />
+                  <div className="absolute inset-0 pointer-events-none bg-gradient-to-b from-white/25 via-transparent to-purple-900/25" />
 
                   {/* Content Container: one short heading and the numbers. The green
                       + in the tab bar is where new goals come from. */}
@@ -2169,21 +2154,21 @@ export default function App() {
 
                 {/* Client Workspaces You Support (Shown if you are a professional connected to clients) */}
                 {isOwner && visibleClients.length > 0 && (
-                  <div className="bg-gradient-to-r from-slate-900 via-slate-850 to-slate-900 text-white rounded-2xl p-5 sm:p-6 shadow-sm border border-slate-800 space-y-3.5">
+                  <div className="rise rise-2 glass-deep sheen text-white rounded-2xl p-5 sm:p-6 space-y-3.5">
                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                       <div>
                         <div className="flex items-center gap-2">
-                          <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-400 bg-emerald-950/90 border border-emerald-500/30 px-2 py-0.5 rounded-md">
+                          <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-200 bg-white/12 border border-white/25 px-2 py-0.5 rounded-md">
                             Professional Access
                           </span>
-                          <span className="text-xs text-slate-300">
+                          <span className="text-xs text-slate-200/90">
                             {visibleClients.length} Connected Client{visibleClients.length > 1 ? 's' : ''}
                           </span>
                         </div>
                         <h3 className="text-base sm:text-lg font-bold text-white mt-1">
                           Client Workspaces You Support
                         </h3>
-                        <p className="text-xs text-slate-300 max-w-2xl leading-relaxed">
+                        <p className="text-xs text-slate-200/85 max-w-2xl leading-relaxed">
                           You are approved as a professional for the following clients. Switch to their workspace to design routines, add subcategories, and manage daily task plans.
                         </p>
                       </div>
@@ -2202,7 +2187,7 @@ export default function App() {
                         return (
                           <div
                             key={client.id}
-                            className="bg-slate-800/80 hover:bg-slate-800 border border-slate-700/80 hover:border-emerald-500/50 rounded-xl p-4 transition flex flex-col justify-between space-y-3 shadow-2xs"
+                            className="lift rounded-xl p-4 flex flex-col justify-between space-y-3 bg-white/12 border border-white/25 backdrop-blur-md"
                           >
                             <div>
                               <div className="flex items-center justify-between gap-2">
@@ -2274,11 +2259,11 @@ export default function App() {
                         className={`text-xs px-3 py-1 rounded-full font-medium capitalize whitespace-nowrap transition cursor-pointer ${
                           selectedCategory === cat
                             ? !isOwner
-                              ? 'bg-purple-800 text-white shadow-2xs'
-                              : 'bg-slate-900 text-white'
+                              ? 'bg-blue-600 text-white shadow-2xs'
+                              : 'bg-purple-600 text-white shadow-2xs'
                             : !isOwner
-                            ? 'bg-white text-purple-900/80 border border-purple-200 hover:bg-purple-50'
-                            : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50'
+                            ? 'bg-white/70 text-blue-900/80 border border-white/60 hover:bg-white'
+                            : 'bg-white/70 text-slate-600 border border-white/60 hover:bg-white'
                         }`}
                       >
                         {cat}
@@ -2289,7 +2274,7 @@ export default function App() {
 
                 {/* Goals Grid */}
                 {filteredGoals.length === 0 ? (
-                  <div className="text-center bg-white border border-slate-200 rounded-2xl p-12">
+                  <div className="rise rise-3 glass text-center rounded-2xl p-12">
                     <div
                       className={`w-14 h-14 rounded-2xl flex items-center justify-center mx-auto mb-3 shadow-2xs ${
                         !isOwner
@@ -2342,14 +2327,15 @@ export default function App() {
                             setSelectedGoalMonth(getCurrentMonthKey());
                             setActiveTab('detail');
                           }}
-                          className={`group bg-white border rounded-2xl p-4 sm:p-5 hover:shadow-md transition-all duration-200 cursor-pointer flex flex-col justify-between ${
-                            !isOwner
-                              ? canEditThisGoal
-                                ? 'border-blue-300 ring-2 ring-blue-500/20 shadow-2xs hover:border-blue-500'
-                                : 'border-sky-200 hover:border-sky-400'
-                              : 'border-slate-200/90 hover:border-emerald-500/40'
+                          className={`rise rise-3 lift group glass relative overflow-hidden rounded-2xl p-4 sm:p-5 cursor-pointer flex flex-col justify-between ${
+                            !isOwner && canEditThisGoal ? 'ring-2 ring-blue-400/30' : ''
                           }`}
                         >
+                          {/* One palette colour per category, so the grid reads as a set */}
+                          <span
+                            aria-hidden="true"
+                            className={`absolute inset-x-0 top-0 h-1 bg-gradient-to-r ${categoryAccent(goal.category)}`}
+                          />
                           <div>
                             <div className="flex items-center justify-between gap-2 mb-2">
                               <span
@@ -2519,7 +2505,7 @@ export default function App() {
             {activeTab === 'today' && (
               <div className="space-y-6">
                 {/* Header Banner */}
-                <div className="bg-white border border-slate-200/90 rounded-3xl p-6 sm:p-7 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div className="rise glass rounded-3xl p-6 sm:p-7 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                   <div>
                     <div className="flex items-center gap-2">
                       <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-600 bg-emerald-50 px-2.5 py-0.5 rounded-md">
@@ -2561,11 +2547,11 @@ export default function App() {
 
                 {/* Goals Work Breakdown for Today */}
                 {goals.length === 0 ? (
-                  <div className="bg-white border border-slate-200 rounded-3xl p-12 text-center text-slate-400 text-sm">
+                  <div className="rise glass rounded-3xl p-12 text-center text-slate-400 text-sm">
                     No active goals yet. Create a goal to start planning your daily tasks.
                   </div>
                 ) : allTodayTasks.length === 0 ? (
-                  <div className="bg-white border border-slate-200 rounded-3xl p-10 text-center space-y-4">
+                  <div className="rise glass rounded-3xl p-10 text-center space-y-4">
                     <div className="w-12 h-12 rounded-2xl bg-emerald-50 text-emerald-600 border border-emerald-200 flex items-center justify-center mx-auto shadow-2xs">
                       <CheckCircle2 className="w-6 h-6" />
                     </div>
@@ -2612,15 +2598,15 @@ export default function App() {
                       return (
                         <div
                           key={g.id}
-                          className="bg-white border border-slate-200/90 rounded-2xl p-4 sm:p-5 shadow-xs space-y-4"
+                          className="rise glass rounded-2xl p-4 sm:p-5 space-y-4"
                         >
                           {/* Goal Header */}
-                          <div className="flex items-center justify-between gap-3 pb-3 border-b border-slate-100">
-                            <div className="flex items-center gap-2.5 min-w-0">
+                          <div className="flex items-center justify-between gap-3 pb-3 border-b border-slate-100 flex-wrap">
+                            <div className="flex items-center gap-2.5 min-w-0 flex-1">
                               <span className="text-xs font-bold text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-lg border border-emerald-100 flex-shrink-0">
                                 {g.category || 'General'}
                               </span>
-                              <h2 className="text-base sm:text-lg font-bold text-slate-900 truncate">
+                              <h2 className="text-base sm:text-lg font-bold text-slate-900 leading-tight break-words">
                                 {g.title}
                               </h2>
                             </div>
@@ -3018,7 +3004,7 @@ export default function App() {
               <div className="space-y-6">
                 {/* Top Goal Bar */}
                 <div
-                  className={`bg-white border rounded-2xl p-4 sm:p-6 shadow-xs transition-colors duration-200 ${
+                  className={`glass rounded-2xl p-4 sm:p-6 transition-colors duration-200 ${
                     !isOwner ? 'border-purple-200/90 shadow-purple-950/5' : 'border-purple-200/80'
                   }`}
                 >
@@ -3280,12 +3266,12 @@ export default function App() {
                 onRemoveClient={handleRemoveClient}
               />
             )}
-          </>
+          </div>
         )}
       </main>
 
       {/* FOOTER */}
-      <footer className="border-t border-slate-200 bg-white py-3.5 sm:py-6 mt-6 sm:mt-12">
+      <footer className="glass border-x-0 border-b-0 rounded-none py-3.5 sm:py-6 mt-6 sm:mt-12">
         <div className="max-w-6xl mx-auto px-3 sm:px-6 flex flex-col sm:flex-row items-center justify-between gap-1.5 sm:gap-4 text-[11px] sm:text-xs text-slate-500 text-center sm:text-left">
           <div className="flex items-center gap-2">
             <span>Goal Path App</span>
@@ -3333,12 +3319,21 @@ export default function App() {
       />
 
       {/* PHONE TAB BAR: a floating pill that stays on screen while you scroll */}
-      <nav className="sm:hidden fixed bottom-0 inset-x-0 z-40 px-3 pb-3 pointer-events-none">
+      <nav className="sm:hidden fixed bottom-0 inset-x-0 z-40 px-3 safe-bottom pointer-events-none">
         <div
-          className={`mx-auto max-w-md flex items-center justify-between gap-0.5 rounded-full border shadow-lg backdrop-blur-md px-1.5 py-1.5 pointer-events-auto ${
-            !isOwner ? 'bg-white/95 border-blue-200' : 'bg-white/95 border-slate-200'
-          }`}
+          ref={phoneNav.ref}
+          data-tone={!isOwner ? 'warm' : 'cool'}
+          className="segmented mx-auto max-w-md justify-between pointer-events-auto shadow-lg"
         >
+          <span
+            className="segmented-track"
+            aria-hidden="true"
+            style={{
+              transform: `translateX(${phoneNav.track.x}px)`,
+              width: phoneNav.track.width,
+              opacity: phoneNav.track.ready ? 1 : 0,
+            }}
+          />
           {navTabs.slice(0, 2).map(renderNavButton)}
 
           {isOwner && (
@@ -3347,7 +3342,7 @@ export default function App() {
               onClick={() => setIsModalOpen(true)}
               aria-label="New Goal"
               title="New Goal"
-              className="-mt-6 w-12 h-12 shrink-0 rounded-full bg-emerald-600 hover:bg-emerald-700 text-white shadow-lg ring-4 ring-white flex items-center justify-center transition cursor-pointer active:scale-95"
+              className="press -mt-6 w-12 h-12 shrink-0 rounded-full bg-emerald-600 hover:bg-emerald-700 text-white shadow-lg ring-4 ring-white/70 flex items-center justify-center cursor-pointer"
             >
               <Plus className="w-5 h-5 stroke-[2.5]" />
             </button>

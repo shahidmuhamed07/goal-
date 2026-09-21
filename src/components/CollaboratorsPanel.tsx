@@ -183,7 +183,7 @@ export const CollaboratorsPanel: React.FC<CollaboratorsPanelProps> = ({
     return (
       <div className="space-y-6 max-w-3xl">
         {/* ACTIVE CLIENT WORKSPACE BANNER WITH GREEN EXIT BUTTON */}
-        <div className="bg-gradient-to-r from-slate-900 via-blue-950/40 to-slate-900 border border-blue-400/50 text-white rounded-2xl p-4 sm:p-5 shadow-md flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div className="glass-deep sheen border border-white/25 text-white rounded-2xl p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div className="space-y-1">
             <div className="flex items-center gap-2">
               <span className="w-2.5 h-2.5 rounded-full bg-blue-400 animate-pulse" />
@@ -217,7 +217,7 @@ export const CollaboratorsPanel: React.FC<CollaboratorsPanelProps> = ({
         </div>
 
         {/* WHO ALL THE PEOPLE ARE COLLABORATED WITH THIS CLIENT */}
-        <div className="bg-white border border-blue-200/90 rounded-2xl p-6 shadow-xs">
+        <div className="glass rounded-2xl p-6">
           <h2 className="text-sm font-bold text-slate-900 uppercase tracking-wider flex items-center gap-2">
             <span>People Connected with this Client</span>
             <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-blue-100 text-blue-900">
@@ -300,7 +300,7 @@ export const CollaboratorsPanel: React.FC<CollaboratorsPanelProps> = ({
         </div>
 
         {/* ALL CLIENTS YOU SUPPORT */}
-        <div className="bg-white border border-blue-200/90 rounded-2xl p-6 shadow-xs">
+        <div className="glass rounded-2xl p-6">
           <h2 className="text-sm font-bold text-slate-900 uppercase tracking-wider">All Clients You Work With</h2>
           <p className="text-xs text-slate-500 mt-1 mb-4">
             Switch between client accounts you have been approved to manage.
@@ -353,7 +353,7 @@ export const CollaboratorsPanel: React.FC<CollaboratorsPanelProps> = ({
   return (
     <div className="space-y-6 max-w-3xl">
       {isViewingClient && (
-        <div className="bg-gradient-to-r from-slate-900 via-slate-850 to-slate-900 border-2 border-emerald-500 text-white rounded-2xl p-4 sm:p-5 shadow-md flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div className="glass-deep sheen border-2 border-emerald-400/60 text-white rounded-2xl p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div className="space-y-1">
             <div className="flex items-center gap-2">
               <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse" />
@@ -386,7 +386,7 @@ export const CollaboratorsPanel: React.FC<CollaboratorsPanelProps> = ({
         </p>
       </div>
 
-      <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-xs">
+      <div className="glass rounded-2xl p-6">
         <h2 className="text-sm font-bold text-slate-900 uppercase tracking-wider">My Code</h2>
         <p className="text-xs text-slate-400 mt-1 mb-4">Give this to a professional so they can request access to your account.</p>
         <div className="flex items-center gap-3">
@@ -404,7 +404,7 @@ export const CollaboratorsPanel: React.FC<CollaboratorsPanelProps> = ({
         </div>
       </div>
 
-      <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-xs">
+      <div className="glass rounded-2xl p-6">
         <h2 className="text-sm font-bold text-slate-900 uppercase tracking-wider">Connect as Professional</h2>
         <p className="text-xs text-slate-400 mt-1 mb-4">Enter a client’s code and the role you are requesting.</p>
         <form onSubmit={handleSubmit} className="flex flex-col sm:flex-row gap-2">
@@ -427,7 +427,7 @@ export const CollaboratorsPanel: React.FC<CollaboratorsPanelProps> = ({
           </select>
           <button
             type="submit"
-            className="px-4 py-2.5 bg-slate-900 hover:bg-slate-800 text-white text-sm font-semibold rounded-xl cursor-pointer"
+            className="px-4 py-2.5 bg-purple-600 hover:bg-purple-700 text-white text-sm font-semibold rounded-xl press cursor-pointer"
           >
             Request access
           </button>
@@ -452,7 +452,7 @@ export const CollaboratorsPanel: React.FC<CollaboratorsPanelProps> = ({
       </div>
 
       {/* PENDING REQUESTS */}
-      <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-xs">
+      <div className="glass rounded-2xl p-6">
         <h2 className="text-sm font-bold text-slate-900 uppercase tracking-wider">Pending requests</h2>
         <p className="text-xs text-slate-400 mt-1 mb-4">Professionals waiting for your approval. You will choose which goals to assign upon approving.</p>
         {incomingError && (
@@ -499,7 +499,7 @@ export const CollaboratorsPanel: React.FC<CollaboratorsPanelProps> = ({
       </div>
 
       {/* CONNECTED PROFESSIONALS */}
-      <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-xs">
+      <div className="glass rounded-2xl p-6">
         <h2 className="text-sm font-bold text-slate-900 uppercase tracking-wider">Connected professionals</h2>
         <p className="text-xs text-slate-400 mt-1 mb-4">
           People connected to your account. They can only edit daily tasks and subcategories in the goals assigned to them.
@@ -623,7 +623,7 @@ export const CollaboratorsPanel: React.FC<CollaboratorsPanelProps> = ({
       </div>
 
       {/* CLIENTS I SUPPORT */}
-      <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-xs">
+      <div className="glass rounded-2xl p-6">
         <h2 className="text-sm font-bold text-slate-900 uppercase tracking-wider">Clients I support</h2>
         <p className="text-xs text-slate-400 mt-1 mb-4">Accounts that approved you as a professional.</p>
         {clientList.length === 0 ? (
@@ -656,7 +656,7 @@ export const CollaboratorsPanel: React.FC<CollaboratorsPanelProps> = ({
                       onClick={() => onSwitchWorkspace(active ? user.uid : (c.id || ''))}
                       className={`text-xs font-semibold px-2.5 py-1.5 rounded-lg cursor-pointer ${
                         active
-                          ? 'bg-slate-900 text-white'
+                          ? 'bg-purple-600 text-white shadow-2xs'
                           : 'border border-slate-200 text-slate-700 hover:bg-slate-50'
                       }`}
                     >
@@ -711,8 +711,8 @@ export const CollaboratorsPanel: React.FC<CollaboratorsPanelProps> = ({
 
       {/* ASSIGN GOALS MODAL */}
       {isModalOpen && (
-        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl border border-slate-200 space-y-5 animate-in fade-in zoom-in-95 duration-150">
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-md flex items-center justify-center p-4 z-50 fade">
+          <div className="glass rounded-3xl max-w-lg w-full p-6 space-y-5 pop">
             <div>
               <div className="flex items-center justify-between">
                 <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-600 bg-emerald-50 px-2.5 py-0.5 rounded-md border border-emerald-100">
@@ -874,7 +874,7 @@ export const CollaboratorsPanel: React.FC<CollaboratorsPanelProps> = ({
 
       {/* CREDENTIALS MODAL: what a client can see about a connected professional */}
       {credentialTarget && (
-        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4 z-50">
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-md flex items-center justify-center p-4 z-50 fade">
           <div className="bg-white rounded-3xl max-w-xl w-full p-6 shadow-2xl border border-slate-200 max-h-[90vh] overflow-y-auto space-y-4">
             <div className="flex items-start justify-between gap-3">
               <div>

@@ -32,8 +32,8 @@ export const PersonaPrompt: React.FC<PersonaPromptProps> = ({
     }`;
 
   return (
-    <div className="fixed inset-0 bg-slate-900/45 backdrop-blur-md flex items-center justify-center p-4 z-50">
-      <div className="bg-white rounded-3xl max-w-lg w-full p-6 sm:p-7 shadow-2xl border border-slate-200 space-y-5">
+    <div className="fixed inset-0 bg-slate-900/45 backdrop-blur-md flex items-center justify-center p-4 z-50 fade">
+      <div className="glass rounded-3xl max-w-lg w-full p-6 sm:p-7 space-y-5 pop">
         <div>
           <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-0.5 rounded-md">
             One quick question

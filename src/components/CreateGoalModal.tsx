@@ -125,8 +125,8 @@ export const CreateGoalModal: React.FC<CreateGoalModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-md flex items-center justify-center p-3 sm:p-4 z-50 animate-in fade-in duration-150">
-      <div className="bg-white/95 backdrop-blur-2xl rounded-3xl max-w-lg w-full p-5 sm:p-7 shadow-2xl border border-emerald-200/90 ring-1 ring-emerald-100/80 max-h-[92vh] overflow-y-auto space-y-5">
+    <div className="fixed inset-0 bg-slate-900/45 backdrop-blur-md flex items-center justify-center p-3 sm:p-4 z-50 fade">
+      <div className="glass rounded-3xl pop max-w-lg w-full p-5 sm:p-7 shadow-2xl border border-emerald-200/90 ring-1 ring-emerald-100/80 max-h-[92vh] overflow-y-auto space-y-5">
         {/* Modal Header */}
         <div className="flex justify-between items-center pb-3 border-b border-emerald-100/80">
           <div className="flex items-center gap-2.5">

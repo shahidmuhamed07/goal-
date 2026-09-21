@@ -67,7 +67,7 @@ export const ProgressBar: React.FC<{ value?: number; height?: string; color?: st
 }) => (
   <div className={`w-full bg-slate-100 rounded-full overflow-hidden ${height}`}>
     <div
-      className={`${color} h-full rounded-full transition-all duration-300 ease-out`}
+      className={`${color} bar-grow h-full rounded-full transition-all duration-300 ease-out`}
       style={{ width: `${Math.min(100, Math.max(0, value))}%` }}
     />
   </div>
