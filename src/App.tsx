@@ -3022,8 +3022,8 @@ export default function App() {
                     !isOwner ? 'border-purple-200/90 shadow-purple-950/5' : 'border-purple-200/80'
                   }`}
                 >
-                  <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
-                    <div className="flex-1 min-w-0">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0 flex-1">
                       {isEditingGoalHeader ? (
                         <div className="bg-purple-50/40 border border-purple-200 rounded-xl p-4 space-y-3">
                           <div className="flex items-center justify-between">
@@ -3094,58 +3094,40 @@ export default function App() {
                         </div>
                       ) : (
                         <>
-                          <div className="flex items-center gap-2 mb-2 flex-wrap">
+                          <div className="flex items-center gap-1.5 flex-wrap">
                             <button
                               onClick={() => {
                                 setSelectedGoalId(null);
                                 setActiveTab('dashboard');
                               }}
-                              className="text-xs font-semibold text-emerald-700 hover:text-emerald-800 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 px-2.5 py-1 rounded-lg transition cursor-pointer shadow-2xs flex items-center gap-1"
+                              className="text-[11px] font-semibold text-emerald-700 hover:text-emerald-800 cursor-pointer"
                             >
-                              ← Back to Dashboard
+                              ← Back
                             </button>
                             <span
-                              className={`text-xs font-semibold px-2.5 py-1 rounded-lg border ${
+                              className={`text-[11px] font-semibold px-2 py-0.5 rounded-md border ${
                                 isOwner
-                                  ? 'text-purple-900 bg-purple-100/90 border-purple-200'
-                                  : 'text-blue-950 bg-blue-100/90 border-blue-300'
+                                  ? 'text-purple-900 bg-purple-50 border-purple-200'
+                                  : 'text-blue-950 bg-blue-50 border-blue-300'
                               }`}
                             >
                               {currentGoal.category || 'General'}
                             </span>
                             <span
-                              className={`text-xs font-semibold px-2.5 py-1 rounded-lg border ${
+                              className={`text-[11px] font-semibold px-2 py-0.5 rounded-md border ${
                                 isOwner
                                   ? 'text-purple-800 bg-purple-50 border-purple-100'
                                   : 'text-blue-900 bg-blue-50 border-blue-200'
                               }`}
                             >
-                              Target: {formatFullMonth(currentGoal.targetDate)}
+                              {formatFullMonth(currentGoal.targetDate)}
                             </span>
-                            {isOwner && (
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setEditGoalTitle(currentGoal.title);
-                                  setEditGoalCategory(currentGoal.category || 'General');
-                                  setEditGoalDesc(currentGoal.description || '');
-                                  setIsEditingGoalHeader(true);
-                                }}
-                                className={`text-xs font-semibold px-2.5 py-1 rounded-lg transition cursor-pointer flex items-center gap-1 shadow-2xs border ${
-                                  isOwner
-                                    ? 'text-purple-900 hover:text-purple-950 bg-purple-50 hover:bg-purple-100 border-purple-200'
-                                    : 'text-blue-950 hover:text-blue-900 bg-blue-50 hover:bg-blue-100 border-blue-300'
-                                }`}
-                                title="Edit Goal Details"
-                              >
-                                <Edit2 className={`w-3.5 h-3.5 ${isOwner ? 'text-purple-700' : 'text-blue-700'}`} />
-                                <span>Edit Goal</span>
-                              </button>
-                            )}
                           </div>
-                          <h1 className="text-2xl sm:text-3xl font-bold text-slate-900">{currentGoal.title}</h1>
+                          <h1 className="mt-1.5 text-xl sm:text-3xl font-bold text-slate-900">
+                            {currentGoal.title}
+                          </h1>
                           {currentGoal.description && (
-                            <p className="text-slate-600 text-sm mt-1 max-w-3xl leading-relaxed">
+                            <p className="text-slate-600 text-xs sm:text-sm mt-0.5 max-w-3xl leading-relaxed">
                               {currentGoal.description}
                             </p>
                           )}
@@ -3153,31 +3135,26 @@ export default function App() {
                       )}
 
                       {!isOwner && (
-                        <div
-                          className={`mt-3 p-3.5 rounded-xl border flex items-center justify-between gap-2.5 text-xs font-semibold flex-wrap ${
+                        <span
+                          className={`mt-2 inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-md border ${
                             canEditGoal(currentGoal.id)
-                              ? 'bg-blue-50/90 border-blue-300 text-blue-950 shadow-2xs'
-                              : 'bg-slate-50 border-slate-300 text-slate-700'
+                              ? 'bg-blue-50 border-blue-200 text-blue-900'
+                              : 'bg-slate-50 border-slate-200 text-slate-600'
                           }`}
+                          title={
+                            canEditGoal(currentGoal.id)
+                              ? `You can edit this goal as ${professionalRole || 'Professional'}`
+                              : 'Your client gave you view-only access to this goal'
+                          }
                         >
-                          <div className="flex items-center gap-2">
-                            <ShieldCheck
-                              className={`w-4 h-4 flex-shrink-0 ${
-                                canEditGoal(currentGoal.id) ? 'text-blue-600' : 'text-slate-500'
-                              }`}
-                            />
-                            <span>
-                              {canEditGoal(currentGoal.id)
-                                ? `Trainer Active Mode: Managing ${workspaceProfile?.displayName || 'Client'}'s roadmap as ${professionalRole || 'Professional'}. Routine subcategories and daily tasks sync directly to their view.`
-                                : `View-only access: ${workspaceProfile?.displayName || 'your client'} shared this goal with you as ${professionalRole || 'Professional'} for review. Ask them for editing access to change routines and tasks.`}
-                            </span>
-                          </div>
-                        </div>
+                          <ShieldCheck className="w-3 h-3" />
+                          {canEditGoal(currentGoal.id) ? 'Editing allowed' : 'View only'}
+                        </span>
                       )}
 
                       {isOwner && profile?.collaborators && profile.collaborators.length > 0 && (
-                        <div className="mt-3 flex items-center gap-2 flex-wrap text-xs">
-                          <span className="text-slate-500 font-medium">Assigned Professionals:</span>
+                        <div className="mt-2 flex items-center gap-1.5 flex-wrap text-[11px]">
+                          <span className="text-slate-400 font-medium">Assigned:</span>
                           {(() => {
                             const assigned = profile.collaborators.filter((c) =>
                               isGoalSharedWith(c, currentGoal.id)
@@ -3207,37 +3184,32 @@ export default function App() {
                       )}
                     </div>
 
-                    <div className="flex items-center flex-wrap gap-2 self-start">
-                      {isOwner && (
-                        <>
-                          {profile?.collaborators && profile.collaborators.length > 0 && (
-                            <button
-                              onClick={() => setManagingAssignedGoal(currentGoal)}
-                              className="hidden sm:flex text-xs text-purple-950 hover:text-purple-950 bg-purple-50/60 hover:bg-purple-100 border border-purple-200 px-3.5 py-1.5 rounded-xl transition font-semibold cursor-pointer items-center gap-1.5 shadow-2xs"
-                              title="Manage assigned professionals"
-                            >
-                              <Users className="w-3.5 h-3.5 text-purple-700" />
-                              <span>
-                                {profile.collaborators.filter((c) =>
-                                  isGoalSharedWith(c, currentGoal.id)
-                                ).length > 0
-                                  ? 'Assigned Pros'
-                                  : 'Assign Pros'}
-                              </span>
-                            </button>
-                          )}
-                          <button
-                            type="button"
-                            onClick={() => setGiveUpTargetGoal(currentGoal)}
-                            className="text-xs text-rose-600 hover:text-rose-700 hover:bg-rose-50 border border-rose-200 px-3.5 py-1.5 rounded-xl transition font-semibold cursor-pointer flex items-center gap-1.5 shadow-2xs"
-                            title="Give up on this goal"
-                          >
-                            <Flag className="w-3.5 h-3.5 text-rose-500" />
-                            <span>Give Up</span>
-                          </button>
-                        </>
-                      )}
-                    </div>
+                    {/* Secondary actions live here, small and out of the way. */}
+                    {isOwner && !isEditingGoalHeader && (
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        <GlassIconButton
+                          variant="purple"
+                          size="md"
+                          title="Edit goal details"
+                          onClick={() => {
+                            setEditGoalTitle(currentGoal.title);
+                            setEditGoalCategory(currentGoal.category || 'General');
+                            setEditGoalDesc(currentGoal.description || '');
+                            setIsEditingGoalHeader(true);
+                          }}
+                        >
+                          <Edit2 className="w-3.5 h-3.5" />
+                        </GlassIconButton>
+                        <GlassIconButton
+                          variant="rose"
+                          size="md"
+                          title="Give up on this goal"
+                          onClick={() => setGiveUpTargetGoal(currentGoal)}
+                        >
+                          <Flag className="w-3.5 h-3.5" />
+                        </GlassIconButton>
+                      </div>
+                    )}
                   </div>
                 </div>
 
