@@ -2075,7 +2075,7 @@ export default function App() {
                   <>
                 {/* Dashboard Metrics Hero Banner - Frosted Glass Window */}
                 <div
-                  className={`relative overflow-hidden rounded-3xl p-4 sm:p-8 shadow-2xl text-white transition-all duration-300 border border-purple-200/50 ring-1 ring-purple-100/40 bg-slate-950/40 backdrop-blur-2xl group ${
+                  className={`relative overflow-hidden rounded-2xl p-3.5 sm:p-4 shadow-lg text-white transition-all duration-300 border border-purple-200/50 ring-1 ring-purple-100/40 bg-slate-950/40 backdrop-blur-2xl group ${
                     !isOwner
                       ? 'shadow-purple-950/20'
                       : 'shadow-slate-950/20'
@@ -2092,56 +2092,15 @@ export default function App() {
                   <div className="absolute inset-0 pointer-events-none bg-gradient-to-r from-slate-950/80 via-slate-900/55 to-purple-950/45 backdrop-blur-xs" />
                   <div className="absolute inset-0 pointer-events-none bg-gradient-to-b from-white/15 via-transparent to-purple-900/20" />
 
-                  {/* Content Container */}
-                  <div className="relative z-10 flex flex-col lg:flex-row lg:items-center justify-between gap-6">
-                    <div className="max-w-xl">
-                      {!isOwner && workspaceProfile ? (
-                        <>
-                          <div className="flex items-center gap-2 mb-2 flex-wrap">
-                            <span className="text-[11px] font-bold uppercase tracking-wider text-purple-200 bg-purple-900/80 border border-purple-400/50 px-2.5 py-0.5 rounded-md shadow-2xs">
-                              Trainer Command Console
-                            </span>
-                          </div>
-                          <h1 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight drop-shadow-xs">
-                            Managing {workspaceProfile.displayName || 'Client'}'s Program
-                          </h1>
-                          <p className="text-purple-100/90 text-xs sm:text-sm mt-1.5 leading-relaxed drop-shadow-2xs">
-                            You are in client workspace mode. Design routine subcategories, configure daily tasks, and schedule milestones. All changes sync directly to {workspaceProfile.displayName || 'your client'}'s timeline.
-                          </p>
-                        </>
-                      ) : (
-                        <>
-                          <div className="flex items-center gap-2 mb-2">
-                            <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-300 bg-emerald-950/80 border border-emerald-400/40 px-2.5 py-0.5 rounded-md shadow-2xs">
-                              Cloud Synced Roadmap
-                            </span>
-                            <span className="text-xs text-slate-200">
-                              Horizon &amp; Daily Action
-                            </span>
-                          </div>
-                          <h1 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight drop-shadow-xs">
-                            Transform Vision Into Milestones
-                          </h1>
-                          <p className="text-slate-200 text-xs sm:text-sm mt-1.5 leading-relaxed drop-shadow-2xs">
-                            Signed in as <span className="font-semibold text-white">{user.displayName || user.email}</span>. Break long-term ambition down into actionable monthly milestones and daily wins.
-                          </p>
+                  {/* Content Container: one short heading and the numbers. The green
+                      + in the tab bar is where new goals come from. */}
+                  <div className="relative z-10 flex items-center justify-between gap-3 flex-wrap">
+                    <h1 className="text-lg sm:text-xl font-extrabold text-white tracking-tight drop-shadow-xs">
+                      Your Goals
+                    </h1>
 
-                          <div className="mt-3.5 flex items-center gap-2.5 flex-wrap">
-                            <button
-                              type="button"
-                              onClick={() => setIsModalOpen(true)}
-                              className="inline-flex items-center gap-2 bg-white/20 hover:bg-white/30 active:bg-white/40 text-white font-bold text-xs sm:text-sm px-4 py-2 rounded-xl border border-white/35 hover:border-purple-300/80 backdrop-blur-md transition shadow-md cursor-pointer active:scale-95"
-                            >
-                              <Plus className="w-4 h-4 text-emerald-300" />
-                              <span>Create New Goal Path</span>
-                            </button>
-                          </div>
-                        </>
-                      )}
-                    </div>
-
-                    {/* Highly Readable & Clickable Glassy Stat Cards */}
-                    <div className="grid grid-cols-3 gap-2 sm:gap-3.5 flex-shrink-0">
+                    {/* Clickable glass stat cards */}
+                    <div className="grid grid-cols-3 gap-2 flex-shrink-0">
                       {/* Stat 1: Goals */}
                       <button
                         type="button"
@@ -2149,14 +2108,14 @@ export default function App() {
                           const el = document.getElementById('goals-grid');
                           if (el) el.scrollIntoView({ behavior: 'smooth' });
                         }}
-                        className="backdrop-blur-xl bg-white/15 hover:bg-white/25 active:bg-white/30 border border-white/25 hover:border-purple-300/80 ring-1 ring-white/15 rounded-2xl p-3 sm:px-4 sm:py-3.5 transition-all duration-200 cursor-pointer shadow-lg hover:shadow-xl hover:-translate-y-0.5 active:scale-95 group/card select-none text-center sm:text-left"
+                        className="backdrop-blur-xl bg-white/15 hover:bg-white/25 active:bg-white/30 border border-white/25 hover:border-purple-300/80 ring-1 ring-white/15 rounded-xl px-2.5 py-2 transition-all duration-200 cursor-pointer shadow-md hover:shadow-lg hover:-translate-y-0.5 active:scale-95 group/card select-none text-center sm:text-left"
                         title="Click to view all goals"
                       >
-                        <div className="text-xl sm:text-2xl font-black text-white">{goals.length}</div>
-                        <div className={`text-[11px] font-medium ${!isOwner ? 'text-purple-200' : 'text-slate-200'}`}>
+                        <div className="text-base sm:text-lg font-black text-white">{goals.length}</div>
+                        <div className={`text-[10px] font-medium ${!isOwner ? 'text-purple-200' : 'text-slate-200'}`}>
                           {!isOwner ? 'Client Goals' : 'Active Goals'}
                         </div>
-                        <div className="text-[9px] font-semibold text-purple-200/80 group-hover/card:text-white flex items-center justify-center sm:justify-start gap-0.5 mt-1 transition">
+                        <div className="text-[9px] font-semibold text-purple-200/80 group-hover/card:text-white flex items-center justify-center sm:justify-start gap-0.5 mt-0.5 transition">
                           <span>View Grid</span>
                           <ArrowRight className="w-2.5 h-2.5 group-hover/card:translate-x-0.5 transition-transform" />
                         </div>
@@ -2166,16 +2125,16 @@ export default function App() {
                       <button
                         type="button"
                         onClick={() => setActiveTab('today')}
-                        className="backdrop-blur-xl bg-white/15 hover:bg-white/25 active:bg-white/30 border border-white/25 hover:border-purple-300/80 ring-1 ring-white/15 rounded-2xl p-3 sm:px-4 sm:py-3.5 transition-all duration-200 cursor-pointer shadow-lg hover:shadow-xl hover:-translate-y-0.5 active:scale-95 group/card select-none text-center sm:text-left"
+                        className="backdrop-blur-xl bg-white/15 hover:bg-white/25 active:bg-white/30 border border-white/25 hover:border-purple-300/80 ring-1 ring-white/15 rounded-xl px-2.5 py-2 transition-all duration-200 cursor-pointer shadow-md hover:shadow-lg hover:-translate-y-0.5 active:scale-95 group/card select-none text-center sm:text-left"
                         title="Click to switch to Today's Focus"
                       >
-                        <div className="text-xl sm:text-2xl font-black text-emerald-300">
+                        <div className="text-base sm:text-lg font-black text-emerald-300">
                           {allTodayTasks.filter((t) => t.completed).length}/{allTodayTasks.length}
                         </div>
-                        <div className={`text-[11px] font-medium ${!isOwner ? 'text-purple-200' : 'text-slate-200'}`}>
+                        <div className={`text-[10px] font-medium ${!isOwner ? 'text-purple-200' : 'text-slate-200'}`}>
                           Tasks Today
                         </div>
-                        <div className="text-[9px] font-semibold text-purple-200/80 group-hover/card:text-white flex items-center justify-center sm:justify-start gap-0.5 mt-1 transition">
+                        <div className="text-[9px] font-semibold text-purple-200/80 group-hover/card:text-white flex items-center justify-center sm:justify-start gap-0.5 mt-0.5 transition">
                           <span>Focus Mode</span>
                           <ArrowRight className="w-2.5 h-2.5 group-hover/card:translate-x-0.5 transition-transform" />
                         </div>
@@ -2190,14 +2149,14 @@ export default function App() {
                             setActiveTab('detail');
                           }
                         }}
-                        className="backdrop-blur-xl bg-white/15 hover:bg-white/25 active:bg-white/30 border border-white/25 hover:border-purple-300/80 ring-1 ring-white/15 rounded-2xl p-3 sm:px-4 sm:py-3.5 transition-all duration-200 cursor-pointer shadow-lg hover:shadow-xl hover:-translate-y-0.5 active:scale-95 group/card select-none text-center sm:text-left"
+                        className="backdrop-blur-xl bg-white/15 hover:bg-white/25 active:bg-white/30 border border-white/25 hover:border-purple-300/80 ring-1 ring-white/15 rounded-xl px-2.5 py-2 transition-all duration-200 cursor-pointer shadow-md hover:shadow-lg hover:-translate-y-0.5 active:scale-95 group/card select-none text-center sm:text-left"
                         title="Click to view progress roadmap"
                       >
-                        <div className="text-xl sm:text-2xl font-black text-white">{overallProgress}%</div>
-                        <div className={`text-[11px] font-medium ${!isOwner ? 'text-purple-200' : 'text-slate-200'}`}>
+                        <div className="text-base sm:text-lg font-black text-white">{overallProgress}%</div>
+                        <div className={`text-[10px] font-medium ${!isOwner ? 'text-purple-200' : 'text-slate-200'}`}>
                           Progress
                         </div>
-                        <div className="text-[9px] font-semibold text-purple-200/80 group-hover/card:text-white flex items-center justify-center sm:justify-start gap-0.5 mt-1 transition">
+                        <div className="text-[9px] font-semibold text-purple-200/80 group-hover/card:text-white flex items-center justify-center sm:justify-start gap-0.5 mt-0.5 transition">
                           <span>Roadmap</span>
                           <ArrowRight className="w-2.5 h-2.5 group-hover/card:translate-x-0.5 transition-transform" />
                         </div>
