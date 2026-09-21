@@ -65,7 +65,7 @@ export const ProgressBar: React.FC<{ value?: number; height?: string; color?: st
   height = 'h-2',
   color = 'bg-emerald-600',
 }) => (
-  <div className={`w-full bg-slate-100 rounded-full overflow-hidden ${height}`}>
+  <div className={`neu-inset-sm w-full rounded-full overflow-hidden ${height}`}>
     <div
       className={`${color} bar-grow h-full rounded-full transition-all duration-300 ease-out`}
       style={{ width: `${Math.min(100, Math.max(0, value))}%` }}
@@ -74,7 +74,7 @@ export const ProgressBar: React.FC<{ value?: number; height?: string; color?: st
 );
 
 /**
- * Clean tactile glass clickable icon button with clear affordance.
+ * Clean tactile neu clickable icon button with clear affordance.
  */
 export const GlassIconButton: React.FC<{
   children: React.ReactNode;

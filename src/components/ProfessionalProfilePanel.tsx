@@ -341,7 +341,7 @@ export const ProfessionalProfilePanel: React.FC<ProfessionalProfilePanelProps> =
 
   if (loading) {
     return (
-      <div className="glass rounded-2xl p-8 text-center">
+      <div className="neu rounded-2xl p-8 text-center">
         <span className="text-xs font-semibold text-slate-500">Loading your profile...</span>
       </div>
     );
@@ -377,13 +377,13 @@ export const ProfessionalProfilePanel: React.FC<ProfessionalProfilePanelProps> =
       </div>
 
       {!isEditing ? (
-        <div className="glass rounded-2xl p-5 sm:p-6">
+        <div className="neu rounded-2xl p-5 sm:p-6">
           <ProfessionalProfileCard value={value} />
         </div>
       ) : (
         <div className="space-y-5">
           {/* Who you are */}
-          <div className="glass rounded-2xl p-5 space-y-3">
+          <div className="neu rounded-2xl p-5 space-y-3">
             <div className="flex items-center gap-2">
               <Briefcase className="w-4 h-4 text-emerald-600" />
               <h2 className="text-sm font-bold text-slate-900 uppercase tracking-wider">Who you are</h2>
@@ -477,7 +477,7 @@ export const ProfessionalProfilePanel: React.FC<ProfessionalProfilePanelProps> =
           </div>
 
           {/* Qualifications */}
-          <div className="glass rounded-2xl p-5 space-y-3">
+          <div className="neu rounded-2xl p-5 space-y-3">
             <div className="flex items-center justify-between gap-3">
               <div className="flex items-center gap-2">
                 <BadgeCheck className="w-4 h-4 text-emerald-600" />
@@ -554,7 +554,7 @@ export const ProfessionalProfilePanel: React.FC<ProfessionalProfilePanelProps> =
           </div>
 
           {/* Showcase */}
-          <div className="glass rounded-2xl p-5 space-y-3">
+          <div className="neu rounded-2xl p-5 space-y-3">
             <div className="flex items-center justify-between gap-3">
               <div className="flex items-center gap-2">
                 <Eye className="w-4 h-4 text-emerald-600" />
@@ -623,7 +623,7 @@ export const ProfessionalProfilePanel: React.FC<ProfessionalProfilePanelProps> =
           </div>
 
           {/* Contact */}
-          <div className="glass rounded-2xl p-5 space-y-3">
+          <div className="neu rounded-2xl p-5 space-y-3">
             <div className="flex items-center gap-2">
               <Mail className="w-4 h-4 text-emerald-600" />
               <h2 className="text-sm font-bold text-slate-900 uppercase tracking-wider">Contact</h2>

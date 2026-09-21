@@ -93,7 +93,6 @@ import { GiveUpInterventionModal } from './components/GiveUpInterventionModal';
 
 import { ProfessionalProfilePanel } from './components/ProfessionalProfilePanel';
 import { PersonaPrompt } from './components/PersonaPrompt';
-import goalPathHero from './assets/images/goal_path_hero_1787491145015.jpg';
 
 /**
  * Slides a pill behind the active item of a segmented control.
@@ -1731,16 +1730,10 @@ export default function App() {
           : 'selection:bg-emerald-100 selection:text-emerald-900'
       } text-slate-900 relative overflow-x-hidden`}
     >
-      {/* The canvas gradient lives on the body; this only adds the fine dot grid
-          so the glass surfaces have something to sit on. */}
-      <div className="fixed inset-0 pointer-events-none -z-10 overflow-hidden">
-        <div className="absolute inset-0 bg-[radial-gradient(#ffffff_1px,transparent_1px)] [background-size:26px_26px] opacity-35" />
-      </div>
-
-      {/* TRAINER MODE COMMAND BAR: Hoki glass so working in someone else's
+      {/* TRAINER MODE COMMAND BAR: Hoki-tinted relief so working in someone else's
           workspace never looks like your own. */}
       {!isOwner && workspaceProfile && (
-        <div className="glass-hoki text-blue-950 px-2.5 sm:px-6 py-1.5 sm:py-2 min-h-[40px] sm:min-h-[44px] flex items-center justify-between gap-2 sm:gap-3 sticky top-0 z-40">
+        <div className="neu-hoki text-blue-950 px-2.5 sm:px-6 py-1.5 sm:py-2 min-h-[40px] sm:min-h-[44px] flex items-center justify-between gap-2 sm:gap-3 sticky top-0 z-40">
           <div className="min-w-0 flex items-center gap-2 text-xs sm:text-sm font-medium tracking-tight truncate">
             <span className="bg-blue-200/80 text-blue-950 border border-blue-300 px-2 py-0.5 rounded text-[10px] uppercase font-bold tracking-wider shadow-2xs shrink-0">
               Trainer Mode
@@ -1810,7 +1803,7 @@ export default function App() {
       <header
         className={`sticky ${
           !isOwner && workspaceProfile ? 'top-[40px] sm:top-[45px]' : 'top-0'
-        } z-30 glass transition-colors duration-200`}
+        } z-30 neu transition-colors duration-200`}
       >
         <div className="max-w-6xl mx-auto px-2.5 sm:px-6 h-12 sm:h-16 flex items-center justify-between gap-2 sm:gap-3">
           {/* Logo / Brand with GoalPath vector integrated */}
@@ -2029,7 +2022,7 @@ export default function App() {
                 {/* Inside a client's workspace the big hero is replaced by a single
                     compact line, so the client's goals are what you see first. */}
                 {!isOwner && workspaceProfile ? (
-                  <div className="rounded-2xl border border-blue-200/90 bg-blue-50/80 px-3.5 py-2.5 flex items-center justify-between gap-3 flex-wrap">
+                  <div className="neu-hoki rise rounded-2xl px-3.5 py-2.5 flex items-center justify-between gap-3 flex-wrap">
                     <div className="flex items-center gap-2 min-w-0">
                       <UsersRound className="w-4 h-4 text-blue-600 shrink-0" />
                       <span className="text-xs sm:text-sm font-semibold text-blue-950 truncate">
@@ -2058,34 +2051,19 @@ export default function App() {
                   </div>
                 ) : (
                   <>
-                {/* Dashboard Metrics Hero Banner - Frosted Glass Window */}
-                <div
-                  className={`rise sheen relative overflow-hidden rounded-2xl p-3.5 sm:p-4 shadow-lg text-white transition-all duration-300 border border-white/25 ring-1 ring-white/15 bg-slate-950/40 backdrop-blur-2xl group ${
-                    !isOwner
-                      ? 'shadow-blue-950/25'
-                      : 'shadow-purple-950/25'
-                  }`}
-                >
-                  {/* Filling Hero Background Image visible through glass */}
-                  <img
-                    src={goalPathHero}
-                    alt="Goal Path Horizon"
-                    className="absolute inset-0 w-full h-full object-cover object-center opacity-25 select-none pointer-events-none scale-100 group-hover:scale-105 transition-transform duration-700 ease-out"
-                    referrerPolicy="no-referrer"
-                  />
-                  {/* The one saturated surface in the product: Crayola into Hoki */}
-                  <div className="absolute inset-0 pointer-events-none bg-gradient-to-r from-purple-700/90 via-purple-600/75 to-blue-600/75" />
-                  <div className="absolute inset-0 pointer-events-none bg-gradient-to-b from-white/25 via-transparent to-purple-900/25" />
+                {/* Dashboard hero: a raised panel, not a picture. In this style the
+                    depth is the decoration, so the numbers carry the colour. */}
+                <div className="rise neu-lg relative overflow-hidden p-4 sm:p-5">
 
                   {/* Content Container: one short heading and the numbers. The green
                       + in the tab bar is where new goals come from. */}
                   <div className="relative z-10 flex items-center justify-between gap-3 flex-wrap">
-                    <h1 className="text-lg sm:text-xl font-extrabold text-white tracking-tight drop-shadow-xs">
+                    <h1 className="text-xl sm:text-2xl font-extrabold text-slate-800 tracking-tight">
                       Your Goals
                     </h1>
 
-                    {/* Clickable glass stat cards */}
-                    <div className="grid grid-cols-3 gap-2 flex-shrink-0">
+                    {/* Clickable neumorphic keys */}
+                    <div className="grid grid-cols-3 gap-2.5 sm:gap-3 flex-shrink-0">
                       {/* Stat 1: Goals */}
                       <button
                         type="button"
@@ -2093,14 +2071,14 @@ export default function App() {
                           const el = document.getElementById('goals-grid');
                           if (el) el.scrollIntoView({ behavior: 'smooth' });
                         }}
-                        className="backdrop-blur-xl bg-white/15 hover:bg-white/25 active:bg-white/30 border border-white/25 hover:border-purple-300/80 ring-1 ring-white/15 rounded-xl px-2.5 py-2 transition-all duration-200 cursor-pointer shadow-md hover:shadow-lg hover:-translate-y-0.5 active:scale-95 group/card select-none text-center sm:text-left"
+                        className="neu-sm press group/card select-none text-center sm:text-left px-3 py-2.5 cursor-pointer"
                         title="Click to view all goals"
                       >
-                        <div className="text-base sm:text-lg font-black text-white">{goals.length}</div>
-                        <div className={`text-[10px] font-medium ${!isOwner ? 'text-purple-200' : 'text-slate-200'}`}>
+                        <div className="text-lg sm:text-xl font-black text-purple-700">{goals.length}</div>
+                        <div className="text-[10px] font-semibold text-slate-600">
                           {!isOwner ? 'Client Goals' : 'Active Goals'}
                         </div>
-                        <div className="text-[9px] font-semibold text-purple-200/80 group-hover/card:text-white flex items-center justify-center sm:justify-start gap-0.5 mt-0.5 transition">
+                        <div className="text-[9px] font-semibold text-slate-500 group-hover/card:text-purple-700 flex items-center justify-center sm:justify-start gap-0.5 mt-0.5 transition">
                           <span>View Grid</span>
                           <ArrowRight className="w-2.5 h-2.5 group-hover/card:translate-x-0.5 transition-transform" />
                         </div>
@@ -2110,16 +2088,16 @@ export default function App() {
                       <button
                         type="button"
                         onClick={() => setActiveTab('today')}
-                        className="backdrop-blur-xl bg-white/15 hover:bg-white/25 active:bg-white/30 border border-white/25 hover:border-purple-300/80 ring-1 ring-white/15 rounded-xl px-2.5 py-2 transition-all duration-200 cursor-pointer shadow-md hover:shadow-lg hover:-translate-y-0.5 active:scale-95 group/card select-none text-center sm:text-left"
+                        className="neu-sm press group/card select-none text-center sm:text-left px-3 py-2.5 cursor-pointer"
                         title="Click to switch to Today's Focus"
                       >
-                        <div className="text-base sm:text-lg font-black text-emerald-300">
+                        <div className="text-lg sm:text-xl font-black text-emerald-700">
                           {allTodayTasks.filter((t) => t.completed).length}/{allTodayTasks.length}
                         </div>
-                        <div className={`text-[10px] font-medium ${!isOwner ? 'text-purple-200' : 'text-slate-200'}`}>
+                        <div className="text-[10px] font-semibold text-slate-600">
                           Tasks Today
                         </div>
-                        <div className="text-[9px] font-semibold text-purple-200/80 group-hover/card:text-white flex items-center justify-center sm:justify-start gap-0.5 mt-0.5 transition">
+                        <div className="text-[9px] font-semibold text-slate-500 group-hover/card:text-emerald-700 flex items-center justify-center sm:justify-start gap-0.5 mt-0.5 transition">
                           <span>Focus Mode</span>
                           <ArrowRight className="w-2.5 h-2.5 group-hover/card:translate-x-0.5 transition-transform" />
                         </div>
@@ -2134,14 +2112,14 @@ export default function App() {
                             setActiveTab('detail');
                           }
                         }}
-                        className="backdrop-blur-xl bg-white/15 hover:bg-white/25 active:bg-white/30 border border-white/25 hover:border-purple-300/80 ring-1 ring-white/15 rounded-xl px-2.5 py-2 transition-all duration-200 cursor-pointer shadow-md hover:shadow-lg hover:-translate-y-0.5 active:scale-95 group/card select-none text-center sm:text-left"
+                        className="neu-sm press group/card select-none text-center sm:text-left px-3 py-2.5 cursor-pointer"
                         title="Click to view progress roadmap"
                       >
-                        <div className="text-base sm:text-lg font-black text-white">{overallProgress}%</div>
-                        <div className={`text-[10px] font-medium ${!isOwner ? 'text-purple-200' : 'text-slate-200'}`}>
+                        <div className="text-lg sm:text-xl font-black text-blue-700">{overallProgress}%</div>
+                        <div className="text-[10px] font-semibold text-slate-600">
                           Progress
                         </div>
-                        <div className="text-[9px] font-semibold text-purple-200/80 group-hover/card:text-white flex items-center justify-center sm:justify-start gap-0.5 mt-0.5 transition">
+                        <div className="text-[9px] font-semibold text-slate-500 group-hover/card:text-blue-700 flex items-center justify-center sm:justify-start gap-0.5 mt-0.5 transition">
                           <span>Roadmap</span>
                           <ArrowRight className="w-2.5 h-2.5 group-hover/card:translate-x-0.5 transition-transform" />
                         </div>
@@ -2154,21 +2132,21 @@ export default function App() {
 
                 {/* Client Workspaces You Support (Shown if you are a professional connected to clients) */}
                 {isOwner && visibleClients.length > 0 && (
-                  <div className="rise rise-2 glass-deep sheen text-white rounded-2xl p-5 sm:p-6 space-y-3.5">
+                  <div className="rise rise-2 neu-deep text-white rounded-2xl p-5 sm:p-6 space-y-3.5">
                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                       <div>
                         <div className="flex items-center gap-2">
-                          <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-200 bg-white/12 border border-white/25 px-2 py-0.5 rounded-md">
+                          <span className="neu-sm text-[10px] font-bold uppercase tracking-wider text-emerald-800 px-2 py-0.5 rounded-md">
                             Professional Access
                           </span>
-                          <span className="text-xs text-slate-200/90">
+                          <span className="text-xs text-slate-600">
                             {visibleClients.length} Connected Client{visibleClients.length > 1 ? 's' : ''}
                           </span>
                         </div>
-                        <h3 className="text-base sm:text-lg font-bold text-white mt-1">
+                        <h3 className="text-base sm:text-lg font-bold text-slate-800 mt-1">
                           Client Workspaces You Support
                         </h3>
-                        <p className="text-xs text-slate-200/85 max-w-2xl leading-relaxed">
+                        <p className="text-xs text-slate-600 max-w-2xl leading-relaxed">
                           You are approved as a professional for the following clients. Switch to their workspace to design routines, add subcategories, and manage daily task plans.
                         </p>
                       </div>
@@ -2187,14 +2165,14 @@ export default function App() {
                         return (
                           <div
                             key={client.id}
-                            className="lift rounded-xl p-4 flex flex-col justify-between space-y-3 bg-white/12 border border-white/25 backdrop-blur-md"
+                            className="lift neu-sm rounded-xl p-4 flex flex-col justify-between space-y-3"
                           >
                             <div>
                               <div className="flex items-center justify-between gap-2">
-                                <span className="text-sm font-bold text-white truncate">
+                                <span className="text-sm font-bold text-slate-800 truncate">
                                   {client.displayName || client.email || 'Client'}
                                 </span>
-                                <span className="text-[10px] font-bold text-emerald-300 bg-emerald-950/80 border border-emerald-500/30 px-2 py-0.5 rounded-md">
+                                <span className="text-[10px] font-bold text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded-md">
                                   Client
                                 </span>
                               </div>
@@ -2208,8 +2186,8 @@ export default function App() {
                                     : `Connected ${formatJoinedDate(collab?.addedAt)}`}
                                 </p>
                               )}
-                              <div className="text-xs text-slate-300 mt-2.5 flex items-center gap-1.5 font-medium">
-                                <Target className="w-3.5 h-3.5 text-emerald-400" />
+                              <div className="text-xs text-slate-600 mt-2.5 flex items-center gap-1.5 font-medium">
+                                <Target className="w-3.5 h-3.5 text-emerald-600" />
                                 <span>
                                   {assignedCount === 'All'
                                     ? 'All Goals Assigned'
@@ -2274,7 +2252,7 @@ export default function App() {
 
                 {/* Goals Grid */}
                 {filteredGoals.length === 0 ? (
-                  <div className="rise rise-3 glass text-center rounded-2xl p-12">
+                  <div className="rise rise-3 neu text-center rounded-2xl p-12">
                     <div
                       className={`w-14 h-14 rounded-2xl flex items-center justify-center mx-auto mb-3 shadow-2xs ${
                         !isOwner
@@ -2327,7 +2305,7 @@ export default function App() {
                             setSelectedGoalMonth(getCurrentMonthKey());
                             setActiveTab('detail');
                           }}
-                          className={`rise rise-3 lift group glass relative overflow-hidden rounded-2xl p-4 sm:p-5 cursor-pointer flex flex-col justify-between ${
+                          className={`rise rise-3 lift group neu relative overflow-hidden rounded-2xl p-4 sm:p-5 cursor-pointer flex flex-col justify-between ${
                             !isOwner && canEditThisGoal ? 'ring-2 ring-blue-400/30' : ''
                           }`}
                         >
@@ -2505,7 +2483,7 @@ export default function App() {
             {activeTab === 'today' && (
               <div className="space-y-6">
                 {/* Header Banner */}
-                <div className="rise glass rounded-3xl p-6 sm:p-7 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div className="rise neu rounded-3xl p-6 sm:p-7 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                   <div>
                     <div className="flex items-center gap-2">
                       <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-600 bg-emerald-50 px-2.5 py-0.5 rounded-md">
@@ -2547,11 +2525,11 @@ export default function App() {
 
                 {/* Goals Work Breakdown for Today */}
                 {goals.length === 0 ? (
-                  <div className="rise glass rounded-3xl p-12 text-center text-slate-400 text-sm">
+                  <div className="rise neu rounded-3xl p-12 text-center text-slate-400 text-sm">
                     No active goals yet. Create a goal to start planning your daily tasks.
                   </div>
                 ) : allTodayTasks.length === 0 ? (
-                  <div className="rise glass rounded-3xl p-10 text-center space-y-4">
+                  <div className="rise neu rounded-3xl p-10 text-center space-y-4">
                     <div className="w-12 h-12 rounded-2xl bg-emerald-50 text-emerald-600 border border-emerald-200 flex items-center justify-center mx-auto shadow-2xs">
                       <CheckCircle2 className="w-6 h-6" />
                     </div>
@@ -2598,7 +2576,7 @@ export default function App() {
                       return (
                         <div
                           key={g.id}
-                          className="rise glass rounded-2xl p-4 sm:p-5 space-y-4"
+                          className="rise neu rounded-2xl p-4 sm:p-5 space-y-4"
                         >
                           {/* Goal Header */}
                           <div className="flex items-center justify-between gap-3 pb-3 border-b border-slate-100 flex-wrap">
@@ -3004,7 +2982,7 @@ export default function App() {
               <div className="space-y-6">
                 {/* Top Goal Bar */}
                 <div
-                  className={`glass rounded-2xl p-4 sm:p-6 transition-colors duration-200 ${
+                  className={`neu rounded-2xl p-4 sm:p-6 transition-colors duration-200 ${
                     !isOwner ? 'border-purple-200/90 shadow-purple-950/5' : 'border-purple-200/80'
                   }`}
                 >
@@ -3271,7 +3249,7 @@ export default function App() {
       </main>
 
       {/* FOOTER */}
-      <footer className="glass border-x-0 border-b-0 rounded-none py-3.5 sm:py-6 mt-6 sm:mt-12">
+      <footer className="neu border-x-0 border-b-0 rounded-none py-3.5 sm:py-6 mt-6 sm:mt-12">
         <div className="max-w-6xl mx-auto px-3 sm:px-6 flex flex-col sm:flex-row items-center justify-between gap-1.5 sm:gap-4 text-[11px] sm:text-xs text-slate-500 text-center sm:text-left">
           <div className="flex items-center gap-2">
             <span>Goal Path App</span>

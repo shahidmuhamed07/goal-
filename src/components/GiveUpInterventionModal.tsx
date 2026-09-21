@@ -71,7 +71,7 @@ export const GiveUpInterventionModal: React.FC<GiveUpInterventionModalProps> = (
 
   return (
     <div className="fixed inset-0 z-50 bg-slate-900/45 backdrop-blur-md flex items-center justify-center p-3 sm:p-5 overflow-y-auto fade">
-      <div className="glass rounded-3xl pop max-w-lg w-full shadow-2xl overflow-hidden transition-all text-slate-800 my-auto">
+      <div className="neu rounded-3xl pop max-w-lg w-full shadow-2xl overflow-hidden transition-all text-slate-800 my-auto">
         
         {/* Top Header */}
         <div className="bg-gradient-to-r from-emerald-50/80 via-white to-emerald-50/80 border-b border-emerald-100 px-5 sm:px-6 py-4 flex items-center justify-between gap-3">

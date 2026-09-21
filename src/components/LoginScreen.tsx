@@ -130,7 +130,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, loading, erro
 
   return (
     <div className="min-h-screen flex items-center justify-center p-4 bg-slate-50">
-      <div className="max-w-md w-full glass rounded-3xl p-8 text-center pop">
+      <div className="max-w-md w-full neu rounded-3xl p-8 text-center pop">
         {/* Brand mark: the same logo shown in the app header */}
         <div className="w-16 h-16 rounded-2xl mx-auto mb-4 shadow-sm overflow-hidden bg-gradient-to-br from-emerald-500 to-teal-700 text-white flex items-center justify-center">
           <GoalPathMark className="w-[62%] h-[62%]" />

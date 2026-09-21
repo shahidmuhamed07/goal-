@@ -183,18 +183,18 @@ export const CollaboratorsPanel: React.FC<CollaboratorsPanelProps> = ({
     return (
       <div className="space-y-6 max-w-3xl">
         {/* ACTIVE CLIENT WORKSPACE BANNER WITH GREEN EXIT BUTTON */}
-        <div className="glass-deep sheen border border-white/25 text-white rounded-2xl p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div className="neu-deep text-slate-800 rounded-2xl p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div className="space-y-1">
             <div className="flex items-center gap-2">
               <span className="w-2.5 h-2.5 rounded-full bg-blue-400 animate-pulse" />
-              <span className="text-[11px] font-bold uppercase tracking-wider text-blue-300">
+              <span className="text-[11px] font-bold uppercase tracking-wider text-blue-700">
                 Active Client Workspace
               </span>
             </div>
-            <p className="text-sm font-bold text-white">
-              Currently viewing: <span className="text-blue-200">{activeClient?.displayName || activeClient?.email || 'Client'}</span>
+            <p className="text-sm font-bold text-slate-800">
+              Currently viewing: <span className="text-blue-800">{activeClient?.displayName || activeClient?.email || 'Client'}</span>
             </p>
-            <p className="text-xs text-blue-100/80">
+            <p className="text-xs text-slate-600">
               You are managing this client's workspace. You can edit their goals, routine subcategories, and daily task plans.
             </p>
           </div>
@@ -217,7 +217,7 @@ export const CollaboratorsPanel: React.FC<CollaboratorsPanelProps> = ({
         </div>
 
         {/* WHO ALL THE PEOPLE ARE COLLABORATED WITH THIS CLIENT */}
-        <div className="glass rounded-2xl p-6">
+        <div className="neu rounded-2xl p-6">
           <h2 className="text-sm font-bold text-slate-900 uppercase tracking-wider flex items-center gap-2">
             <span>People Connected with this Client</span>
             <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-blue-100 text-blue-900">
@@ -300,7 +300,7 @@ export const CollaboratorsPanel: React.FC<CollaboratorsPanelProps> = ({
         </div>
 
         {/* ALL CLIENTS YOU SUPPORT */}
-        <div className="glass rounded-2xl p-6">
+        <div className="neu rounded-2xl p-6">
           <h2 className="text-sm font-bold text-slate-900 uppercase tracking-wider">All Clients You Work With</h2>
           <p className="text-xs text-slate-500 mt-1 mb-4">
             Switch between client accounts you have been approved to manage.
@@ -353,18 +353,18 @@ export const CollaboratorsPanel: React.FC<CollaboratorsPanelProps> = ({
   return (
     <div className="space-y-6 max-w-3xl">
       {isViewingClient && (
-        <div className="glass-deep sheen border-2 border-emerald-400/60 text-white rounded-2xl p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div className="neu-deep text-slate-800 rounded-2xl p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div className="space-y-1">
             <div className="flex items-center gap-2">
               <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse" />
-              <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-400">
+              <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-700">
                 Active Client Workspace
               </span>
             </div>
-            <p className="text-sm font-bold text-white">
-              Currently viewing: <span className="text-emerald-300">{activeClient?.displayName || activeClient?.email || 'Client'}</span>
+            <p className="text-sm font-bold text-slate-800">
+              Currently viewing: <span className="text-emerald-800">{activeClient?.displayName || activeClient?.email || 'Client'}</span>
             </p>
-            <p className="text-xs text-slate-300">
+            <p className="text-xs text-slate-600">
               You can edit subcategories and daily tasks in the Goals tab, or return to your own dashboard.
             </p>
           </div>
@@ -386,7 +386,7 @@ export const CollaboratorsPanel: React.FC<CollaboratorsPanelProps> = ({
         </p>
       </div>
 
-      <div className="glass rounded-2xl p-6">
+      <div className="neu rounded-2xl p-6">
         <h2 className="text-sm font-bold text-slate-900 uppercase tracking-wider">My Code</h2>
         <p className="text-xs text-slate-400 mt-1 mb-4">Give this to a professional so they can request access to your account.</p>
         <div className="flex items-center gap-3">
@@ -404,7 +404,7 @@ export const CollaboratorsPanel: React.FC<CollaboratorsPanelProps> = ({
         </div>
       </div>
 
-      <div className="glass rounded-2xl p-6">
+      <div className="neu rounded-2xl p-6">
         <h2 className="text-sm font-bold text-slate-900 uppercase tracking-wider">Connect as Professional</h2>
         <p className="text-xs text-slate-400 mt-1 mb-4">Enter a client’s code and the role you are requesting.</p>
         <form onSubmit={handleSubmit} className="flex flex-col sm:flex-row gap-2">
@@ -452,7 +452,7 @@ export const CollaboratorsPanel: React.FC<CollaboratorsPanelProps> = ({
       </div>
 
       {/* PENDING REQUESTS */}
-      <div className="glass rounded-2xl p-6">
+      <div className="neu rounded-2xl p-6">
         <h2 className="text-sm font-bold text-slate-900 uppercase tracking-wider">Pending requests</h2>
         <p className="text-xs text-slate-400 mt-1 mb-4">Professionals waiting for your approval. You will choose which goals to assign upon approving.</p>
         {incomingError && (
@@ -499,7 +499,7 @@ export const CollaboratorsPanel: React.FC<CollaboratorsPanelProps> = ({
       </div>
 
       {/* CONNECTED PROFESSIONALS */}
-      <div className="glass rounded-2xl p-6">
+      <div className="neu rounded-2xl p-6">
         <h2 className="text-sm font-bold text-slate-900 uppercase tracking-wider">Connected professionals</h2>
         <p className="text-xs text-slate-400 mt-1 mb-4">
           People connected to your account. They can only edit daily tasks and subcategories in the goals assigned to them.
@@ -623,7 +623,7 @@ export const CollaboratorsPanel: React.FC<CollaboratorsPanelProps> = ({
       </div>
 
       {/* CLIENTS I SUPPORT */}
-      <div className="glass rounded-2xl p-6">
+      <div className="neu rounded-2xl p-6">
         <h2 className="text-sm font-bold text-slate-900 uppercase tracking-wider">Clients I support</h2>
         <p className="text-xs text-slate-400 mt-1 mb-4">Accounts that approved you as a professional.</p>
         {clientList.length === 0 ? (
@@ -712,7 +712,7 @@ export const CollaboratorsPanel: React.FC<CollaboratorsPanelProps> = ({
       {/* ASSIGN GOALS MODAL */}
       {isModalOpen && (
         <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-md flex items-center justify-center p-4 z-50 fade">
-          <div className="glass rounded-3xl max-w-lg w-full p-6 space-y-5 pop">
+          <div className="neu rounded-3xl max-w-lg w-full p-6 space-y-5 pop">
             <div>
               <div className="flex items-center justify-between">
                 <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-600 bg-emerald-50 px-2.5 py-0.5 rounded-md border border-emerald-100">
