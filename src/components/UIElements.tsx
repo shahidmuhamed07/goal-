@@ -1,4 +1,17 @@
 import React from 'react';
+import { Route } from 'lucide-react';
+
+/**
+ * The Goal Path brand mark.
+ *
+ * Lucide's "route" icon: a winding path running from where you are to where you
+ * are going, which is what the app does with a goal. Lucide is MIT licensed and
+ * already the icon set for the rest of the interface, so the brand mark and the
+ * product speak the same visual language.
+ */
+export const GoalPathMark: React.FC<{ className?: string }> = ({ className = '' }) => (
+  <Route className={className} strokeWidth={2.2} aria-hidden="true" />
+);
 
 export const GoalPathLogo: React.FC<{ size?: 'sm' | 'md' | 'lg'; showText?: boolean; className?: string }> = ({
   size = 'md',
@@ -14,40 +27,14 @@ export const GoalPathLogo: React.FC<{ size?: 'sm' | 'md' | 'lg'; showText?: bool
   return (
     <div className={`flex items-center gap-2.5 select-none ${className}`}>
       <div
-        className={`${iconSizes[size]} rounded-xl bg-gradient-to-br from-emerald-500 via-emerald-600 to-teal-700 p-1.5 shadow-sm flex items-center justify-center flex-shrink-0 text-white relative overflow-hidden group`}
+        className={`${iconSizes[size]} rounded-xl bg-gradient-to-br from-emerald-500 to-teal-700 text-white shadow-sm flex items-center justify-center flex-shrink-0 overflow-hidden`}
       >
-        {/* Modern Vector Path & Star Milestone Icon */}
-        <svg
-          viewBox="0 0 32 32"
-          fill="none"
-          xmlns="http://www.w3.org/2000/svg"
-          className="w-full h-full drop-shadow-xs"
-        >
-          {/* Subtle background glow */}
-          <circle cx="24" cy="8" r="6" fill="white" fillOpacity="0.2" />
-          {/* Milestone Target Star */}
-          <path
-            d="M24 3L25.4 6.6L29 8L25.4 9.4L24 13L22.6 9.4L19 8L22.6 6.6L24 3Z"
-            fill="white"
-          />
-          {/* Ascending S-Curve Horizon Pathway */}
-          <path
-            d="M5 28C8 28 8 21 14 20C20 19 20 12 24 8"
-            stroke="white"
-            strokeWidth="2.75"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
-          {/* Stepping Path Dots */}
-          <circle cx="8.5" cy="25" r="1.5" fill="white" fillOpacity="0.8" />
-          <circle cx="13.5" cy="20.5" r="1.5" fill="white" fillOpacity="0.8" />
-          <circle cx="18.5" cy="15" r="1.5" fill="white" fillOpacity="0.8" />
-        </svg>
+        <GoalPathMark className="w-[62%] h-[62%]" />
       </div>
 
       {showText && (
-        <div className="flex flex-col">
-          <div className="flex items-center gap-1 font-extrabold text-slate-900 tracking-tight leading-none text-base sm:text-lg">
+        <div className="hidden min-[360px]:flex flex-col">
+          <div className="flex items-center gap-1 font-extrabold text-slate-900 tracking-tight leading-none text-[15px] sm:text-lg">
             <span>Goal</span>
             <span className="text-emerald-600 font-black">Path</span>
           </div>
@@ -93,7 +80,7 @@ export const GlassIconButton: React.FC<{
   children: React.ReactNode;
   onClick?: (e: React.MouseEvent<HTMLButtonElement>) => void;
   title?: string;
-  variant?: 'purple' | 'emerald' | 'rose' | 'slate' | 'amber';
+  variant?: 'purple' | 'emerald' | 'rose' | 'slate' | 'amber' | 'blue';
   size?: 'xs' | 'sm' | 'md' | 'lg';
   disabled?: boolean;
   active?: boolean;
@@ -133,6 +120,10 @@ export const GlassIconButton: React.FC<{
     amber: active
       ? 'bg-amber-600 text-white border-amber-500 shadow-xs ring-2 ring-amber-400/30'
       : 'bg-amber-500/10 hover:bg-amber-500/20 active:bg-amber-500/30 text-amber-800 hover:text-amber-950 border border-amber-300/40 hover:border-amber-400/60 backdrop-blur-xs shadow-2xs hover:shadow-xs',
+    // Used while a professional works inside someone else's workspace.
+    blue: active
+      ? 'bg-blue-600 text-white border-blue-500 shadow-xs ring-2 ring-blue-400/30'
+      : 'bg-blue-500/10 hover:bg-blue-500/20 active:bg-blue-500/30 text-blue-700 hover:text-blue-900 border border-blue-300/40 hover:border-blue-400/60 backdrop-blur-xs shadow-2xs hover:shadow-xs',
   };
 
   return (
@@ -150,13 +141,14 @@ export const GlassIconButton: React.FC<{
 
 export const GlassBadge: React.FC<{
   children: React.ReactNode;
-  variant?: 'purple' | 'emerald' | 'amber' | 'slate';
+  variant?: 'purple' | 'emerald' | 'amber' | 'slate' | 'blue';
   className?: string;
 }> = ({ children, variant = 'emerald', className = '' }) => {
   const styles = {
     purple: 'bg-purple-500/10 text-purple-800 border-purple-300/40',
     emerald: 'bg-emerald-500/10 text-emerald-800 border-emerald-300/40',
     amber: 'bg-amber-500/10 text-amber-800 border-amber-300/40',
+    blue: 'bg-blue-500/10 text-blue-800 border-blue-300/40',
     slate: 'bg-slate-200/50 text-slate-700 border-slate-300/40',
   };
   return (

@@ -1,14 +1,20 @@
 import React, { useState, useEffect } from 'react';
-import { X } from 'lucide-react';
-import { Goal, Collaborator } from '../types';
+import { X, Eye, Pencil, Ban } from 'lucide-react';
+import { Goal, Collaborator, GoalAccessLevel } from '../types';
+import { getGoalAccessLevel } from '../utils';
 
 interface GoalAssignmentModalProps {
   isOpen: boolean;
   onClose: () => void;
   goal: Goal | null;
   collaborators: Collaborator[];
-  onSave: (goalId: string, assignedCollaboratorUids: string[]) => Promise<void>;
+  onSave: (goalId: string, access: Record<string, GoalAccessLevel>) => Promise<void>;
 }
+
+const LEVEL_OPTIONS: { value: GoalAccessLevel; label: string; icon: React.ReactNode }[] = [
+  { value: 'view', label: 'View', icon: <Eye className="w-3.5 h-3.5" /> },
+  { value: 'edit', label: 'Edit', icon: <Pencil className="w-3.5 h-3.5" /> },
+];
 
 export const GoalAssignmentModal: React.FC<GoalAssignmentModalProps> = ({
   isOpen,
@@ -17,45 +23,38 @@ export const GoalAssignmentModal: React.FC<GoalAssignmentModalProps> = ({
   collaborators,
   onSave,
 }) => {
-  const [selectedUids, setSelectedUids] = useState<string[]>([]);
+  const [access, setAccess] = useState<Record<string, GoalAccessLevel>>({});
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     if (goal && isOpen) {
-      // Find which collaborators currently have this goal assigned
-      const assigned = collaborators
-        .filter((c) => {
-          if (c.assignedGoalIds !== undefined) {
-            return c.assignedGoalIds.includes(goal.id);
-          }
-          return true; // Default legacy
-        })
-        .map((c) => c.uid);
-      setSelectedUids(assigned);
+      const current: Record<string, GoalAccessLevel> = {};
+      collaborators.forEach((c) => {
+        const level = getGoalAccessLevel(c, goal.id);
+        if (level) current[c.uid] = level;
+      });
+      setAccess(current);
     }
   }, [goal, isOpen, collaborators]);
 
   if (!isOpen || !goal) return null;
 
-  const toggleUid = (uid: string) => {
-    setSelectedUids((prev) =>
-      prev.includes(uid) ? prev.filter((id) => id !== uid) : [...prev, uid]
-    );
+  const setLevel = (uid: string, level: GoalAccessLevel | null) => {
+    setAccess((prev) => {
+      const next = { ...prev };
+      if (level) next[uid] = level;
+      else delete next[uid];
+      return next;
+    });
   };
 
-  const handleSelectAll = () => {
-    setSelectedUids(collaborators.map((c) => c.uid));
-  };
-
-  const handleDeselectAll = () => {
-    setSelectedUids([]);
-  };
+  const selectedCount = Object.keys(access).length;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setSaving(true);
     try {
-      await onSave(goal.id, selectedUids);
+      await onSave(goal.id, access);
       onClose();
     } finally {
       setSaving(false);
@@ -78,8 +77,11 @@ export const GoalAssignmentModal: React.FC<GoalAssignmentModalProps> = ({
         </div>
 
         <p className="text-xs text-slate-500 mb-4 leading-relaxed">
-          Choose which connected professionals are authorized to create subcategories, schedule routines, and manage daily tasks for{' '}
-          <strong className="text-slate-800">"{goal.title}"</strong>.
+          Choose who can reach <strong className="text-slate-800">"{goal.title}"</strong>.{' '}
+          <strong className="text-slate-800">View</strong> is read-only,{' '}
+          <strong className="text-slate-800">Edit</strong> also allows changing subcategories, routines
+          and daily tasks. Anyone left on <strong className="text-slate-800">No access</strong> cannot see
+          this goal at all.
         </p>
 
         {collaborators.length === 0 ? (
@@ -93,60 +95,96 @@ export const GoalAssignmentModal: React.FC<GoalAssignmentModalProps> = ({
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="flex items-center justify-between text-xs pb-1">
               <span className="font-semibold text-slate-700">
-                Connected Professionals ({selectedUids.length}/{collaborators.length} assigned)
+                Connected Professionals ({selectedCount}/{collaborators.length} with access)
               </span>
               <div className="flex items-center gap-2">
                 <button
                   type="button"
-                  onClick={handleSelectAll}
+                  onClick={() => {
+                    const next: Record<string, GoalAccessLevel> = {};
+                    collaborators.forEach((c) => {
+                      next[c.uid] = 'edit';
+                    });
+                    setAccess(next);
+                  }}
                   className="text-emerald-600 hover:text-emerald-700 font-medium text-[11px] cursor-pointer"
                 >
-                  Select All
+                  Everyone can edit
                 </button>
                 <span className="text-slate-300">•</span>
                 <button
                   type="button"
-                  onClick={handleDeselectAll}
-                  className="text-slate-500 hover:text-slate-700 font-medium text-[11px] cursor-pointer"
+                  onClick={() => setAccess({})}
+                  className="text-rose-600 hover:text-rose-700 font-medium text-[11px] cursor-pointer"
                 >
-                  Clear All
+                  No access for everyone
                 </button>
               </div>
             </div>
 
             <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
               {collaborators.map((c) => {
-                const isSelected = selectedUids.includes(c.uid);
+                const level = access[c.uid];
                 return (
-                  <label
+                  <div
                     key={c.uid}
-                    className={`flex items-center justify-between p-3 rounded-xl border transition cursor-pointer ${
-                      isSelected
-                        ? 'bg-emerald-50/70 border-emerald-300 text-slate-900 shadow-2xs'
-                        : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
+                    className={`flex items-center justify-between gap-3 p-3 rounded-xl border transition ${
+                      level === 'edit'
+                        ? 'bg-emerald-50/70 border-emerald-300 shadow-2xs'
+                        : level === 'view'
+                          ? 'bg-sky-50/70 border-sky-300 shadow-2xs'
+                          : 'bg-white border-slate-200'
                     }`}
                   >
                     <div className="flex items-center gap-3 min-w-0 pr-2">
-                      <input
-                        type="checkbox"
-                        checked={isSelected}
-                        onChange={() => toggleUid(c.uid)}
-                        className="w-4 h-4 text-emerald-600 rounded border-slate-300 focus:ring-emerald-500 cursor-pointer flex-shrink-0"
-                      />
                       <div className="min-w-0">
-                        <div className="text-xs font-bold text-slate-900 truncate">
-                          {c.name || c.email || 'Professional'}
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-xs font-bold text-slate-900 truncate">
+                            {c.name || c.email || 'Professional'}
+                          </span>
+                          <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-slate-100 text-slate-700 border border-slate-200 flex-shrink-0">
+                            {c.role}
+                          </span>
                         </div>
                         {c.email && (
-                          <div className="text-[11px] text-slate-400 truncate">{c.email}</div>
+                          <div className="text-[11px] text-slate-400 truncate mt-0.5">{c.email}</div>
                         )}
                       </div>
                     </div>
 
-                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-slate-100 text-slate-700 border border-slate-200 flex-shrink-0">
-                      {c.role}
-                    </span>
-                  </label>
+                    <div className="flex items-center gap-1 bg-slate-100/80 border border-slate-200 rounded-lg p-0.5 flex-shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => setLevel(c.uid, null)}
+                        title="No access"
+                        className={`px-2 py-1 rounded-md text-[11px] font-semibold transition cursor-pointer flex items-center gap-1 ${
+                          !level
+                            ? 'bg-white text-slate-700 shadow-2xs'
+                            : 'text-slate-400 hover:text-slate-600'
+                        }`}
+                      >
+                        <Ban className="w-3.5 h-3.5" />
+                      </button>
+                      {LEVEL_OPTIONS.map((option) => (
+                        <button
+                          key={option.value}
+                          type="button"
+                          onClick={() => setLevel(c.uid, option.value)}
+                          title={option.value === 'view' ? 'Read-only access' : 'Can edit tasks and routines'}
+                          className={`px-2 py-1 rounded-md text-[11px] font-semibold transition cursor-pointer flex items-center gap-1 ${
+                            level === option.value
+                              ? option.value === 'edit'
+                                ? 'bg-emerald-600 text-white shadow-2xs'
+                                : 'bg-sky-600 text-white shadow-2xs'
+                              : 'text-slate-500 hover:text-slate-700'
+                          }`}
+                        >
+                          {option.icon}
+                          <span>{option.label}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
                 );
               })}
             </div>
@@ -164,7 +202,7 @@ export const GoalAssignmentModal: React.FC<GoalAssignmentModalProps> = ({
                 disabled={saving}
                 className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-semibold text-xs rounded-xl transition cursor-pointer shadow-xs"
               >
-                {saving ? 'Saving...' : 'Save Assigned Professionals'}
+                {saving ? 'Saving...' : 'Save Access'}
               </button>
             </div>
           </form>

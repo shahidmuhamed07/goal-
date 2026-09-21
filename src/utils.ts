@@ -1,4 +1,61 @@
+import { Collaborator, Goal, GoalAccessLevel } from './types';
+
 export const getTodayDateString = (): string => new Date().toISOString().split('T')[0];
+
+/**
+ * Permission a connected professional holds for one goal, or null when the goal
+ * was never shared with them. Older accounts only stored `assignedGoalIds`,
+ * which always meant full editing access.
+ */
+export const getGoalAccessLevel = (
+  collaborator: Collaborator | null | undefined,
+  goalId: string
+): GoalAccessLevel | null => {
+  if (!collaborator) return null;
+  const explicit = collaborator.goalAccess?.[goalId];
+  if (explicit === 'view' || explicit === 'edit') return explicit;
+  if (collaborator.assignedGoalIds?.includes(goalId)) return 'edit';
+  return null;
+};
+
+export const isGoalSharedWith = (
+  collaborator: Collaborator | null | undefined,
+  goalId: string
+): boolean => getGoalAccessLevel(collaborator, goalId) !== null;
+
+/**
+ * The access lists a goal document must carry for Firestore to enforce who can
+ * read and write it. Editors are also viewers, so a single `viewerUids` query
+ * returns everything a professional is allowed to see.
+ */
+export const buildGoalAccessArrays = (
+  collaborators: Collaborator[] | null | undefined,
+  goalId: string
+): { viewerUids: string[]; editorUids: string[] } => {
+  const viewerUids: string[] = [];
+  const editorUids: string[] = [];
+
+  (collaborators || []).forEach((collaborator) => {
+    const level = getGoalAccessLevel(collaborator, goalId);
+    if (!level) return;
+    viewerUids.push(collaborator.uid);
+    if (level === 'edit') editorUids.push(collaborator.uid);
+  });
+
+  return { viewerUids, editorUids };
+};
+
+/** Access lists for every goal at once, keyed by goal id. */
+export const buildGoalAccessMap = (
+  goals: Goal[],
+  collaborators: Collaborator[] | null | undefined
+): Record<string, { viewerUids: string[]; editorUids: string[] }> => {
+  const map: Record<string, { viewerUids: string[]; editorUids: string[] }> = {};
+  goals.forEach((goal) => {
+    map[goal.id] = buildGoalAccessArrays(collaborators, goal.id);
+  });
+  return map;
+};
 
 export const getCurrentMonthKey = (): string => {
   const d = new Date();
@@ -143,4 +200,19 @@ export const formatDisplayDate = (dateStr: string): string => {
     return `Today · ${formatted}`;
   }
   return formatted;
+};
+
+/**
+ * A full calendar date such as "Sep 20, 2026" for stored timestamps, which may
+ * be a plain "YYYY-MM-DD" day or a full ISO timestamp. Returns an empty string
+ * when there is nothing usable to show, so callers can hide the line.
+ */
+export const formatJoinedDate = (value?: string): string => {
+  if (!value) return '';
+  const parts = /^(\d{4})-(\d{2})-(\d{2})/.exec(value);
+  const date = parts
+    ? new Date(Number(parts[1]), Number(parts[2]) - 1, Number(parts[3]))
+    : new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 };

@@ -1,5 +1,17 @@
 rules_version = '2';
 
+// Goal Path security rules
+//
+// Access model:
+//   - A goal is owned by the user in its `userId` field. The owner has full control.
+//   - A goal carries two access lists, written only by the owner:
+//       viewerUids: read-only access to that goal (milestones, subcategories, tasks)
+//       editorUids: read access plus permission to change tasks, milestones and
+//                   subcategories. Editors are also listed in viewerUids.
+//   - A goal that does not list a user is invisible to that user.
+//   - Nobody can grant themselves access: the access lists only change through an
+//     update written by the goal owner.
+
 service cloud.firestore {
   match /databases/{database}/documents {
 
@@ -7,29 +19,125 @@ service cloud.firestore {
       return request.auth != null;
     }
 
+    function isMe(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function existing(name, fallback) {
+      return name in resource.data ? resource.data[name] : fallback;
+    }
+
     // Default deny
     match /{document=**} {
       allow read, write: if false;
     }
 
-    // User profiles
+    // ---------------------------------------------------------------- profiles
+    // A profile is private to its owner. A professional may read a client's
+    // profile only while that owner keeps them in `collaboratorUids`.
     match /users/{userId} {
-      allow read, write: if isSignedIn();
+      // Direct field access on the read path so the query engine can prove
+      // `where('collaboratorUids', 'array-contains', uid)` used to list clients.
+      allow read: if isMe(userId)
+        || (isSignedIn() && request.auth.uid in resource.data.collaboratorUids);
+
+      // Only the owner writes their own profile, so an outside account cannot
+      // add itself to someone else's roster.
+      allow create, update: if isMe(userId);
+
+      allow delete: if false;
     }
 
-    // 6-character connection codes
+    // -------------------------------------------------- professional profiles
+    // A professional's public profile lives outside their user document, so a
+    // connected client can read the credentials without also seeing the
+    // professional's connection code and their roster of other clients.
+    // Readable by the owner and by clients whose access request they approved.
+    match /publicProfiles/{ownerUid} {
+      function isLinkedToOwner() {
+        // A professional's request to a client is stored as "<professional>_<client>".
+        return isSignedIn()
+          && exists(/databases/$(database)/documents/accessRequests/$(ownerUid + '_' + request.auth.uid))
+          && get(/databases/$(database)/documents/accessRequests/$(ownerUid + '_' + request.auth.uid)).data.status == 'approved';
+      }
+
+      allow read: if isMe(ownerUid) || isLinkedToOwner();
+      allow create, update: if isMe(ownerUid);
+      // The owner may clear their own profile; nobody else can touch it.
+      allow delete: if isMe(ownerUid);
+    }
+
+    // ------------------------------------------------------------ invite codes
+    // Lookup by an exact code is allowed; listing the collection is not. Codes
+    // are write-once, so a code can never be re-pointed at another account.
     match /codes/{code} {
-      allow read, write: if isSignedIn();
+      allow get: if isSignedIn();
+      allow list: if false;
+      allow create: if isSignedIn() && request.resource.data.uid == request.auth.uid;
+      allow update, delete: if false;
     }
 
-    // Collaboration access requests
+    // -------------------------------------------------------- access requests
+    // A professional creates a request; the client and that professional can
+    // read it and resolve it. Only the status field may change afterwards.
     match /accessRequests/{requestId} {
-      allow read, write: if isSignedIn();
+      function isParticipant() {
+        return isSignedIn()
+          && (request.auth.uid == resource.data.fromUid
+            || request.auth.uid == resource.data.toUid);
+      }
+
+      allow create: if isSignedIn() && request.resource.data.fromUid == request.auth.uid;
+      allow read: if isParticipant();
+      allow update: if isParticipant() && (
+        // The client resolves the request.
+        (request.auth.uid == resource.data.toUid
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status'])
+          && request.resource.data.status in ['approved', 'denied', 'removed'])
+        // The professional asks again after being denied or removed.
+        || (request.auth.uid == resource.data.fromUid
+          && request.resource.data.status == 'pending'
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'role', 'createdAt']))
+      );
+      allow delete: if false;
     }
 
-    // Goals, milestones, subcategories, and daily tasks
+    // ------------------------------------------------------------------ goals
     match /goals/{goalId} {
-      allow read, write: if isSignedIn();
+      function isGoalOwner() {
+        return isSignedIn() && request.auth.uid == existing('userId', '');
+      }
+
+      function isEditor() {
+        return isSignedIn() && request.auth.uid in existing('editorUids', []);
+      }
+
+      // An editor may only change the planning content. Ownership, title,
+      // category, target date and the access lists stay owner-only, so an editor
+      // can never widen their own permissions.
+      function contentOnlyChange() {
+        return request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['tasks', 'subcategories', 'milestones']);
+      }
+
+      // Direct field access on the read path: the query engine can then prove
+      // `where('userId', '==', uid)` for owners and
+      // `where('viewerUids', 'array-contains', uid)` for professionals.
+      // Short-circuit order matters: an owner's own goal is allowed before the
+      // access lists are touched, so older goals without them still open.
+      allow read: if isSignedIn() && (
+        request.auth.uid == resource.data.userId
+        || request.auth.uid in resource.data.viewerUids
+        || request.auth.uid in resource.data.editorUids
+      );
+
+      allow create: if isSignedIn()
+        && request.resource.data.userId == request.auth.uid;
+
+      allow update: if (isGoalOwner() && request.resource.data.userId == existing('userId', ''))
+        || (isEditor() && contentOnlyChange());
+
+      allow delete: if isGoalOwner();
     }
   }
 }

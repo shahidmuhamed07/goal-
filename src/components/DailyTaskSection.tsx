@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
-import { Calendar, ChevronLeft, ChevronRight, Sparkles, Plus } from 'lucide-react';
+import { Calendar, ChevronDown, ChevronLeft, ChevronRight, Sparkles, Plus } from 'lucide-react';
 import { Goal, Subcategory } from '../types';
 import { SubcategoryBlock } from './SubcategoryBlock';
 import { GlassIconButton, GlassBadge } from './UIElements';
@@ -58,6 +58,9 @@ export const DailyTaskSection: React.FC<DailyTaskSectionProps> = ({
   });
 
   const [newSubName, setNewSubName] = useState('');
+  // On phones the preset panel is collapsed by default so the actual task list
+  // is what you land on. Desktop keeps it open.
+  const [showPresets, setShowPresets] = useState(false);
   const [expandedIds, setExpandedIds] = useState<Record<string, boolean>>({});
   const [allExpanded, setAllExpanded] = useState<boolean>(true);
   const dateScrollRef = useRef<HTMLDivElement>(null);
@@ -211,7 +214,7 @@ export const DailyTaskSection: React.FC<DailyTaskSectionProps> = ({
     <div
       className={`bg-white border rounded-2xl p-4 sm:p-6 shadow-xs space-y-4 sm:space-y-5 transition-colors duration-200 ${
         !isOwner
-          ? 'border-amber-200/90 shadow-amber-950/5'
+          ? 'border-blue-200/90 shadow-blue-950/5'
           : 'border-purple-200/80'
       }`}
     >
@@ -222,7 +225,7 @@ export const DailyTaskSection: React.FC<DailyTaskSectionProps> = ({
             <span
               className={`text-[11px] font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-md border ${
                 !isOwner
-                  ? 'text-amber-950 bg-amber-100 border-amber-300/80'
+                  ? 'text-blue-950 bg-blue-100 border-blue-300/80'
                   : 'text-purple-900 bg-purple-100 border-purple-200/90'
               }`}
             >
@@ -230,7 +233,7 @@ export const DailyTaskSection: React.FC<DailyTaskSectionProps> = ({
             </span>
 
             {!isOwner && (
-              <span className="text-[10px] font-bold text-amber-800 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-md">
+              <span className="text-[10px] font-bold text-blue-800 bg-blue-50 border border-blue-200 px-2 py-0.5 rounded-md">
                 Client Workspace
               </span>
             )}
@@ -240,20 +243,20 @@ export const DailyTaskSection: React.FC<DailyTaskSectionProps> = ({
               <div
                 className={`flex items-center gap-1.5 rounded-lg px-2 py-0.5 border ${
                   !isOwner
-                    ? 'bg-amber-50/70 border-amber-200/90'
-                    : 'bg-emerald-50/70 border-emerald-200/90'
+                    ? 'bg-blue-50/70 border-blue-200/90'
+                    : 'bg-purple-50/70 border-purple-200/90'
                 }`}
               >
                 <Calendar
                   className={`w-3.5 h-3.5 flex-shrink-0 ${
-                    !isOwner ? 'text-amber-700' : 'text-emerald-700'
+                    !isOwner ? 'text-blue-700' : 'text-purple-700'
                   }`}
                 />
                 <select
                   value={activeMonthKey}
                   onChange={(e) => onSelectMonth(e.target.value)}
                   className={`text-xs font-bold bg-transparent cursor-pointer focus:outline-none ${
-                    !isOwner ? 'text-amber-950' : 'text-emerald-950'
+                    !isOwner ? 'text-blue-950' : 'text-purple-950'
                   }`}
                   title="Select month"
                 >
@@ -267,11 +270,11 @@ export const DailyTaskSection: React.FC<DailyTaskSectionProps> = ({
             ) : (
               <div
                 className={`flex items-center gap-1.5 text-xs font-semibold ${
-                  !isOwner ? 'text-amber-800' : 'text-emerald-800'
+                  !isOwner ? 'text-blue-800' : 'text-purple-800'
                 }`}
               >
                 <Calendar
-                  className={`w-3.5 h-3.5 ${!isOwner ? 'text-amber-600' : 'text-emerald-600'}`}
+                  className={`w-3.5 h-3.5 ${!isOwner ? 'text-blue-600' : 'text-purple-600'}`}
                 />
                 <span>{formatFullMonth(activeMonthKey)}</span>
               </div>
@@ -290,8 +293,8 @@ export const DailyTaskSection: React.FC<DailyTaskSectionProps> = ({
               onClick={() => setSelectedDate(todayStr)}
               className={`text-xs font-semibold px-2.5 py-1 rounded-lg transition cursor-pointer border ${
                 !isOwner
-                  ? 'text-amber-950 bg-amber-50 hover:bg-amber-100 border-amber-200'
-                  : 'text-emerald-900 bg-emerald-50 hover:bg-emerald-100 border-emerald-200'
+                  ? 'text-blue-950 bg-blue-50 hover:bg-blue-100 border-blue-200'
+                  : 'text-purple-900 bg-purple-50 hover:bg-purple-100 border-purple-200'
               }`}
             >
               Today
@@ -300,8 +303,8 @@ export const DailyTaskSection: React.FC<DailyTaskSectionProps> = ({
           <span
             className={`text-xs font-bold px-2.5 py-1 rounded-full tabular-nums border ${
               !isOwner
-                ? 'bg-amber-50 text-amber-950 border-amber-200'
-                : 'bg-emerald-50 text-emerald-900 border-emerald-200'
+                ? 'bg-blue-50 text-blue-950 border-blue-200'
+                : 'bg-purple-50 text-purple-900 border-purple-200'
             }`}
           >
             {completedCount}/{selectedDateTasks.length} Done
@@ -320,7 +323,7 @@ export const DailyTaskSection: React.FC<DailyTaskSectionProps> = ({
               onClick={handlePrevDay}
               disabled={selectedDate === monthDays[0]?.dateStr}
               size="sm"
-              variant={!isOwner ? 'amber' : 'emerald'}
+              variant={!isOwner ? 'blue' : 'purple'}
               title="Previous Day"
             >
               <ChevronLeft className="w-3.5 h-3.5 stroke-[2.5]" />
@@ -329,7 +332,7 @@ export const DailyTaskSection: React.FC<DailyTaskSectionProps> = ({
               onClick={handleNextDay}
               disabled={selectedDate === monthDays[monthDays.length - 1]?.dateStr}
               size="sm"
-              variant={!isOwner ? 'amber' : 'emerald'}
+              variant={!isOwner ? 'blue' : 'purple'}
               title="Next Day"
             >
               <ChevronRight className="w-3.5 h-3.5 stroke-[2.5]" />
@@ -358,16 +361,16 @@ export const DailyTaskSection: React.FC<DailyTaskSectionProps> = ({
                 className={`flex-shrink-0 flex flex-col items-center justify-center min-w-[3rem] sm:min-w-[3.25rem] py-1.5 sm:py-2 px-1 rounded-xl border transition-all cursor-pointer select-none relative ${
                   isSelected
                     ? !isOwner
-                      ? 'bg-gradient-to-b from-amber-700 via-orange-800 to-amber-900 text-white border-amber-700 shadow-sm ring-2 ring-amber-400/40'
-                      : 'bg-gradient-to-b from-emerald-700 via-emerald-800 to-teal-900 text-white border-emerald-700 shadow-sm ring-2 ring-emerald-400/40'
+                      ? 'bg-gradient-to-b from-blue-700 via-sky-800 to-blue-900 text-white border-blue-700 shadow-sm ring-2 ring-blue-400/40'
+                      : 'bg-gradient-to-b from-purple-700 via-purple-800 to-indigo-900 text-white border-purple-700 shadow-sm ring-2 ring-purple-400/40'
                     : d.isToday
                     ? !isOwner
-                      ? 'bg-amber-50 text-amber-950 border-amber-300 font-semibold'
-                      : 'bg-emerald-50 text-emerald-950 border-emerald-300 font-semibold'
+                      ? 'bg-blue-50 text-blue-950 border-blue-300 font-semibold'
+                      : 'bg-purple-50 text-purple-950 border-purple-300 font-semibold'
                     : hasTasks
                     ? !isOwner
-                      ? 'bg-white text-slate-800 border-slate-200 hover:border-amber-300'
-                      : 'bg-white text-slate-800 border-slate-200 hover:border-emerald-300'
+                      ? 'bg-white text-slate-800 border-slate-200 hover:border-blue-300'
+                      : 'bg-white text-slate-800 border-slate-200 hover:border-purple-300'
                     : 'bg-slate-50/60 text-slate-600 border-transparent hover:bg-slate-100'
                 }`}
               >
@@ -384,17 +387,17 @@ export const DailyTaskSection: React.FC<DailyTaskSectionProps> = ({
                     <span
                       className={`w-1.5 h-1.5 rounded-full ${
                         allDone
-                          ? !isOwner ? 'bg-amber-600' : 'bg-emerald-600'
+                          ? !isOwner ? 'bg-blue-600' : 'bg-purple-600'
                           : isSelected
-                          ? !isOwner ? 'bg-amber-200' : 'bg-emerald-200'
-                          : !isOwner ? 'bg-amber-400' : 'bg-emerald-400'
+                          ? !isOwner ? 'bg-blue-200' : 'bg-purple-200'
+                          : !isOwner ? 'bg-blue-400' : 'bg-purple-400'
                       }`}
                       title={`${stats.done}/${stats.total} tasks completed`}
                     />
                   ) : hasSubs ? (
                     <span
                       className={`w-1 h-1 rounded-full ${
-                        isSelected ? (!isOwner ? 'bg-amber-200' : 'bg-emerald-200') : 'bg-slate-400'
+                        isSelected ? (!isOwner ? 'bg-blue-200' : 'bg-purple-200') : 'bg-slate-400'
                       }`}
                       title={`${stats.subCount} subcategory scheduled`}
                     />
@@ -402,8 +405,8 @@ export const DailyTaskSection: React.FC<DailyTaskSectionProps> = ({
                     <span
                       className={`text-[8px] font-bold leading-none ${
                         isSelected
-                          ? !isOwner ? 'text-amber-200' : 'text-emerald-200'
-                          : !isOwner ? 'text-amber-600' : 'text-emerald-600'
+                          ? !isOwner ? 'text-blue-200' : 'text-purple-200'
+                          : !isOwner ? 'text-blue-600' : 'text-purple-600'
                       }`}
                     >
                       ★
@@ -439,25 +442,43 @@ export const DailyTaskSection: React.FC<DailyTaskSectionProps> = ({
         {/* EMPTY STATE FOR THIS DAY - CATEGORY SPECIFIC */}
         {subcategories.length === 0 && uncategorizedTasks.length === 0 && (
           <div
-            className={`text-center py-6 px-3 sm:px-5 border border-dashed rounded-2xl space-y-3 ${
+            className={`text-center py-4 sm:py-6 px-3 sm:px-5 border border-dashed rounded-2xl space-y-3 ${
               !isOwner
-                ? 'border-amber-200/80 bg-gradient-to-b from-amber-50/40 via-white to-slate-50/40'
-                : 'border-emerald-200/80 bg-gradient-to-b from-emerald-50/40 via-white to-slate-50/40'
+                ? 'border-blue-200/80 bg-gradient-to-b from-blue-50/40 via-white to-slate-50/40'
+                : 'border-purple-200/80 bg-gradient-to-b from-purple-50/40 via-white to-slate-50/40'
             }`}
           >
-            <div
-              className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-bold ${
-                !isOwner
-                  ? 'bg-amber-100/80 text-amber-900'
-                  : 'bg-emerald-100/80 text-emerald-800'
-              }`}
-            >
-              <Sparkles
-                className={`w-3 h-3 ${!isOwner ? 'text-amber-600' : 'text-emerald-600'}`}
-              />
-              <span>{categoryConfig.presetGroupLabel}</span>
+            <div className="flex items-center justify-center gap-2 flex-wrap">
+              <div
+                className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-bold ${
+                  !isOwner
+                    ? 'bg-blue-100/80 text-blue-900'
+                    : 'bg-purple-100/80 text-purple-800'
+                }`}
+              >
+                <Sparkles
+                  className={`w-3 h-3 ${!isOwner ? 'text-blue-600' : 'text-purple-600'}`}
+                />
+                <span>{categoryConfig.presetGroupLabel}</span>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setShowPresets((v) => !v)}
+                className={`sm:hidden inline-flex items-center gap-1 text-[11px] font-bold px-2.5 py-0.5 rounded-full border transition cursor-pointer active:scale-95 ${
+                  !isOwner
+                    ? 'text-blue-800 bg-white border-blue-200'
+                    : 'text-purple-800 bg-white border-purple-200'
+                }`}
+              >
+                <span>{showPresets ? 'Hide' : 'Show presets'}</span>
+                <ChevronDown
+                  className={`w-3 h-3 transition-transform ${showPresets ? 'rotate-180' : ''}`}
+                />
+              </button>
             </div>
-            
+
+            <div className={showPresets ? 'space-y-3' : 'hidden sm:block space-y-3'}>
             <p className="text-xs text-slate-600 max-w-md mx-auto">
               {categoryConfig.contextDescription} Choose a tailored preset below to start planning:
             </p>
@@ -486,7 +507,7 @@ export const DailyTaskSection: React.FC<DailyTaskSectionProps> = ({
               <div>
                 <div
                   className={`text-[10px] font-bold uppercase tracking-wider mb-1.5 ${
-                    !isOwner ? 'text-amber-800' : 'text-emerald-700/80'
+                    !isOwner ? 'text-blue-800' : 'text-purple-700/80'
                   }`}
                 >
                   {categoryConfig.categoryName} Presets:
@@ -499,8 +520,8 @@ export const DailyTaskSection: React.FC<DailyTaskSectionProps> = ({
                       onClick={() => handleAddSub(preset)}
                       className={`text-xs font-semibold px-2.5 py-1 rounded-lg transition cursor-pointer active:scale-95 shadow-2xs ${
                         !isOwner
-                          ? 'text-amber-950 bg-amber-50 hover:bg-amber-100/80 border border-amber-200/80 hover:border-amber-300'
-                          : 'text-emerald-900 bg-emerald-50 hover:bg-emerald-100/80 border border-emerald-200/80 hover:border-emerald-300'
+                          ? 'text-blue-950 bg-blue-50 hover:bg-blue-100/80 border border-blue-200/80 hover:border-blue-300'
+                          : 'text-purple-900 bg-purple-50 hover:bg-purple-100/80 border border-purple-200/80 hover:border-purple-300'
                       }`}
                     >
                       + {preset}
@@ -513,7 +534,7 @@ export const DailyTaskSection: React.FC<DailyTaskSectionProps> = ({
               {categoryConfig.suggestedTasks && categoryConfig.suggestedTasks.length > 0 && (
                 <div
                   className={`pt-2 border-t ${
-                    !isOwner ? 'border-amber-100/80' : 'border-emerald-100/80'
+                    !isOwner ? 'border-blue-100/80' : 'border-purple-100/80'
                   }`}
                 >
                   <div className="text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1.5">
@@ -539,14 +560,14 @@ export const DailyTaskSection: React.FC<DailyTaskSectionProps> = ({
                         }}
                         className={`text-xs p-2 rounded-xl transition flex items-center justify-between gap-2 group cursor-pointer border ${
                           !isOwner
-                            ? 'text-slate-700 hover:text-amber-950 bg-white/80 hover:bg-amber-50/60 border-slate-200 hover:border-amber-200'
-                            : 'text-slate-700 hover:text-emerald-900 bg-white/80 hover:bg-emerald-50/60 border-slate-200 hover:border-emerald-200'
+                            ? 'text-slate-700 hover:text-blue-950 bg-white/80 hover:bg-blue-50/60 border-slate-200 hover:border-blue-200'
+                            : 'text-slate-700 hover:text-purple-900 bg-white/80 hover:bg-purple-50/60 border-slate-200 hover:border-purple-200'
                         }`}
                       >
                         <span className="truncate">{taskItem.text}</span>
                         <span
                           className={`text-[10px] font-semibold flex items-center gap-0.5 flex-shrink-0 group-hover:underline ${
-                            !isOwner ? 'text-amber-700' : 'text-emerald-600'
+                            !isOwner ? 'text-blue-700' : 'text-purple-600'
                           }`}
                         >
                           <Plus className="w-3 h-3" /> Add
@@ -556,6 +577,7 @@ export const DailyTaskSection: React.FC<DailyTaskSectionProps> = ({
                   </div>
                 </div>
               )}
+            </div>
             </div>
           </div>
         )}
@@ -633,8 +655,8 @@ export const DailyTaskSection: React.FC<DailyTaskSectionProps> = ({
           onChange={(e) => setNewSubName(e.target.value)}
           className={`flex-1 text-xs sm:text-sm bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-slate-800 placeholder-slate-400 focus:outline-none focus:bg-white focus:ring-2 ${
             !isOwner
-              ? 'focus:ring-amber-500/20 focus:border-amber-600'
-              : 'focus:ring-emerald-500/20 focus:border-emerald-600'
+              ? 'focus:ring-blue-500/20 focus:border-blue-600'
+              : 'focus:ring-purple-500/20 focus:border-purple-600'
           }`}
         />
         <button
@@ -642,8 +664,8 @@ export const DailyTaskSection: React.FC<DailyTaskSectionProps> = ({
           disabled={!newSubName.trim()}
           className={`w-full sm:w-auto px-4 py-2.5 disabled:opacity-40 text-white text-xs sm:text-sm font-semibold rounded-xl transition cursor-pointer shrink-0 shadow-2xs active:scale-98 ${
             !isOwner
-              ? 'bg-gradient-to-r from-amber-700 to-orange-800 hover:from-amber-800 hover:to-orange-900'
-              : 'bg-gradient-to-r from-emerald-700 to-teal-800 hover:from-emerald-800 hover:to-teal-900'
+              ? 'bg-gradient-to-r from-blue-700 to-sky-800 hover:from-blue-800 hover:to-sky-900'
+              : 'bg-gradient-to-r from-purple-700 to-indigo-800 hover:from-purple-800 hover:to-indigo-900'
           }`}
         >
           + Add Category

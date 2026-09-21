@@ -1,12 +1,11 @@
-{
-  "projectId": "exalted-dialect-hdtd0",
-  "appId": "1:722289622729:web:2a5616b2f2f0c86b9f5718",
-  "apiKey": "AIzaSyA1-zBo1a9Zhpm7J_HymhdbG7a_BJotFQs",
-  "authDomain": "exalted-dialect-hdtd0.firebaseapp.com",
-  "firestoreDatabaseId": "ai-studio-remixgoalpath-5e0e68d7-5661-4e8f-b5d1-75a9cace2aac",
-  "storageBucket": "exalted-dialect-hdtd0.firebasestorage.app",
-  "messagingSenderId": "722289622729",
-  "measurementId": "",
-  "oAuthClientId": "722289622729-ru70919bd3fba0siushn5q42n0529qru.apps.googleusercontent.com",
-  "recaptchaSiteKey": ""
-}
+
+   {
+     "apiKey": "AIzaSyD-8Cl4OGoNvecv-p8p7KlHZgShoFLuN7o",
+     "authDomain": "goal-path-9f4cc.firebaseapp.com",
+     "projectId": "goal-path-9f4cc",
+     "storageBucket": "goal-path-9f4cc.firebasestorage.app",
+     "messagingSenderId": "87360274095",
+     "appId": "1:87360274095:web:e068ad7ad16821eec75e5a",
+     "measurementId": "G-R4YXHYCRD3",
+     "firestoreDatabaseId": "(default)"
+   }

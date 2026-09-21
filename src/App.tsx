@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import {
   User,
   signInWithPopup,
@@ -43,6 +43,7 @@ import {
   X,
   ArrowRight,
   Sparkles,
+  Briefcase,
 } from 'lucide-react';
 
 import { auth, db, googleProvider } from './firebase';
@@ -55,6 +56,8 @@ import {
   AccessRequest,
   ProfessionalRole,
   Collaborator,
+  GoalAccessLevel,
+  AccountPersona,
 } from './types';
 import {
   getTodayDateString,
@@ -64,13 +67,18 @@ import {
   generateMonthRange,
   generateInviteCode,
   requestDocId,
+  formatJoinedDate,
   PROFESSIONAL_ROLES,
   getMonthDays,
   formatDisplayDate,
   addMonthsToKey,
+  buildGoalAccessArrays,
+  getGoalAccessLevel,
+  isGoalSharedWith,
 } from './utils';
 
 import { LoginScreen } from './components/LoginScreen';
+import { AppSelect } from './components/AppSelect';
 import { PriorityBadge, ProgressBar, GoalPathLogo, GlassIconButton, GlassBadge } from './components/UIElements';
 import { DailyTaskSection } from './components/DailyTaskSection';
 import { MonthlyMilestoneSection } from './components/MonthlyMilestoneSection';
@@ -78,8 +86,25 @@ import { CollaboratorsPanel } from './components/CollaboratorsPanel';
 import { CreateGoalModal } from './components/CreateGoalModal';
 import { GoalAssignmentModal } from './components/GoalAssignmentModal';
 import { GiveUpInterventionModal } from './components/GiveUpInterventionModal';
-import goalPathLogo from './assets/images/goal_path_logo_1787491130948.jpg';
+import { ProfessionalProfilePanel } from './components/ProfessionalProfilePanel';
+import { PersonaPrompt } from './components/PersonaPrompt';
 import goalPathHero from './assets/images/goal_path_hero_1787491145015.jpg';
+
+/** Maps a Firestore goal document onto the shape the interface uses. */
+const mapGoalDoc = (id: string, data: Record<string, unknown>): Goal => ({
+  id,
+  userId: (data.userId as string) || '',
+  title: (data.title as string) || '',
+  category: (data.category as string) || 'General',
+  description: (data.description as string) || '',
+  createdAt: (data.createdAt as string) || '',
+  targetDate: (data.targetDate as string) || '',
+  milestones: (data.milestones as Goal['milestones']) || [],
+  subcategories: (data.subcategories as Goal['subcategories']) || [],
+  tasks: (data.tasks as Goal['tasks']) || [],
+  viewerUids: Array.isArray(data.viewerUids) ? (data.viewerUids as string[]) : undefined,
+  editorUids: Array.isArray(data.editorUids) ? (data.editorUids as string[]) : undefined,
+});
 
 async function ensureUserProfile(firebaseUser: User) {
   const userRef = doc(db, 'users', firebaseUser.uid);
@@ -132,7 +157,6 @@ export default function App() {
   const [user, setUser] = useState<User | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [authError, setAuthError] = useState<string | null>(null);
-  const [isDemoMode, setIsDemoMode] = useState(false);
 
   // Data State
   const [goals, setGoals] = useState<Goal[]>([]);
@@ -142,7 +166,10 @@ export default function App() {
   const [giveUpTargetGoal, setGiveUpTargetGoal] = useState<Goal | null>(null);
 
   // UI View State
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'today' | 'detail' | 'connect'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'today' | 'detail' | 'connect' | 'professional'>('dashboard');
+  const [savingPersona, setSavingPersona] = useState(false);
+  const [personaPromptDismissed, setPersonaPromptDismissed] = useState(false);
+  const [personaPickerOpen, setPersonaPickerOpen] = useState(false);
   const [selectedGoalId, setSelectedGoalId] = useState<string | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -173,18 +200,32 @@ export default function App() {
   const [outgoingRequests, setOutgoingRequests] = useState<AccessRequest[]>([]);
   const [clientList, setClientList] = useState<UserProfile[]>([]);
   const [clientsReady, setClientsReady] = useState(false);
+  /**
+   * Clients this professional has removed from their own list. Kept on their
+   * own profile so it follows them between devices. Only the client can fully
+   * revoke access, so the shared request is marked "removed" and the client's
+   * account drops the professional the next time it signs in.
+   */
+  const [withdrawnClientIds, setWithdrawnClientIds] = useState<string[]>([]);
   const [workspaceUid, setWorkspaceUid] = useState<string | null>(null);
   const [connectNotice, setConnectNotice] = useState<{ type: 'ok' | 'error'; text: string } | null>(null);
   const [incomingError, setIncomingError] = useState<string | null>(null);
+
+  /**
+   * The clients actually shown in the interface: everyone connected except the
+   * ones this professional has removed.
+   */
+  const visibleClients = useMemo(
+    () => clientList.filter((c) => !withdrawnClientIds.includes(c.id || '')),
+    [clientList, withdrawnClientIds]
+  );
 
   // Listen for Firebase Auth State Changes
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(
       auth,
       (currentUser) => {
-        if (!isDemoMode) {
-          setUser(currentUser);
-        }
+        setUser(currentUser);
         setAuthLoading(false);
       },
       (err) => {
@@ -194,14 +235,12 @@ export default function App() {
       }
     );
     return () => unsubscribe();
-  }, [isDemoMode]);
+  }, []);
 
   useEffect(() => {
-    if (!user || isDemoMode) {
-      if (!isDemoMode) {
-        setWorkspaceUid(null);
-        setProfile(null);
-      }
+    if (!user) {
+      setWorkspaceUid(null);
+      setProfile(null);
       return;
     }
     setWorkspaceUid((prev) => prev || user.uid);
@@ -211,17 +250,21 @@ export default function App() {
         err.message || 'Could not set up your access code. Check Firestore rules for users/codes.'
       );
     });
-  }, [user, isDemoMode]);
+  }, [user]);
 
   useEffect(() => {
-    if (!user || isDemoMode) {
-      if (!isDemoMode) setProfile(null);
+    if (!user) {
+      setProfile(null);
       return undefined;
     }
     const unsub = onSnapshot(
       doc(db, 'users', user.uid),
       (snap) => {
-        if (snap.exists()) setProfile({ id: snap.id, ...snap.data() } as UserProfile);
+        if (snap.exists()) {
+          const data = snap.data();
+          setProfile({ id: snap.id, ...data } as UserProfile);
+          setWithdrawnClientIds(Array.isArray(data.withdrawnClients) ? data.withdrawnClients : []);
+        }
       },
       (err) => {
         console.error('Profile listener:', err);
@@ -229,15 +272,13 @@ export default function App() {
       }
     );
     return () => unsub();
-  }, [user, isDemoMode]);
+  }, [user]);
 
   useEffect(() => {
-    if (!user || isDemoMode) {
-      if (!isDemoMode) {
-        setIncomingRequests([]);
-        setOutgoingRequests([]);
-        setIncomingError(null);
-      }
+    if (!user) {
+      setIncomingRequests([]);
+      setOutgoingRequests([]);
+      setIncomingError(null);
       return undefined;
     }
     const incomingQ = query(collection(db, 'accessRequests'), where('toUid', '==', user.uid));
@@ -267,18 +308,34 @@ export default function App() {
       unsubIn();
       unsubOut();
     };
-  }, [user, isDemoMode]);
+  }, [user]);
 
   // Realtime client list & active client profile listener
   const [activeClientProfile, setActiveClientProfile] = useState<UserProfile | null>(null);
   const [isAccountMenuOpen, setIsAccountMenuOpen] = useState(false);
 
+  /**
+   * A professional who removes a client marks the shared request "removed".
+   * Access itself lives on the client's account, so the client is the one who
+   * can actually clear it. This runs that cleanup the next time they sign in.
+   */
+  const clearedWithdrawnPros = useRef<string[]>([]);
   useEffect(() => {
-    if (!user || isDemoMode) {
-      if (!isDemoMode) {
-        setClientList([]);
-        setClientsReady(false);
-      }
+    if (!user || !profile) return;
+    const stillListed = (profile.collaborators || []).map((c) => c.uid);
+    const pending = incomingRequests.filter(
+      (r) => r.status === 'removed' && stillListed.includes(r.fromUid)
+    );
+    const next = pending.find((r) => !clearedWithdrawnPros.current.includes(r.fromUid));
+    if (!next) return;
+    clearedWithdrawnPros.current.push(next.fromUid);
+    handleRemoveCollaborator(next.fromUid);
+  }, [user, profile, incomingRequests]);
+
+  useEffect(() => {
+    if (!user) {
+      setClientList([]);
+      setClientsReady(false);
       return undefined;
     }
     const clientsQ = query(
@@ -297,11 +354,11 @@ export default function App() {
       }
     );
     return () => unsub();
-  }, [user, isDemoMode]);
+  }, [user]);
 
   // Realtime listener for active client workspace if switching to a client's account
   useEffect(() => {
-    if (!user || !workspaceUid || workspaceUid === user.uid || isDemoMode) {
+    if (!user || !workspaceUid || workspaceUid === user.uid) {
       setActiveClientProfile(null);
       return undefined;
     }
@@ -315,21 +372,20 @@ export default function App() {
       (err) => console.error('Active client profile listener:', err)
     );
     return () => unsub();
-  }, [user, workspaceUid, isDemoMode]);
+  }, [user, workspaceUid]);
 
   useEffect(() => {
-    if (!user || !workspaceUid || workspaceUid === user.uid || isDemoMode) return;
+    if (!user || !workspaceUid || workspaceUid === user.uid) return;
     if (!clientsReady) return;
-    if (!clientList.some((c) => c.id === workspaceUid) && !activeClientProfile) {
+    if (!visibleClients.some((c) => c.id === workspaceUid) && !activeClientProfile) {
       setWorkspaceUid(user.uid);
       setActiveTab('dashboard');
       setSelectedGoalId(null);
     }
-  }, [user, workspaceUid, clientList, activeClientProfile, clientsReady, isDemoMode]);
+  }, [user, workspaceUid, visibleClients, activeClientProfile, clientsReady]);
 
   // Realtime Firestore: goals for active workspace
   useEffect(() => {
-    if (isDemoMode) return;
     if (!user || !workspaceUid) {
       setGoals([]);
       setDataLoading(false);
@@ -340,7 +396,14 @@ export default function App() {
     setErrorMessage(null);
 
     const goalsRef = collection(db, 'goals');
-    const q = query(goalsRef, where('userId', '==', workspaceUid));
+    // The owner loads their own goals. A professional loads every goal shared
+    // with them, because that is the only shape the security rules can prove.
+    // Goals belonging to other clients are filtered out below, so one client's
+    // workspace never shows another client's goals.
+    const viewingClient = workspaceUid !== user.uid;
+    const q = viewingClient
+      ? query(goalsRef, where('viewerUids', 'array-contains', user.uid))
+      : query(goalsRef, where('userId', '==', workspaceUid));
 
     const unsubscribe = onSnapshot(
       q,
@@ -348,18 +411,8 @@ export default function App() {
         const fetchedGoals: Goal[] = [];
         snapshot.forEach((docSnap) => {
           const data = docSnap.data();
-          fetchedGoals.push({
-            id: docSnap.id,
-            userId: data.userId,
-            title: data.title,
-            category: data.category,
-            description: data.description || '',
-            createdAt: data.createdAt,
-            targetDate: data.targetDate,
-            milestones: data.milestones || [],
-            subcategories: data.subcategories || [],
-            tasks: data.tasks || [],
-          });
+          if (viewingClient && data.userId !== workspaceUid) return;
+          fetchedGoals.push(mapGoalDoc(docSnap.id, data));
         });
 
         // Sort newest first
@@ -378,6 +431,33 @@ export default function App() {
     return () => unsubscribe();
   }, [user, workspaceUid]);
 
+  /**
+   * Every goal shared with this professional, across all of their clients.
+   *
+   * The workspace listener above only ever loads one workspace at a time, so on
+   * the dashboard it returns the professional's own goals and the per-client
+   * "Assigned Session(s)" counts came out as zero. This keeps the full picture.
+   */
+  const [sharedGoals, setSharedGoals] = useState<Goal[]>([]);
+  const isProfessional = clientList.length > 0 || profile?.persona === 'professional';
+  useEffect(() => {
+    if (!user || !isProfessional) {
+      setSharedGoals([]);
+      return undefined;
+    }
+    const q = query(collection(db, 'goals'), where('viewerUids', 'array-contains', user.uid));
+    const unsub = onSnapshot(
+      q,
+      (snapshot) => {
+        const rows: Goal[] = [];
+        snapshot.forEach((docSnap) => rows.push(mapGoalDoc(docSnap.id, docSnap.data())));
+        setSharedGoals(rows);
+      },
+      (err) => console.error('Shared goals listener:', err)
+    );
+    return () => unsub();
+  }, [user, isProfessional]);
+
   const isOwner = !!user && workspaceUid === user.uid;
   const workspaceProfile = isOwner
     ? profile
@@ -389,106 +469,217 @@ export default function App() {
   const professionalRole = currentCollaborator?.role || approvedOutgoingReq?.role || null;
   const pendingIncoming = incomingRequests.filter((r) => r.status === 'pending');
 
-  // Role diagnostic log
+  // --------------------------------------------------------------- swipe nav
+  /** The tabs a swipe moves between, in the order they appear in the bar. */
+  const swipeTabs = useMemo(() => {
+    const tabs: Array<'dashboard' | 'today' | 'connect' | 'professional'> = [
+      'dashboard',
+      'today',
+      'connect',
+    ];
+    if (isOwner && profile?.persona === 'professional') tabs.push('professional');
+    return tabs;
+  }, [isOwner, profile?.persona]);
+
+  const contentRef = useRef<HTMLElement | null>(null);
+  const swipe = useRef<{
+    x: number;
+    y: number;
+    dx: number;
+    axis: 'none' | 'x' | 'y';
+    active: boolean;
+    locked: boolean;
+  }>({ x: 0, y: 0, dx: 0, axis: 'none', active: false, locked: false });
+
+  /** The tab a swipe of `step` places away lands on, or null when there is none. */
+  const swipeTarget = (step: number) => {
+    if (activeTab === 'detail') return step === -1 ? 'dashboard' : null;
+    const index = swipeTabs.indexOf(activeTab as (typeof swipeTabs)[number]);
+    if (index === -1) return null;
+    const next = index + step;
+    return next >= 0 && next < swipeTabs.length ? swipeTabs[next] : null;
+  };
+
+  const paintContent = (dx: number, opacity: number, transition: string) => {
+    const element = contentRef.current;
+    if (!element) return;
+    element.style.transition = transition;
+    element.style.transform = `translate3d(${dx}px, 0, 0)`;
+    element.style.opacity = String(opacity);
+  };
+
+  const settleContent = () => {
+    paintContent(0, 1, 'transform 260ms cubic-bezier(0.22, 1, 0.36, 1), opacity 180ms ease-out');
+    window.setTimeout(() => {
+      const element = contentRef.current;
+      if (!element) return;
+      element.style.transition = '';
+      element.style.transform = '';
+      element.style.opacity = '';
+      element.style.willChange = '';
+      swipe.current.locked = false;
+    }, 300);
+  };
+
+  /** Slides the current view out, swaps the tab, then slides the new one in. */
+  const commitSwipe = (step: number) => {
+    const target = swipeTarget(step);
+    if (!target || swipe.current.locked) return;
+    swipe.current.locked = true;
+    const element = contentRef.current;
+    if (element) element.style.willChange = 'transform, opacity';
+
+    paintContent(step === 1 ? -64 : 64, 0.3, 'transform 130ms ease-in, opacity 130ms ease-in');
+    window.setTimeout(() => {
+      setSelectedGoalId(null);
+      setActiveTab(target);
+      paintContent(step === 1 ? 64 : -64, 0.3, 'none');
+      window.requestAnimationFrame(() => settleContent());
+    }, 140);
+  };
+
   useEffect(() => {
-    if (user && !isOwner) {
-      console.log('[Professional Role Diagnosis]', {
-        userId: user.uid,
-        userEmail: user.email,
-        workspaceUid,
-        isOwner,
-        workspaceClientName: workspaceProfile?.displayName || workspaceProfile?.email,
-        currentCollaboratorFound: currentCollaborator,
-        approvedOutgoingReqFound: approvedOutgoingReq,
-        computedProfessionalRole: professionalRole,
-        collaboratorsInWorkspace: workspaceProfile?.collaborators,
-      });
-    }
-  }, [user, isOwner, workspaceUid, workspaceProfile, currentCollaborator, approvedOutgoingReq, professionalRole]);
+    const handleStart = (event: TouchEvent) => {
+      if (event.touches.length !== 1 || swipe.current.locked) return;
+      const target = event.target as HTMLElement | null;
+      if (!target || !contentRef.current?.contains(target)) return;
+      if (target.closest('input, textarea, select, [data-no-swipe]')) return;
+      // Rows that scroll sideways keep that gesture for themselves.
+      let node: HTMLElement | null = target;
+      for (let depth = 0; node && depth < 6; depth += 1) {
+        const overflowX = window.getComputedStyle(node).overflowX;
+        if (overflowX === 'auto' || overflowX === 'scroll') return;
+        node = node.parentElement;
+      }
+      const touch = event.touches[0];
+      swipe.current = {
+        x: touch.clientX,
+        y: touch.clientY,
+        dx: 0,
+        axis: 'none',
+        active: true,
+        locked: false,
+      };
+    };
 
-  // Any authenticated collaborator in this workspace has permission to view/interact with assigned goals
-  const isGoalAssignedToMe = (goalId: string) => {
-    if (isOwner) return true;
-    if (!currentCollaborator) return true;
-    // If collaborator has no assignedGoalIds specified OR empty array (e.g. approved without restrictions), grant access to workspace goals
-    if (!currentCollaborator.assignedGoalIds || currentCollaborator.assignedGoalIds.length === 0) {
-      return true;
-    }
-    return currentCollaborator.assignedGoalIds.includes(goalId);
+    const handleMove = (event: TouchEvent) => {
+      const state = swipe.current;
+      if (!state.active || event.touches.length !== 1) return;
+      const touch = event.touches[0];
+      const dx = touch.clientX - state.x;
+      const dy = touch.clientY - state.y;
+      if (state.axis === 'none') {
+        if (Math.abs(dx) < 12 && Math.abs(dy) < 12) return;
+        state.axis = Math.abs(dx) > Math.abs(dy) ? 'x' : 'y';
+        const element = contentRef.current;
+        if (state.axis === 'x' && element) element.style.willChange = 'transform, opacity';
+      }
+      if (state.axis !== 'x') return;
+      event.preventDefault();
+      state.dx = dx;
+      const step = dx < 0 ? 1 : -1;
+      // Past the first or last tab the view barely moves, so the end is felt.
+      const offset = swipeTarget(step) ? dx : dx * 0.3;
+      paintContent(offset, 1 - Math.min(Math.abs(offset) / 900, 0.18), 'none');
+    };
+
+    const handleEnd = () => {
+      const state = swipe.current;
+      if (!state.active) return;
+      state.active = false;
+      if (state.axis !== 'x') return;
+      const dx = state.dx;
+      state.axis = 'none';
+      const step = dx < 0 ? 1 : -1;
+      const threshold = Math.min(90, window.innerWidth * 0.22);
+      if (Math.abs(dx) > threshold && swipeTarget(step)) {
+        commitSwipe(step);
+        return;
+      }
+      settleContent();
+    };
+
+    document.addEventListener('touchstart', handleStart, { passive: true });
+    document.addEventListener('touchmove', handleMove, { passive: false });
+    document.addEventListener('touchend', handleEnd);
+    document.addEventListener('touchcancel', handleEnd);
+    return () => {
+      document.removeEventListener('touchstart', handleStart);
+      document.removeEventListener('touchmove', handleMove);
+      document.removeEventListener('touchend', handleEnd);
+      document.removeEventListener('touchcancel', handleEnd);
+    };
+  }, [activeTab, swipeTabs]);
+
+  /**
+   * What the signed-in user may do with one goal. Access lives on the goal
+   * document itself, which is what the Firestore rules check, so the interface
+   * and the database always agree.
+   *   'edit' - owner or assigned editor
+   *   'view' - assigned read-only professional
+   *   null   - not shared with this user
+   */
+  const goalAccessLevel = (goalId: string): GoalAccessLevel | null => {
+    if (isOwner) return 'edit';
+    const goal = goals.find((g) => g.id === goalId);
+    if (!goal || !user) return null;
+    if ((goal.editorUids || []).includes(user.uid)) return 'edit';
+    if ((goal.viewerUids || []).includes(user.uid)) return 'view';
+    return null;
   };
 
-  const handleAssignGoalToMe = async (goalId: string) => {
-    if (!user || isOwner || !workspaceUid) return;
-    try {
-      const clientRef = doc(db, 'users', workspaceUid);
-      const snap = await getDoc(clientRef);
-      if (!snap.exists()) return;
-      const data = snap.data();
-      const collabs: Collaborator[] = data.collaborators || [];
-      const updated = collabs.map((c) => {
-        if (c.uid === user.uid) {
-          const prev = c.assignedGoalIds || [];
-          return {
-            ...c,
-            assignedGoalIds: Array.from(new Set([...prev, goalId])),
-          };
+  const canViewGoal = (goalId: string) => goalAccessLevel(goalId) !== null;
+  const canEditGoal = (goalId: string) => goalAccessLevel(goalId) === 'edit';
+
+  // Goals created before per-goal permissions existed carry no access lists yet.
+  // The owner's browser fills them in once, so professionals can be granted read
+  // or edit access from then on.
+  useEffect(() => {
+    if (!isOwner || dataLoading) return;
+    const stale = goals.filter(
+      (g) => !Array.isArray(g.viewerUids) || !Array.isArray(g.editorUids)
+    );
+    if (stale.length === 0) return;
+
+    (async () => {
+      for (const goal of stale) {
+        const { viewerUids, editorUids } = buildGoalAccessArrays(
+          profile?.collaborators,
+          goal.id
+        );
+        try {
+          await updateDoc(doc(db, 'goals', goal.id), { viewerUids, editorUids });
+        } catch (err) {
+          console.error('Goal access backfill failed:', err);
         }
-        return c;
-      });
-      await updateDoc(clientRef, { collaborators: updated });
-    } catch (err) {
-      console.error('Assign goal to me error:', err);
-    }
-  };
+      }
+    })();
+  }, [isOwner, dataLoading, goals, profile?.collaborators]);
 
   const canEditSubcategoryTasks = (goalId: string, sub?: Subcategory) => {
     if (isOwner) return true;
-    if (!isGoalAssignedToMe(goalId)) {
-      console.log('[canEditSubcategoryTasks] Goal not assigned to collaborator:', { goalId });
-      return false;
-    }
+    if (!canEditGoal(goalId)) return false;
 
     const currentUserRole = professionalRole || null;
     const subcategoryRole = sub?.editorRole || null;
-
-    console.log('[canEditSubcategoryTasks Comparison]', {
-      goalId,
-      subcategoryId: sub?.id,
-      subcategoryName: sub?.name,
-      currentUserRole,
-      subcategoryRole,
-      isOwner,
-    });
 
     // If no role tag is assigned to the subcategory ("Client & Pros" / null / undefined / ""), any assigned pro can edit
     if (!subcategoryRole || subcategoryRole.trim() === '') {
       return true;
     }
 
-    if (!currentUserRole) {
-      console.warn('[canEditSubcategoryTasks MISMATCH - No role found for current user]', {
-        currentUserRole,
-        subcategoryRole,
-      });
-      return false;
-    }
+    if (!currentUserRole) return false;
 
-    const matches = currentUserRole.trim().toLowerCase() === subcategoryRole.trim().toLowerCase();
-    console.log('[canEditSubcategoryTasks Result]', {
-      currentUserRole,
-      subcategoryRole,
-      matches,
-    });
-
-    return matches;
+    return currentUserRole.trim().toLowerCase() === subcategoryRole.trim().toLowerCase();
   };
 
   const canEditTaskRecord = (goalId: string, task?: TaskItem) => {
     if (isOwner) return true;
+    if (!canEditGoal(goalId)) return false;
     if (!task) return true;
     if (!task.subcategoryId) return true;
     const goal = goals.find((g) => g.id === goalId);
-    if (!goal) return true;
+    if (!goal) return false;
     const sub = (goal.subcategories || []).find((s) => s.id === task.subcategoryId);
     return canEditSubcategoryTasks(goalId, sub);
   };
@@ -582,67 +773,10 @@ export default function App() {
   }, [goals]);
 
   // AUTH ACTIONS
-  const handleEnterDemoMode = () => {
-    setIsDemoMode(true);
-    const demoUser = {
-      uid: 'demo-user',
-      displayName: 'Demo Explorer',
-      email: 'demo@goalpath.app',
-      photoURL: '',
-    } as unknown as User;
-    setUser(demoUser);
-    setWorkspaceUid('demo-user');
-    setProfile({
-      id: 'demo-user',
-      displayName: 'Demo Explorer',
-      email: 'demo@goalpath.app',
-      photoURL: '',
-      code: 'DEMO01',
-      collaborators: [],
-      collaboratorUids: [],
-      createdAt: new Date().toISOString(),
-    });
-
-    const curKey = getCurrentMonthKey();
-    const months = generateMonthRange(curKey, '2025-12');
-    const sampleGoal: Goal = {
-      id: 'goal-demo-1',
-      userId: 'demo-user',
-      title: 'Launch Product MVP & Onboard First 500 Users',
-      category: 'Business',
-      description: 'Ship initial web & mobile experience, conduct user interviews, and achieve steady retention.',
-      createdAt: todayDate,
-      targetDate: '2025-12',
-      milestones: months.map((m, idx) => ({
-        id: `demo-m-${idx}`,
-        monthKey: m,
-        title:
-          idx === 0
-            ? 'Complete core interactive workflow and QA'
-            : idx === months.length - 1
-            ? 'Official public release & beta outreach'
-            : `Reach checkpoint for ${formatMonthKey(m)}`,
-        completed: idx === 0,
-      })),
-      subcategories: [
-        { id: 'sub-tech', name: 'Product Engineering', order: 0, editorRole: 'Developer' },
-        { id: 'sub-mktg', name: 'Growth & Distribution', order: 1, editorRole: 'Manager' },
-      ],
-      tasks: [
-        { id: 't-1', subcategoryId: 'sub-tech', text: 'Set up cloud hosting & automated deployment pipeline', completed: true, date: todayDate, priority: 'high' },
-        { id: 't-2', subcategoryId: 'sub-tech', text: 'Review responsive mobile navigation and touch targets', completed: false, date: todayDate, priority: 'medium' },
-        { id: 't-3', subcategoryId: 'sub-mktg', text: 'Draft launch announcement & early access email list', completed: false, date: todayDate, priority: 'high' },
-      ],
-    };
-    setGoals([sampleGoal]);
-    setDataLoading(false);
-  };
-
   const handleGoogleSignIn = async () => {
     setAuthError(null);
     try {
       await signInWithPopup(auth, googleProvider);
-      setIsDemoMode(false);
     } catch (err: unknown) {
       const authErr = err as { code?: string; message?: string };
       console.error('Google Sign In Error:', err);
@@ -667,11 +801,8 @@ export default function App() {
 
   const handleSignOut = async () => {
     try {
-      if (!isDemoMode) {
-        await signOut(auth);
-      }
+      await signOut(auth);
       setUser(null);
-      setIsDemoMode(false);
       setSelectedGoalId(null);
       setActiveTab('dashboard');
       setWorkspaceUid(null);
@@ -682,6 +813,31 @@ export default function App() {
   };
 
   // FIRESTORE / LOCAL GOAL ACTIONS
+  /**
+   * Records the answer to "how will you use Goal Path?".
+   * Purely descriptive: it changes what this account sees, not what it may read.
+   * Access to anyone else's data still runs through the approval flow.
+   */
+  const handleChoosePersona = async (persona: AccountPersona) => {
+    if (!user) return;
+    setSavingPersona(true);
+    try {
+      const chosenAt = new Date().toISOString();
+      await updateDoc(doc(db, 'users', user.uid), { persona, personaChosenAt: chosenAt });
+      setProfile((prev) => (prev ? { ...prev, persona, personaChosenAt: chosenAt } : prev));
+      setPersonaPromptDismissed(true);
+      setPersonaPickerOpen(false);
+      if (persona === 'professional') {
+        setActiveTab('professional');
+      }
+    } catch (err) {
+      console.error('Save persona error:', err);
+      setErrorMessage('Could not save your choice. Check permissions and try again.');
+    } finally {
+      setSavingPersona(false);
+    }
+  };
+
   const handleCreateGoal = async (newGoalData: {
     title: string;
     category: string;
@@ -717,36 +873,33 @@ export default function App() {
       tasks: [],
     };
 
-    if (isDemoMode) {
-      setGoals((prev) => [docData, ...prev]);
-      setSelectedGoalId(newGoalId);
-      setActiveTab('detail');
-      return;
-    }
-
     try {
       const docRef = await addDoc(collection(db, 'goals'), docData);
       const createdId = docRef.id;
 
-      // If specific professionals were assigned during creation:
-      if (newGoalData.assignedProfessionalUids && newGoalData.assignedProfessionalUids.length > 0) {
+      // Professionals picked during creation start with editing access. The goal
+      // document gets the access lists Firestore enforces, and the owner's roster
+      // records the same permission so both stay in step.
+      const assignedUids = newGoalData.assignedProfessionalUids || [];
+      if (assignedUids.length > 0) {
         const userRef = doc(db, 'users', user.uid);
         const fresh = await getDoc(userRef);
         const data = fresh.data() || {};
         const collaborators: Collaborator[] = data.collaborators || [];
 
-        const updatedCollabs = collaborators.map((c) => {
-          if (newGoalData.assignedProfessionalUids?.includes(c.uid)) {
-            const currentIds = c.assignedGoalIds !== undefined ? c.assignedGoalIds : goals.map((g) => g.id);
-            return {
-              ...c,
-              assignedGoalIds: Array.from(new Set([...currentIds, createdId])),
-            };
-          }
-          return c;
-        });
+        const updatedCollabs: Collaborator[] = collaborators.map((c) =>
+          assignedUids.includes(c.uid)
+            ? {
+                ...c,
+                goalAccess: { ...(c.goalAccess || {}), [createdId]: 'edit' as GoalAccessLevel },
+              }
+            : c
+        );
 
         await updateDoc(userRef, { collaborators: updatedCollabs });
+
+        const { viewerUids, editorUids } = buildGoalAccessArrays(updatedCollabs, createdId);
+        await updateDoc(doc(db, 'goals', createdId), { viewerUids, editorUids });
       }
 
       setSelectedGoalId(createdId);
@@ -761,19 +914,14 @@ export default function App() {
     goalId: string,
     updates: { title?: string; category?: string; description?: string }
   ) => {
-    if (!isOwner && !isGoalAssignedToMe(goalId)) {
-      setErrorMessage('You are not authorized to edit this goal.');
+    // Title, category and description are owner-only: the security rules never
+    // let a collaborator change them.
+    if (!isOwner) {
+      setErrorMessage('Only the goal owner can change these details.');
       return;
     }
     const targetGoal = goals.find((g) => g.id === goalId);
     if (!targetGoal) return;
-
-    if (isDemoMode) {
-      setGoals((prev) =>
-        prev.map((g) => (g.id === goalId ? { ...g, ...updates } : g))
-      );
-      return;
-    }
 
     try {
       await updateDoc(doc(db, 'goals', goalId), updates);
@@ -785,15 +933,6 @@ export default function App() {
 
   const handleGiveUpGoal = async (goalId: string) => {
     if (!isOwner) return;
-
-    if (isDemoMode) {
-      setGoals((prev) => prev.filter((g) => g.id !== goalId));
-      if (selectedGoalId === goalId) {
-        setSelectedGoalId(null);
-        setActiveTab('dashboard');
-      }
-      return;
-    }
 
     try {
       await deleteDoc(doc(db, 'goals', goalId));
@@ -832,18 +971,6 @@ export default function App() {
     const updatedMilestones = [...targetGoal.milestones, ...newMilestones];
     const updatedTargetDate = finalTargetDate > targetGoal.targetDate ? finalTargetDate : targetGoal.targetDate;
 
-    if (isDemoMode) {
-      setGoals((prev) =>
-        prev.map((g) =>
-          g.id === goalId
-            ? { ...g, targetDate: updatedTargetDate, milestones: updatedMilestones }
-            : g
-        )
-      );
-      setSuccessMessage(`Added +${count} ${count === 1 ? 'month' : 'months'} to "${targetGoal.title}"! New horizon: ${formatFullMonth(updatedTargetDate)}. Progress is progress!`);
-      return;
-    }
-
     try {
       await updateDoc(doc(db, 'goals', goalId), {
         targetDate: updatedTargetDate,
@@ -857,20 +984,13 @@ export default function App() {
   };
 
   const handleToggleMilestone = async (goalId: string, milestoneId: string) => {
-    if (!isOwner && !isGoalAssignedToMe(goalId)) return;
+    if (!canEditGoal(goalId)) return;
     const targetGoal = goals.find((g) => g.id === goalId);
     if (!targetGoal) return;
 
     const updatedMilestones = targetGoal.milestones.map((m) =>
       m.id === milestoneId ? { ...m, completed: !m.completed } : m
     );
-
-    if (isDemoMode) {
-      setGoals((prev) =>
-        prev.map((g) => (g.id === goalId ? { ...g, milestones: updatedMilestones } : g))
-      );
-      return;
-    }
 
     try {
       await updateDoc(doc(db, 'goals', goalId), {
@@ -883,20 +1003,13 @@ export default function App() {
   };
 
   const handleUpdateMilestoneTitle = async (goalId: string, milestoneId: string, title: string) => {
-    if (!isOwner && !isGoalAssignedToMe(goalId)) return;
+    if (!canEditGoal(goalId)) return;
     const targetGoal = goals.find((g) => g.id === goalId);
     if (!targetGoal) return;
 
     const updatedMilestones = targetGoal.milestones.map((m) =>
       m.id === milestoneId ? { ...m, title } : m
     );
-
-    if (isDemoMode) {
-      setGoals((prev) =>
-        prev.map((g) => (g.id === goalId ? { ...g, milestones: updatedMilestones } : g))
-      );
-      return;
-    }
 
     try {
       await updateDoc(doc(db, 'goals', goalId), {
@@ -909,9 +1022,7 @@ export default function App() {
   };
 
   const handleAddSubcategory = async (goalId: string, name: string, date?: string): Promise<string | null> => {
-    if (!isOwner && !isGoalAssignedToMe(goalId)) {
-      await handleAssignGoalToMe(goalId);
-    }
+    if (!canEditGoal(goalId)) return null;
     const targetGoal = goals.find((g) => g.id === goalId);
     if (!targetGoal) return null;
 
@@ -922,17 +1033,6 @@ export default function App() {
       date: date || todayDate,
       editorRole: isOwner ? null : (professionalRole || null),
     };
-
-    if (isDemoMode) {
-      setGoals((prev) =>
-        prev.map((g) =>
-          g.id === goalId
-            ? { ...g, subcategories: [...(g.subcategories || []), newSub] }
-            : g
-        )
-      );
-      return newSub.id;
-    }
 
     try {
       await updateDoc(doc(db, 'goals', goalId), {
@@ -947,20 +1047,13 @@ export default function App() {
   };
 
   const handleRenameSubcategory = async (goalId: string, subcategoryId: string, name: string) => {
-    if (!isOwner && !isGoalAssignedToMe(goalId)) return;
+    if (!canEditGoal(goalId)) return;
     const targetGoal = goals.find((g) => g.id === goalId);
     if (!targetGoal) return;
 
     const updatedSubcategories = (targetGoal.subcategories || []).map((s) =>
       s.id === subcategoryId ? { ...s, name } : s
     );
-
-    if (isDemoMode) {
-      setGoals((prev) =>
-        prev.map((g) => (g.id === goalId ? { ...g, subcategories: updatedSubcategories } : g))
-      );
-      return;
-    }
 
     try {
       await updateDoc(doc(db, 'goals', goalId), {
@@ -973,7 +1066,7 @@ export default function App() {
   };
 
   const handleDeleteSubcategory = async (goalId: string, subcategoryId: string) => {
-    if (!isOwner && !isGoalAssignedToMe(goalId)) return;
+    if (!canEditGoal(goalId)) return;
 
     const targetGoal = goals.find((g) => g.id === goalId);
     if (!targetGoal) return;
@@ -982,17 +1075,6 @@ export default function App() {
       (s) => s.id !== subcategoryId
     );
     const updatedTasks = (targetGoal.tasks || []).filter((t) => t.subcategoryId !== subcategoryId);
-
-    if (isDemoMode) {
-      setGoals((prev) =>
-        prev.map((g) =>
-          g.id === goalId
-            ? { ...g, subcategories: updatedSubcategories, tasks: updatedTasks }
-            : g
-        )
-      );
-      return;
-    }
 
     try {
       await updateDoc(doc(db, 'goals', goalId), {
@@ -1006,20 +1088,13 @@ export default function App() {
   };
 
   const handleSetSubcategoryRole = async (goalId: string, subcategoryId: string, editorRole: string) => {
-    if (!isOwner && !isGoalAssignedToMe(goalId)) return;
+    if (!canEditGoal(goalId)) return;
     const targetGoal = goals.find((g) => g.id === goalId);
     if (!targetGoal) return;
 
     const updatedSubcategories = (targetGoal.subcategories || []).map((s) =>
       s.id === subcategoryId ? { ...s, editorRole: editorRole || null } : s
     );
-
-    if (isDemoMode) {
-      setGoals((prev) =>
-        prev.map((g) => (g.id === goalId ? { ...g, subcategories: updatedSubcategories } : g))
-      );
-      return;
-    }
 
     try {
       await updateDoc(doc(db, 'goals', goalId), {
@@ -1041,11 +1116,7 @@ export default function App() {
     const targetGoal = goals.find((g) => g.id === goalId);
     if (!targetGoal) return;
 
-    if (!isOwner) {
-      if (!isGoalAssignedToMe(goalId)) {
-        await handleAssignGoalToMe(goalId);
-      }
-    }
+    if (!canEditGoal(goalId)) return;
 
     const newTask: TaskItem = {
       id: `t-${Date.now()}`,
@@ -1055,15 +1126,6 @@ export default function App() {
       date: date || todayDate,
       subcategoryId: subcategoryId || '',
     };
-
-    if (isDemoMode) {
-      setGoals((prev) =>
-        prev.map((g) =>
-          g.id === goalId ? { ...g, tasks: [newTask, ...g.tasks] } : g
-        )
-      );
-      return;
-    }
 
     try {
       await updateDoc(doc(db, 'goals', goalId), {
@@ -1088,13 +1150,6 @@ export default function App() {
       t.id === taskId ? { ...t, completed: !t.completed } : t
     );
 
-    if (isDemoMode) {
-      setGoals((prev) =>
-        prev.map((g) => (g.id === goalId ? { ...g, tasks: updatedTasks } : g))
-      );
-      return;
-    }
-
     try {
       await updateDoc(doc(db, 'goals', goalId), {
         tasks: updatedTasks,
@@ -1115,13 +1170,6 @@ export default function App() {
     }
 
     const updatedTasks = targetGoal.tasks.filter((t) => t.id !== taskId);
-
-    if (isDemoMode) {
-      setGoals((prev) =>
-        prev.map((g) => (g.id === goalId ? { ...g, tasks: updatedTasks } : g))
-      );
-      return;
-    }
 
     try {
       await updateDoc(doc(db, 'goals', goalId), {
@@ -1149,13 +1197,6 @@ export default function App() {
     const updatedTasks = targetGoal.tasks.map((t) =>
       t.id === taskId ? { ...t, ...updates } : t
     );
-
-    if (isDemoMode) {
-      setGoals((prev) =>
-        prev.map((g) => (g.id === goalId ? { ...g, tasks: updatedTasks } : g))
-      );
-      return;
-    }
 
     try {
       await updateDoc(doc(db, 'goals', goalId), {
@@ -1196,9 +1237,19 @@ export default function App() {
         return;
       }
 
-      const reqRef = doc(db, 'accessRequests', requestDocId(user.uid, toUid));
-      const existing = await getDoc(reqRef);
-      if (existing.exists()) {
+      // Ask with a query rather than reading the request document directly.
+      // Reading a document that does not exist yet is refused by the security
+      // rules, so a first-time request used to fail as "permission denied".
+      const existingSnap = await getDocs(
+        query(
+          collection(db, 'accessRequests'),
+          where('fromUid', '==', user.uid),
+          where('toUid', '==', toUid)
+        )
+      );
+      const existing = existingSnap.docs[0];
+
+      if (existing) {
         const status = existing.data().status;
         if (status === 'pending') {
           setConnectNotice({ type: 'error', text: 'A request is already waiting for this client.' });
@@ -1208,9 +1259,21 @@ export default function App() {
           setConnectNotice({ type: 'error', text: 'You already have access to this client.' });
           return;
         }
+        // Denied or removed before: re-open the existing request. Overwriting it
+        // would count as changing more than the status, which the rules refuse.
+        await updateDoc(existing.ref, {
+          status: 'pending',
+          role,
+          createdAt: new Date().toISOString(),
+        });
+        setConnectNotice({ type: 'ok', text: 'Request sent again. The client must approve it.' });
+        // Asking again clears an earlier removal, so the client comes back into
+        // the list once they approve.
+        await clearWithdrawnClient(toUid);
+        return;
       }
 
-      await setDoc(reqRef, {
+      await setDoc(doc(db, 'accessRequests', requestDocId(user.uid, toUid)), {
         fromUid: user.uid,
         fromName: user.displayName || user.email || 'Professional',
         fromEmail: user.email || '',
@@ -1222,6 +1285,7 @@ export default function App() {
         createdAt: new Date().toISOString(),
       });
       setConnectNotice({ type: 'ok', text: 'Request sent. The client must approve it.' });
+      await clearWithdrawnClient(toUid);
     } catch (err: unknown) {
       console.error('Request access error:', err);
       const msg = err instanceof Error ? err.message : 'Could not send request. Please try again.';
@@ -1234,24 +1298,54 @@ export default function App() {
     }
   };
 
-  const handleApproveRequest = async (request: AccessRequest, assignedGoalIds: string[]) => {
+  /**
+   * Pushes the owner's collaborator permissions onto the goal documents, which
+   * is what the Firestore rules read. Goals not passed in are left untouched.
+   */
+  const syncGoalAccess = async (
+    collaborations: Collaborator[],
+    goalIds?: string[]
+  ): Promise<void> => {
+    const targets = goalIds ? goals.filter((g) => goalIds.includes(g.id)) : goals;
+
+    for (const goal of targets) {
+      const { viewerUids, editorUids } = buildGoalAccessArrays(collaborations, goal.id);
+      if (
+        (goal.viewerUids || []).join(',') === viewerUids.join(',') &&
+        (goal.editorUids || []).join(',') === editorUids.join(',')
+      ) {
+        continue;
+      }
+      try {
+        await updateDoc(doc(db, 'goals', goal.id), { viewerUids, editorUids });
+      } catch (err) {
+        console.error('Sync goal access error:', err);
+        setErrorMessage('Saved the assignment but could not update goal access.');
+      }
+    }
+  };
+
+  const handleApproveRequest = async (
+    request: AccessRequest,
+    goalAccess: Record<string, GoalAccessLevel>
+  ) => {
     if (!user) return;
     try {
       const userRef = doc(db, 'users', user.uid);
       const fresh = await getDoc(userRef);
       const data = fresh.data() || {};
-      const collaborators = data.collaborators || [];
-      const collaboratorUids = data.collaboratorUids || [];
+      const collaborators: Collaborator[] = data.collaborators || [];
+      const collaboratorUids: string[] = data.collaboratorUids || [];
 
-      const updatedCollaborators = [
-        ...collaborators.filter((c: { uid: string }) => c.uid !== request.fromUid),
+      const updatedCollaborators: Collaborator[] = [
+        ...collaborators.filter((c) => c.uid !== request.fromUid),
         {
           uid: request.fromUid,
           role: request.role,
           addedAt: new Date().toISOString(),
           name: request.fromName || '',
           email: request.fromEmail || '',
-          assignedGoalIds: assignedGoalIds,
+          goalAccess,
         },
       ];
 
@@ -1263,27 +1357,41 @@ export default function App() {
       });
 
       await updateDoc(doc(db, 'accessRequests', request.id), { status: 'approved' });
+
+      await syncGoalAccess(updatedCollaborators);
     } catch (err) {
       console.error('Approve request error:', err);
       setErrorMessage('Failed to approve request.');
     }
   };
 
-  const handleUpdateAssignedGoals = async (professionalUid: string, assignedGoalIds: string[]) => {
+  const handleUpdateAssignedGoals = async (
+    professionalUid: string,
+    goalAccess: Record<string, GoalAccessLevel>
+  ) => {
     if (!user) return;
+
+    const applyAccess = (collaborators: Collaborator[]): Collaborator[] =>
+      collaborators.map((c) => {
+        if (c.uid !== professionalUid) return c;
+        const next: Collaborator = { ...c, goalAccess };
+        delete next.assignedGoalIds;
+        return next;
+      });
+
     try {
       const userRef = doc(db, 'users', user.uid);
       const fresh = await getDoc(userRef);
       const data = fresh.data() || {};
       const collaborators: Collaborator[] = data.collaborators || [];
 
-      const updated = collaborators.map((c) =>
-        c.uid === professionalUid ? { ...c, assignedGoalIds } : c
-      );
+      const updated = applyAccess(collaborators);
 
       await updateDoc(userRef, {
         collaborators: updated,
       });
+
+      await syncGoalAccess(updated);
     } catch (err) {
       console.error('Update assigned goals error:', err);
       setErrorMessage('Failed to update assigned goals.');
@@ -1292,31 +1400,37 @@ export default function App() {
 
   const handleSaveGoalCollaboratorAssignments = async (
     goalId: string,
-    assignedCollaboratorUids: string[]
+    assignments: Record<string, GoalAccessLevel>
   ) => {
     if (!user || !isOwner) return;
+
+    const applyAssignments = (collaborators: Collaborator[]): Collaborator[] =>
+      collaborators.map((c) => {
+        const level = assignments[c.uid];
+        const goalAccess = { ...(c.goalAccess || {}) };
+        if (level === 'view' || level === 'edit') {
+          goalAccess[goalId] = level;
+        } else {
+          delete goalAccess[goalId];
+        }
+        const next: Collaborator = { ...c, goalAccess };
+        delete next.assignedGoalIds;
+        return next;
+      });
+
     try {
       const userRef = doc(db, 'users', user.uid);
       const fresh = await getDoc(userRef);
       const data = fresh.data() || {};
       const collaborators: Collaborator[] = data.collaborators || [];
 
-      const updated = collaborators.map((c) => {
-        const shouldBeAssigned = assignedCollaboratorUids.includes(c.uid);
-        const currentIds = c.assignedGoalIds !== undefined ? c.assignedGoalIds : goals.map((g) => g.id);
-        const nextIds = shouldBeAssigned
-          ? Array.from(new Set([...currentIds, goalId]))
-          : currentIds.filter((id) => id !== goalId);
-
-        return {
-          ...c,
-          assignedGoalIds: nextIds,
-        };
-      });
+      const updated = applyAssignments(collaborators);
 
       await updateDoc(userRef, {
         collaborators: updated,
       });
+
+      await syncGoalAccess(updated, [goalId]);
     } catch (err) {
       console.error('Update goal collaborator assignments error:', err);
       setErrorMessage('Failed to update assigned professionals for this goal.');
@@ -1356,24 +1470,17 @@ export default function App() {
           : null
       );
 
-      if (isDemoMode) {
-        return;
-      }
-
       await updateDoc(userRef, {
         collaborators: nextCollaborators,
         collaboratorUids: nextCollaboratorUids,
       });
 
-      // Update access request status to removed
-      const reqId = requestDocId(professionalUid, user.uid);
-      const reqRef = doc(db, 'accessRequests', reqId);
-      const reqSnap = await getDoc(reqRef);
-      if (reqSnap.exists()) {
-        await updateDoc(reqRef, { status: 'removed' });
-      }
+      // Drop the removed professional from every goal's access lists.
+      await syncGoalAccess(nextCollaborators);
 
-      // Also clean up any other matching request docs
+      // Mark any matching request docs as removed. Done by query, not by reading
+      // one document, because a read of a document that does not exist is refused
+      // by the rules and used to surface as a failure.
       const q = query(
         collection(db, 'accessRequests'),
         where('fromUid', '==', professionalUid),
@@ -1395,6 +1502,55 @@ export default function App() {
     setActiveTab('dashboard');
   };
 
+  /** Undoes an earlier removal when the professional asks for that client again. */
+  const clearWithdrawnClient = async (clientId: string) => {
+    if (!user || !clientId || !withdrawnClientIds.includes(clientId)) return;
+    const nextWithdrawn = withdrawnClientIds.filter((id) => id !== clientId);
+    setWithdrawnClientIds(nextWithdrawn);
+    await updateDoc(doc(db, 'users', user.uid), { withdrawnClients: nextWithdrawn }).catch(() => {});
+  };
+
+  /**
+   * Removes a client from this professional's list.
+   *
+   * Access is granted by the client's own account, so the professional cannot
+   * delete it directly. Instead the client id is recorded on the professional's
+   * own profile (which hides the client here, on every device) and the shared
+   * request is marked "removed". The client's account clears the professional's
+   * access the next time it signs in.
+   */
+  const handleRemoveClient = async (clientId: string, clientName: string) => {
+    if (!user || !clientId) return;
+    try {
+      const nextWithdrawn = Array.from(new Set([...withdrawnClientIds, clientId]));
+      setWithdrawnClientIds(nextWithdrawn);
+      if (workspaceUid === clientId) {
+        setWorkspaceUid(user.uid);
+        setSelectedGoalId(null);
+        setActiveTab('dashboard');
+      }
+
+      await updateDoc(doc(db, 'users', user.uid), { withdrawnClients: nextWithdrawn });
+
+      const q = query(
+        collection(db, 'accessRequests'),
+        where('fromUid', '==', user.uid),
+        where('toUid', '==', clientId)
+      );
+      const snap = await getDocs(q);
+      for (const d of snap.docs) {
+        await updateDoc(d.ref, { status: 'removed' }).catch(() => {});
+      }
+
+      setSuccessMessage(
+        `${clientName} was removed from your client list. Their account drops your access the next time they sign in.`
+      );
+    } catch (err) {
+      console.error('Remove client error:', err);
+      setErrorMessage('Could not remove that client. Please try again.');
+    }
+  };
+
   // LOADING & LOGIN GATES
   if (authLoading) {
     return (
@@ -1413,7 +1569,6 @@ export default function App() {
         onLogin={handleGoogleSignIn}
         loading={authLoading}
         error={authError}
-        onEnterDemoMode={handleEnterDemoMode}
       />
     );
   }
@@ -1422,52 +1577,47 @@ export default function App() {
     <div
       className={`min-h-screen flex flex-col transition-colors duration-300 ${
         !isOwner
-          ? 'bg-[#fffaf3] selection:bg-amber-200 selection:text-amber-950'
+          ? 'bg-[#f4f8ff] selection:bg-blue-200 selection:text-blue-950'
           : 'bg-slate-50/90 selection:bg-emerald-100 selection:text-emerald-900'
       } text-slate-900 relative overflow-x-hidden`}
     >
-      {/* Non-intrusive ambient background layer with palette shift for Trainer Mode (Amber/Clay theme) */}
+      {/* Ambient background wash, cool blue while a professional works in a client's workspace */}
       <div className="fixed inset-0 pointer-events-none -z-10 overflow-hidden">
         {/* Delicate geometric micro-dot grid */}
         <div className="absolute inset-0 bg-[radial-gradient(#cbd5e1_1px,transparent_1px)] [background-size:24px_24px] opacity-40" />
         {/* Soft, low-contrast ambient color washes */}
         <div
           className={`absolute -top-32 right-1/4 w-[500px] h-[500px] rounded-full blur-3xl transition-all duration-700 ${
-            !isOwner ? 'bg-amber-200/40' : 'bg-emerald-100/35'
+            !isOwner ? 'bg-blue-200/40' : 'bg-emerald-100/35'
           }`}
         />
         <div
           className={`absolute top-1/2 -left-32 w-[450px] h-[450px] rounded-full blur-3xl transition-all duration-700 ${
-            !isOwner ? 'bg-orange-200/30' : 'bg-teal-100/25'
+            !isOwner ? 'bg-sky-200/30' : 'bg-teal-100/25'
           }`}
         />
         <div
           className={`absolute bottom-10 right-10 w-[400px] h-[400px] rounded-full blur-3xl transition-all duration-700 ${
-            !isOwner ? 'bg-amber-100/40' : 'bg-slate-200/40'
+            !isOwner ? 'bg-blue-100/40' : 'bg-slate-200/40'
           }`}
         />
       </div>
 
-      {/* DISTINCT TRAINER MODE COMMAND BAR AT THE VERY TOP - REFINED SOFT WARM AMBER / CLAY THEME */}
+      {/* DISTINCT TRAINER MODE COMMAND BAR AT THE VERY TOP - REFINED SOFT WARM blue / CLAY THEME */}
       {!isOwner && workspaceProfile && (
-        <div className="bg-amber-50/95 text-amber-950 border-b border-amber-200/90 px-3 sm:px-6 py-2 flex items-center justify-between gap-3 shadow-xs sticky top-0 z-40 backdrop-blur-md">
-          <div className="flex items-center gap-2.5 min-w-0">
-            <span className="w-7 h-7 rounded-lg bg-amber-100 border border-amber-300 flex items-center justify-center text-amber-800 shrink-0 shadow-2xs">
-              <Users className="w-4 h-4" />
+        <div className="bg-blue-50/95 text-blue-950 border-b border-blue-200/90 px-2.5 sm:px-6 py-1.5 sm:py-2 min-h-[40px] sm:min-h-[44px] flex items-center justify-between gap-2 sm:gap-3 shadow-xs sticky top-0 z-40 backdrop-blur-md">
+          <div className="min-w-0 flex items-center gap-2 text-xs sm:text-sm font-medium tracking-tight truncate">
+            <span className="bg-blue-200/80 text-blue-950 border border-blue-300 px-2 py-0.5 rounded text-[10px] uppercase font-bold tracking-wider shadow-2xs shrink-0">
+              Trainer Mode
             </span>
-            <div className="min-w-0">
-              <div className="text-xs sm:text-sm font-medium tracking-tight truncate flex items-center gap-2">
-                <span className="bg-amber-200/80 text-amber-950 border border-amber-300 px-2 py-0.5 rounded text-[10px] uppercase font-bold tracking-wider shadow-2xs">
-                  Trainer Mode
+            <span className="text-blue-950 font-semibold truncate">
+              Managing <span className="font-bold underline decoration-blue-400">{workspaceProfile.displayName || 'Client'}</span>'s Workspace
+              {workspaceProfile.email && (
+                <span className="hidden sm:inline text-[11px] font-medium text-blue-900/70 ml-1.5">
+                  {workspaceProfile.email}
                 </span>
-                <span className="text-amber-950 font-semibold">
-                  Managing <span className="font-bold underline decoration-amber-400">{workspaceProfile.displayName || 'Client'}</span>'s Workspace
-                </span>
-                <span className="text-amber-700 font-normal text-xs hidden md:inline">
-                  • Role: {professionalRole || 'Trainer'}
-                </span>
-              </div>
-            </div>
+              )}
+            </span>
           </div>
 
           {/* SINGLE PRIMARY EXIT BUTTON: KEPT IN CLEAR GREEN INDICATING RETURN TO MAIN WORKSPACE */}
@@ -1475,29 +1625,14 @@ export default function App() {
             <button
               type="button"
               onClick={() => handleSwitchWorkspace(user.uid)}
-              className="bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white font-bold text-xs px-3.5 py-1.5 rounded-xl border border-emerald-500 shadow-2xs transition flex items-center gap-1.5 cursor-pointer active:scale-95"
+              className="bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white font-bold text-[11px] sm:text-xs px-2.5 sm:px-3.5 py-1.5 rounded-xl border border-emerald-500 shadow-2xs transition flex items-center gap-1.5 cursor-pointer active:scale-95"
               title="Return to your personal dashboard"
             >
               <ArrowRight className="w-3.5 h-3.5 rotate-180 text-white" />
-              <span>Exit to My Workspace</span>
+              <span className="hidden sm:inline">Exit to My Workspace</span>
+              <span className="sm:hidden">Exit</span>
             </button>
           </div>
-        </div>
-      )}
-
-      {isDemoMode && (
-        <div className="bg-emerald-700 text-white text-xs px-4 py-2 flex flex-col sm:flex-row items-center justify-between gap-2 shadow-xs">
-          <div className="flex items-center gap-2">
-            <span className="bg-white/20 text-white text-[10px] font-bold uppercase px-2 py-0.5 rounded-full">Demo Mode</span>
-            <span>Exploring Goal Path with sample data. Whitelist your domain in Firebase Console to use Google Sign-in.</span>
-          </div>
-          <button
-            type="button"
-            onClick={handleSignOut}
-            className="text-[11px] font-semibold bg-white text-emerald-900 hover:bg-emerald-50 px-2.5 py-1 rounded-lg transition cursor-pointer flex-shrink-0"
-          >
-            Sign in with Google →
-          </button>
         </div>
       )}
 
@@ -1505,16 +1640,16 @@ export default function App() {
       {successMessage && (
         <div className={`${
           !isOwner
-            ? 'bg-amber-50/95 border-b border-amber-200/90 text-amber-950'
+            ? 'bg-blue-50/95 border-b border-blue-200/90 text-blue-950'
             : 'bg-emerald-50/95 border-b border-emerald-200/90 text-emerald-950'
         } backdrop-blur-md px-4 py-2.5 text-xs font-semibold flex items-center justify-between shadow-2xs animate-in fade-in duration-150`}>
           <div className="flex items-center gap-2">
-            <Sparkles className={`w-4 h-4 ${!isOwner ? 'text-amber-600' : 'text-emerald-600'} flex-shrink-0`} />
+            <Sparkles className={`w-4 h-4 ${!isOwner ? 'text-blue-600' : 'text-emerald-600'} flex-shrink-0`} />
             <span>{successMessage}</span>
           </div>
           <button
             onClick={() => setSuccessMessage(null)}
-            className={`p-1 ${!isOwner ? 'text-amber-500 hover:text-amber-800' : 'text-emerald-500 hover:text-emerald-800'} ml-4 cursor-pointer`}
+            className={`p-1 ${!isOwner ? 'text-blue-500 hover:text-blue-800' : 'text-emerald-500 hover:text-emerald-800'} ml-4 cursor-pointer`}
             title="Dismiss"
           >
             <X className="w-3.5 h-3.5" />
@@ -1539,14 +1674,14 @@ export default function App() {
       {/* TOP NAVIGATION BAR */}
       <header
         className={`sticky ${
-          !isOwner && workspaceProfile ? 'top-[45px]' : 'top-0'
+          !isOwner && workspaceProfile ? 'top-[40px] sm:top-[45px]' : 'top-0'
         } z-30 shadow-xs transition-colors duration-200 ${
           !isOwner
-            ? 'bg-white/95 border-b border-amber-200/90 backdrop-blur-md'
+            ? 'bg-white/95 border-b border-blue-200/90 backdrop-blur-md'
             : 'bg-white border-b border-slate-200'
         }`}
       >
-        <div className="max-w-6xl mx-auto px-3 sm:px-6 h-14 sm:h-16 flex items-center justify-between gap-3">
+        <div className="max-w-6xl mx-auto px-2.5 sm:px-6 h-12 sm:h-16 flex items-center justify-between gap-2 sm:gap-3">
           {/* Logo / Brand with GoalPath vector integrated */}
           <div
             onClick={() => {
@@ -1559,42 +1694,41 @@ export default function App() {
           </div>
 
           {/* Right Side Controls: Client Access + New Goal + Account Avatar in ONE Line */}
-          <div className="flex items-center gap-2 sm:gap-3 flex-shrink-0">
+          <div className="flex items-center gap-1.5 sm:gap-3 min-w-0">
             {/* Minimal Client Workspace Indicator - Single Exit is on top command bar, so no redundant exit here */}
             {!isOwner && workspaceProfile ? (
-              <div className="flex items-center gap-1.5 bg-amber-50 border border-amber-200/90 px-2.5 py-1 rounded-xl text-xs shadow-2xs">
-                <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse shrink-0" />
+              <div className="flex items-center gap-1 sm:gap-1.5 bg-blue-50 border border-blue-200/90 px-2 py-0.5 sm:px-2.5 sm:py-1 rounded-xl text-xs shadow-2xs">
+                <span className="w-2 h-2 rounded-full bg-blue-500 animate-pulse shrink-0" />
                 <span
-                  className="font-bold text-amber-950 text-[11px] sm:text-xs truncate max-w-[120px] sm:max-w-[180px]"
+                  className="font-bold text-blue-950 text-[11px] sm:text-xs truncate max-w-[96px] sm:max-w-[180px]"
                   title={workspaceProfile.displayName || workspaceProfile.email || 'Client'}
                 >
                   {workspaceProfile.displayName || workspaceProfile.email || 'Client'}
                 </span>
-                <span className="text-[10px] font-bold text-amber-800 bg-amber-100 px-1.5 py-0.5 rounded-md uppercase hidden xs:inline">
-                  {professionalRole || 'Trainer'}
-                </span>
               </div>
-            ) : clientList.length > 0 ? (
-              <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl text-xs font-semibold">
+            ) : visibleClients.length > 0 ? (
+              <div className="flex items-center gap-1 bg-slate-100 p-0.5 sm:p-1 rounded-xl text-xs font-semibold min-w-0 shrink">
                 <span className="text-[10px] text-slate-400 uppercase font-bold pl-1 hidden md:inline">
                   Workspace:
                 </span>
-                <select
+                <AppSelect
                   value={workspaceUid || user.uid}
-                  onChange={(e) => handleSwitchWorkspace(e.target.value)}
-                  className="bg-white border border-slate-200 rounded-lg px-2 py-1 text-slate-800 text-[11px] sm:text-xs font-bold focus:outline-none focus:ring-1 focus:ring-emerald-500 cursor-pointer max-w-[120px] sm:max-w-[180px] truncate"
-                >
-                  <option value={user.uid}>My Workspace</option>
-                  {clientList.map((c) => {
-                    const collab = (c.collaborators || []).find((x) => x.uid === user.uid);
-                    const roleStr = collab?.role ? ` (${collab.role})` : '';
-                    return (
-                      <option key={c.id} value={c.id || ''}>
-                        Client: {c.displayName || c.email || 'Client'}{roleStr}
-                      </option>
-                    );
-                  })}
-                </select>
+                  onChange={handleSwitchWorkspace}
+                  ariaLabel="Switch workspace"
+                  className="bg-white border border-slate-200 rounded-lg px-1.5 py-0.5 sm:px-2 sm:py-1 text-slate-800 text-[10.5px] sm:text-xs font-bold hover:border-slate-300 focus:outline-none focus:ring-1 focus:ring-emerald-500 w-full min-w-0 max-w-[118px] sm:max-w-[180px]"
+                  options={[
+                    { value: user.uid, label: 'My Workspace' },
+                    ...visibleClients.map((c) => {
+                      return {
+                        value: c.id || '',
+                        label: c.displayName || c.email || 'Client',
+                        // Two clients can share a display name, so the email is
+                        // what tells them apart in the list.
+                        hint: c.email || 'Client',
+                      };
+                    }),
+                  ]}
+                />
               </div>
             ) : null}
 
@@ -1603,10 +1737,11 @@ export default function App() {
               <button
                 type="button"
                 onClick={() => setIsModalOpen(true)}
-                className="bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white font-bold text-xs sm:text-sm px-3 sm:px-4 py-1.5 sm:py-2 rounded-xl shadow-2xs transition flex items-center gap-1.5 cursor-pointer"
+                aria-label="New Goal"
+                className="bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white font-bold text-xs sm:text-sm px-2.5 sm:px-4 py-1.5 sm:py-2 rounded-xl shadow-2xs transition flex items-center gap-1.5 cursor-pointer shrink-0"
               >
                 <Plus className="w-3.5 h-3.5 sm:w-4 sm:h-4 stroke-[2.5]" />
-                <span className="hidden xs:inline">New Goal</span>
+                <span className="hidden sm:inline">New Goal</span>
               </button>
             )}
 
@@ -1615,20 +1750,16 @@ export default function App() {
               <button
                 type="button"
                 onClick={() => setIsAccountMenuOpen((prev) => !prev)}
-                className="rounded-full focus:outline-none focus:ring-2 focus:ring-emerald-500/40 cursor-pointer block"
-                title="Account Settings & Profile"
+                className="flex items-center gap-2 rounded-full pl-0.5 pr-1 py-0.5 hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-emerald-500/40 cursor-pointer transition"
+                title={user.email || 'Account Settings & Profile'}
               >
-                {user.photoURL ? (
-                  <img
-                    src={user.photoURL}
-                    alt={user.displayName || 'User'}
-                    className="w-8 h-8 rounded-full border border-slate-200 object-cover shadow-2xs hover:ring-2 hover:ring-emerald-300 transition"
-                  />
-                ) : (
-                  <div className="w-8 h-8 rounded-full bg-emerald-100 text-emerald-800 flex items-center justify-center text-xs font-bold border border-emerald-200 shadow-2xs hover:ring-2 hover:ring-emerald-300 transition">
-                    {user.email ? user.email.charAt(0).toUpperCase() : 'U'}
-                  </div>
-                )}
+                {/* A letter badge rather than the Google photo, which can fail to load */}
+                <span className="w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-emerald-100 text-emerald-800 flex items-center justify-center text-xs font-bold border border-emerald-200 shadow-2xs shrink-0">
+                  {(user.email || user.displayName || 'U').charAt(0).toUpperCase()}
+                </span>
+                <span className="hidden sm:block max-w-[150px] truncate text-xs font-semibold text-slate-600">
+                  {user.email}
+                </span>
               </button>
 
               {/* Account Dropdown Menu */}
@@ -1654,6 +1785,25 @@ export default function App() {
                       type="button"
                       onClick={() => {
                         setIsAccountMenuOpen(false);
+                        if (profile?.persona === 'professional') {
+                          setActiveTab('professional');
+                        } else {
+                          setPersonaPickerOpen(true);
+                        }
+                      }}
+                      className="w-full text-left text-xs font-semibold text-slate-700 hover:bg-slate-50 px-2.5 py-2 rounded-xl transition flex items-center gap-2 cursor-pointer"
+                    >
+                      <Briefcase className="w-3.5 h-3.5 text-slate-500" />
+                      <span>
+                        {profile?.persona === 'professional'
+                          ? 'My professional profile'
+                          : 'Add a professional profile'}
+                      </span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsAccountMenuOpen(false);
                         handleSignOut();
                       }}
                       className="w-full text-left text-xs font-semibold text-rose-600 hover:bg-rose-50 px-2.5 py-2 rounded-xl transition flex items-center gap-2 cursor-pointer"
@@ -1671,16 +1821,16 @@ export default function App() {
 
       {/* VIEW SWITCHER TABS BAR */}
       <div
-        className={`border-b py-2 px-3 sm:px-6 transition-colors duration-200 ${
+        className={`border-b py-1.5 sm:py-2 px-2.5 sm:px-6 transition-colors duration-200 ${
           !isOwner
-            ? 'bg-amber-50/60 border-amber-200/80'
+            ? 'bg-blue-50/60 border-blue-200/80'
             : 'bg-slate-50 border-slate-200/90'
         }`}
       >
-        <div className="max-w-6xl mx-auto flex items-center justify-between gap-3 flex-wrap">
+        <div className="max-w-6xl mx-auto flex items-center justify-between gap-2 sm:gap-3 flex-wrap">
           <nav
-            className={`flex items-center p-1 rounded-xl gap-1 text-xs font-semibold overflow-x-auto scrollbar-none ${
-              !isOwner ? 'bg-amber-100/70' : 'bg-slate-200/70'
+            className={`flex items-center p-0.5 sm:p-1 rounded-xl gap-0.5 sm:gap-1 text-[11px] sm:text-xs font-semibold overflow-x-auto max-w-full [scrollbar-width:none] [&::-webkit-scrollbar]:hidden ${
+              !isOwner ? 'bg-blue-100/70' : 'bg-slate-200/70'
             }`}
           >
             <button
@@ -1689,38 +1839,40 @@ export default function App() {
                 setSelectedGoalId(null);
                 setActiveTab('dashboard');
               }}
-              className={`px-3 py-1.5 rounded-lg transition whitespace-nowrap cursor-pointer ${
+              className={`px-2 py-1 sm:px-3 sm:py-1.5 rounded-lg transition whitespace-nowrap cursor-pointer ${
                 activeTab === 'dashboard'
                   ? !isOwner
-                    ? 'bg-amber-700 text-white shadow-xs font-bold'
+                    ? 'bg-blue-700 text-white shadow-xs font-bold'
                     : 'bg-white text-slate-900 shadow-xs font-bold'
                   : !isOwner
-                  ? 'text-amber-950/80 hover:text-amber-950'
+                  ? 'text-blue-950/80 hover:text-blue-950'
                   : 'text-slate-600 hover:text-slate-900'
               }`}
             >
-              All Goals ({goals.length})
+              <span className="hidden sm:inline">All Goals ({goals.length})</span>
+              <span className="sm:hidden">Goals ({goals.length})</span>
             </button>
 
             {/* TODAY'S FOCUS WITH OPTICALLY CENTERED CIRCLE */}
             <button
               type="button"
               onClick={() => setActiveTab('today')}
-              className={`px-3 py-1.5 rounded-lg transition flex items-center justify-center gap-1.5 whitespace-nowrap cursor-pointer ${
+              className={`px-2 py-1 sm:px-3 sm:py-1.5 rounded-lg transition flex items-center justify-center gap-1 sm:gap-1.5 whitespace-nowrap cursor-pointer ${
                 activeTab === 'today'
                   ? !isOwner
-                    ? 'bg-amber-700 text-white shadow-xs font-bold'
+                    ? 'bg-blue-700 text-white shadow-xs font-bold'
                     : 'bg-white text-slate-900 shadow-xs font-bold'
                   : !isOwner
-                  ? 'text-amber-950/80 hover:text-amber-950'
+                  ? 'text-blue-950/80 hover:text-blue-950'
                   : 'text-slate-600 hover:text-slate-900'
               }`}
             >
-              <span>Today's Focus</span>
+              <span className="hidden sm:inline">Today's Focus</span>
+              <span className="sm:hidden">Today</span>
               <span
-                className={`inline-flex items-center justify-center min-w-[20px] h-[20px] px-1 text-[11px] font-bold rounded-full leading-none shadow-2xs shrink-0 ${
+                className={`inline-flex items-center justify-center min-w-[17px] h-[17px] sm:min-w-[20px] sm:h-[20px] px-1 text-[10px] sm:text-[11px] font-bold rounded-full leading-none shadow-2xs shrink-0 ${
                   !isOwner
-                    ? 'bg-amber-200 text-amber-950'
+                    ? 'bg-blue-200 text-blue-950'
                     : 'bg-emerald-100 text-emerald-800'
                 }`}
               >
@@ -1731,43 +1883,56 @@ export default function App() {
             <button
               type="button"
               onClick={() => setActiveTab('connect')}
-              className={`px-3 py-1.5 rounded-lg transition flex items-center justify-center gap-1.5 whitespace-nowrap cursor-pointer ${
+              className={`px-2 py-1 sm:px-3 sm:py-1.5 rounded-lg transition flex items-center justify-center gap-1 sm:gap-1.5 whitespace-nowrap cursor-pointer ${
                 activeTab === 'connect'
                   ? !isOwner
-                    ? 'bg-amber-700 text-white shadow-xs font-bold'
+                    ? 'bg-blue-700 text-white shadow-xs font-bold'
                     : 'bg-white text-slate-900 shadow-xs font-bold'
                   : !isOwner
-                  ? 'text-amber-950/80 hover:text-amber-950'
+                  ? 'text-blue-950/80 hover:text-blue-950'
                   : 'text-slate-600 hover:text-slate-900'
               }`}
             >
-              <span>Collaborate</span>
+              <span className="hidden sm:inline">Collaborate</span>
+              <span className="sm:hidden">Connect</span>
               {pendingIncoming.length > 0 && (
-                <span className="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 text-[10px] font-bold rounded-full bg-amber-100 text-amber-800 leading-none shadow-2xs shrink-0">
+                <span className="inline-flex items-center justify-center min-w-[17px] h-[17px] sm:min-w-[18px] sm:h-[18px] px-1 text-[10px] font-bold rounded-full bg-blue-100 text-blue-800 leading-none shadow-2xs shrink-0">
                   {pendingIncoming.length}
                 </span>
               )}
             </button>
+
+            {/* Only professionals see their own profile tab, and only in their own workspace */}
+            {isOwner && profile?.persona === 'professional' && (
+              <button
+                type="button"
+                onClick={() => setActiveTab('professional')}
+                className={`px-2 py-1 sm:px-3 sm:py-1.5 rounded-lg transition flex items-center justify-center gap-1 sm:gap-1.5 whitespace-nowrap cursor-pointer ${
+                  activeTab === 'professional'
+                    ? 'bg-white text-slate-900 shadow-xs font-bold'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                <Briefcase className="w-3.5 h-3.5 hidden sm:block" />
+                <span className="hidden sm:inline">Professional</span>
+                <span className="sm:hidden">Profile</span>
+              </button>
+            )}
           </nav>
 
-          {!isOwner && workspaceProfile && (
-            <div className="text-[11px] text-amber-950 font-semibold hidden sm:flex items-center gap-1.5 bg-amber-100/80 border border-amber-300/80 px-2.5 py-1 rounded-lg">
-              <span className="w-1.5 h-1.5 rounded-full bg-amber-600 animate-pulse"></span>
-              <span>
-                Client Workspace: <strong>{workspaceProfile.displayName || 'Client'}</strong> ({professionalRole || 'Trainer'})
-              </span>
-            </div>
-          )}
         </div>
       </div>
 
       {/* MAIN CONTAINER */}
-      <main className="max-w-6xl mx-auto px-4 sm:px-6 py-8 flex-1 w-full relative z-10">
-        {dataLoading && activeTab !== 'connect' ? (
+      <main
+        ref={contentRef}
+        className="max-w-6xl mx-auto px-3 sm:px-6 py-5 sm:py-8 flex-1 w-full relative z-10"
+      >
+        {dataLoading && activeTab !== 'connect' && activeTab !== 'professional' ? (
           <div className="text-center py-20">
             <div
               className={`w-8 h-8 border-2 ${
-                !isOwner ? 'border-amber-600' : 'border-emerald-600'
+                !isOwner ? 'border-blue-600' : 'border-emerald-600'
               } border-t-transparent rounded-full animate-spin mx-auto mb-3`}
             ></div>
             <span className="text-xs font-semibold text-slate-400">Loading goals from cloud...</span>
@@ -1779,7 +1944,7 @@ export default function App() {
               <div className="space-y-6">
                 {/* Dashboard Metrics Hero Banner - Frosted Glass Window */}
                 <div
-                  className={`relative overflow-hidden rounded-3xl p-6 sm:p-8 shadow-2xl text-white transition-all duration-300 border border-purple-200/50 ring-1 ring-purple-100/40 bg-slate-950/40 backdrop-blur-2xl group ${
+                  className={`relative overflow-hidden rounded-3xl p-4 sm:p-8 shadow-2xl text-white transition-all duration-300 border border-purple-200/50 ring-1 ring-purple-100/40 bg-slate-950/40 backdrop-blur-2xl group ${
                     !isOwner
                       ? 'shadow-purple-950/20'
                       : 'shadow-slate-950/20'
@@ -1804,9 +1969,6 @@ export default function App() {
                           <div className="flex items-center gap-2 mb-2 flex-wrap">
                             <span className="text-[11px] font-bold uppercase tracking-wider text-purple-200 bg-purple-900/80 border border-purple-400/50 px-2.5 py-0.5 rounded-md shadow-2xs">
                               Trainer Command Console
-                            </span>
-                            <span className="text-xs text-purple-200 font-medium">
-                              Active Role: {professionalRole || 'Trainer'}
                             </span>
                           </div>
                           <h1 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight drop-shadow-xs">
@@ -1848,7 +2010,7 @@ export default function App() {
                     </div>
 
                     {/* Highly Readable & Clickable Glassy Stat Cards */}
-                    <div className="grid grid-cols-3 gap-2.5 sm:gap-3.5 flex-shrink-0">
+                    <div className="grid grid-cols-3 gap-2 sm:gap-3.5 flex-shrink-0">
                       {/* Stat 1: Goals */}
                       <button
                         type="button"
@@ -1914,7 +2076,7 @@ export default function App() {
                 </div>
 
                 {/* Client Workspaces You Support (Shown if you are a professional connected to clients) */}
-                {isOwner && clientList.length > 0 && (
+                {isOwner && visibleClients.length > 0 && (
                   <div className="bg-gradient-to-r from-slate-900 via-slate-850 to-slate-900 text-white rounded-2xl p-5 sm:p-6 shadow-sm border border-slate-800 space-y-3.5">
                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                       <div>
@@ -1923,7 +2085,7 @@ export default function App() {
                             Professional Access
                           </span>
                           <span className="text-xs text-slate-300">
-                            {clientList.length} Connected Client{clientList.length > 1 ? 's' : ''}
+                            {visibleClients.length} Connected Client{visibleClients.length > 1 ? 's' : ''}
                           </span>
                         </div>
                         <h3 className="text-base sm:text-lg font-bold text-white mt-1">
@@ -1936,13 +2098,14 @@ export default function App() {
                     </div>
 
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5 pt-1">
-                      {clientList.map((client) => {
+                      {visibleClients.map((client) => {
                         const collab = (client.collaborators || []).find((c) => c.uid === user.uid);
-                        const myRole = collab?.role || 'Professional';
-                        const assignedCount =
-                          collab?.assignedGoalIds !== undefined
-                            ? collab.assignedGoalIds.length
-                            : 'All';
+                        // Goals are shared through the client's own records, so the
+                        // count has to come from every goal shared with this
+                        // professional rather than from the open workspace.
+                        const assignedCount = sharedGoals.filter(
+                          (g) => g.userId === client.id
+                        ).length;
 
                         return (
                           <div
@@ -1955,12 +2118,19 @@ export default function App() {
                                   {client.displayName || client.email || 'Client'}
                                 </span>
                                 <span className="text-[10px] font-bold text-emerald-300 bg-emerald-950/80 border border-emerald-500/30 px-2 py-0.5 rounded-md">
-                                  {myRole}
+                                  Client
                                 </span>
                               </div>
                               <p className="text-[11px] text-slate-400 truncate mt-0.5">
                                 {client.email}
                               </p>
+                              {(formatJoinedDate(client.createdAt) || formatJoinedDate(collab?.addedAt)) && (
+                                <p className="text-[11px] text-slate-400 mt-0.5">
+                                  {formatJoinedDate(client.createdAt)
+                                    ? `Joined ${formatJoinedDate(client.createdAt)}`
+                                    : `Connected ${formatJoinedDate(collab?.addedAt)}`}
+                                </p>
+                              )}
                               <div className="text-xs text-slate-300 mt-2.5 flex items-center gap-1.5 font-medium">
                                 <Target className="w-3.5 h-3.5 text-emerald-400" />
                                 <span>
@@ -1986,27 +2156,27 @@ export default function App() {
                   </div>
                 )}
 
-                {/* Professional Next Steps Guide if inside a client's workspace - Amber/Clay Theme */}
+                {/* Professional next-steps guide, shown only inside a client's workspace */}
                 {!isOwner && workspaceProfile && (
-                  <div className="bg-gradient-to-r from-amber-600/10 via-orange-600/5 to-amber-600/10 border border-amber-300/90 rounded-2xl p-4 sm:p-5 shadow-xs">
+                  <div className="bg-gradient-to-r from-blue-600/10 via-sky-600/5 to-blue-600/10 border border-blue-300/90 rounded-2xl p-4 sm:p-5 shadow-xs">
                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3">
                       <div className="flex items-center gap-2">
-                        <span className="text-[11px] font-bold uppercase tracking-wider text-amber-950 bg-amber-100 px-2.5 py-0.5 rounded-md flex items-center gap-1 border border-amber-300">
-                          <Sparkles className="w-3 h-3 text-amber-700" />
+                        <span className="text-[11px] font-bold uppercase tracking-wider text-blue-950 bg-blue-100 px-2.5 py-0.5 rounded-md flex items-center gap-1 border border-blue-300">
+                          <Sparkles className="w-3 h-3 text-blue-700" />
                           <span>Trainer Next Steps</span>
                         </span>
-                        <span className="text-xs font-bold text-amber-950">
+                        <span className="text-xs font-bold text-blue-950">
                           Managing {workspaceProfile.displayName || 'Client'}'s Program
                         </span>
                       </div>
-                      <span className="text-[11px] text-amber-900 font-bold bg-white px-2 py-0.5 rounded border border-amber-200">
+                      <span className="text-[11px] text-blue-900 font-bold bg-white px-2 py-0.5 rounded border border-blue-200">
                         Role: {professionalRole || 'Trainer'}
                       </span>
                     </div>
 
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
-                      <div className="bg-white/95 border border-amber-200/80 rounded-xl p-3 shadow-2xs">
-                        <div className="text-[11px] font-bold text-amber-900 uppercase tracking-wider">
+                      <div className="bg-white/95 border border-blue-200/80 rounded-xl p-3 shadow-2xs">
+                        <div className="text-[11px] font-bold text-blue-900 uppercase tracking-wider">
                           1 • Select a Goal
                         </div>
                         <p className="text-xs text-slate-600 mt-1">
@@ -2014,8 +2184,8 @@ export default function App() {
                         </p>
                       </div>
 
-                      <div className="bg-white/95 border border-amber-200/80 rounded-xl p-3 shadow-2xs">
-                        <div className="text-[11px] font-bold text-amber-900 uppercase tracking-wider">
+                      <div className="bg-white/95 border border-blue-200/80 rounded-xl p-3 shadow-2xs">
+                        <div className="text-[11px] font-bold text-blue-900 uppercase tracking-wider">
                           2 • Contextual Presets
                         </div>
                         <p className="text-xs text-slate-600 mt-1">
@@ -2023,8 +2193,8 @@ export default function App() {
                         </p>
                       </div>
 
-                      <div className="bg-white/95 border border-amber-200/80 rounded-xl p-3 shadow-2xs">
-                        <div className="text-[11px] font-bold text-amber-900 uppercase tracking-wider">
+                      <div className="bg-white/95 border border-blue-200/80 rounded-xl p-3 shadow-2xs">
+                        <div className="text-[11px] font-bold text-blue-900 uppercase tracking-wider">
                           3 • Configure & Schedule
                         </div>
                         <p className="text-xs text-slate-600 mt-1">
@@ -2080,7 +2250,7 @@ export default function App() {
                     <div
                       className={`w-14 h-14 rounded-2xl flex items-center justify-center mx-auto mb-3 shadow-2xs ${
                         !isOwner
-                          ? 'bg-amber-50 text-amber-700 border border-amber-300'
+                          ? 'bg-blue-50 text-blue-700 border border-blue-300'
                           : 'bg-emerald-50 text-emerald-600 border border-emerald-200'
                       }`}
                     >
@@ -2118,7 +2288,8 @@ export default function App() {
 
                       const goalTodayTasks = (goal.tasks || []).filter((t) => t.date === todayDate);
                       const doneTodayTasks = goalTodayTasks.filter((t) => t.completed).length;
-                      const isAssigned = isGoalAssignedToMe(goal.id);
+                      const goalLevel = goalAccessLevel(goal.id);
+                      const canEditThisGoal = goalLevel === 'edit';
 
                       return (
                         <div
@@ -2128,11 +2299,11 @@ export default function App() {
                             setSelectedGoalMonth(getCurrentMonthKey());
                             setActiveTab('detail');
                           }}
-                          className={`group bg-white border rounded-2xl p-5 hover:shadow-md transition-all duration-200 cursor-pointer flex flex-col justify-between ${
+                          className={`group bg-white border rounded-2xl p-4 sm:p-5 hover:shadow-md transition-all duration-200 cursor-pointer flex flex-col justify-between ${
                             !isOwner
-                              ? isAssigned
-                                ? 'border-amber-300 ring-2 ring-amber-500/20 shadow-2xs hover:border-amber-500'
-                                : 'border-amber-200/80 hover:border-amber-400'
+                              ? canEditThisGoal
+                                ? 'border-blue-300 ring-2 ring-blue-500/20 shadow-2xs hover:border-blue-500'
+                                : 'border-sky-200 hover:border-sky-400'
                               : 'border-slate-200/90 hover:border-emerald-500/40'
                           }`}
                         >
@@ -2141,7 +2312,7 @@ export default function App() {
                               <span
                                 className={`text-[11px] font-semibold px-2 py-0.5 rounded-md border ${
                                   !isOwner
-                                    ? 'text-amber-950 bg-amber-100/90 border-amber-300'
+                                    ? 'text-blue-950 bg-blue-100/90 border-blue-300'
                                     : 'text-emerald-700 bg-emerald-50 border-emerald-100'
                                 }`}
                               >
@@ -2154,7 +2325,7 @@ export default function App() {
 
                             <h3
                               className={`font-bold text-slate-900 text-base transition-colors line-clamp-1 mb-1 ${
-                                !isOwner ? 'group-hover:text-amber-800' : 'group-hover:text-emerald-700'
+                                !isOwner ? 'group-hover:text-blue-800' : 'group-hover:text-emerald-700'
                               }`}
                             >
                               {goal.title}
@@ -2164,9 +2335,7 @@ export default function App() {
                               <div className="flex items-center justify-between gap-1 mb-2.5 pt-0.5">
                                 {(() => {
                                   const assigned = profile.collaborators.filter((c) =>
-                                    c.assignedGoalIds !== undefined
-                                      ? c.assignedGoalIds.includes(goal.id)
-                                      : true
+                                    isGoalSharedWith(c, goal.id)
                                   );
                                   const isAssigned = assigned.length > 0;
                                   return (
@@ -2214,15 +2383,15 @@ export default function App() {
 
                             {!isOwner && (
                               <div className="mb-2.5">
-                                {isAssigned ? (
-                                  <div className="flex items-center gap-1.5 text-[11px] font-bold text-amber-950 bg-amber-50 border border-amber-300 px-2.5 py-1 rounded-lg">
-                                    <span className="w-2 h-2 rounded-full bg-amber-600 animate-pulse" />
+                                {canEditThisGoal ? (
+                                  <div className="flex items-center gap-1.5 text-[11px] font-bold text-blue-950 bg-blue-50 border border-blue-300 px-2.5 py-1 rounded-lg">
+                                    <span className="w-2 h-2 rounded-full bg-blue-600 animate-pulse" />
                                     <span>Assigned Session ({professionalRole || 'Trainer'})</span>
                                   </div>
                                 ) : (
-                                  <div className="flex items-center gap-1.5 text-[11px] font-semibold text-slate-500 bg-slate-100 border border-slate-200 px-2.5 py-1 rounded-lg">
-                                    <Lock className="w-3 h-3 text-slate-400" />
-                                    <span>Read-only (Not assigned to your role)</span>
+                                  <div className="flex items-center gap-1.5 text-[11px] font-semibold text-sky-800 bg-sky-50 border border-sky-200 px-2.5 py-1 rounded-lg">
+                                    <Lock className="w-3 h-3 text-sky-500" />
+                                    <span>View only ({professionalRole || 'Professional'})</span>
                                   </div>
                                 )}
                               </div>
@@ -2244,8 +2413,8 @@ export default function App() {
                                 <span
                                   className={`w-2 h-2 rounded-full mt-1 flex-shrink-0 ${
                                     curMilestone?.completed
-                                      ? !isOwner ? 'bg-amber-600' : 'bg-emerald-500'
-                                      : 'bg-amber-500'
+                                      ? !isOwner ? 'bg-blue-600' : 'bg-emerald-500'
+                                      : 'bg-blue-500'
                                   }`}
                                 />
                                 <span
@@ -2277,25 +2446,20 @@ export default function App() {
 
                             {!isOwner && (
                               <div className="pt-1.5">
-                                {isAssigned ? (
-                                  <div className="w-full bg-amber-50 text-amber-950 border border-amber-300 font-semibold text-xs py-2 px-3 rounded-xl flex items-center justify-center gap-1.5 group-hover:bg-amber-600 group-hover:text-white transition shadow-2xs">
+                                {canEditThisGoal ? (
+                                  <div className="w-full bg-blue-50 text-blue-950 border border-blue-300 font-semibold text-xs py-2 px-3 rounded-xl flex items-center justify-center gap-1.5 group-hover:bg-blue-600 group-hover:text-white transition shadow-2xs">
                                     <Edit2 className="w-3.5 h-3.5" />
                                     <span>Edit Subcategories & Routines</span>
                                     <ArrowRight className="w-3.5 h-3.5" />
                                   </div>
                                 ) : (
-                                  <button
-                                    type="button"
-                                    onClick={async (e) => {
-                                      e.stopPropagation();
-                                      await handleAssignGoalToMe(goal.id);
-                                    }}
-                                    className="w-full bg-amber-50 hover:bg-amber-100 text-amber-950 text-xs py-2 px-3 rounded-xl text-center font-bold flex items-center justify-center gap-1.5 border border-amber-300 transition cursor-pointer active:scale-98"
-                                    title="Click to enable routine planning access for this goal"
+                                  <div
+                                    className="w-full bg-sky-50 text-sky-900 border border-sky-200 font-semibold text-xs py-2 px-3 rounded-xl flex items-center justify-center gap-1.5"
+                                    title="Your client gave you read-only access to this goal"
                                   >
-                                    <Plus className="w-3.5 h-3.5" />
-                                    <span>Enable Access to Edit</span>
-                                  </button>
+                                    <Lock className="w-3.5 h-3.5" />
+                                    <span>Read-only access</span>
+                                  </div>
                                 )}
                               </div>
                             )}
@@ -2388,7 +2552,7 @@ export default function App() {
                   <div className="space-y-5">
                     {goals.map((g) => {
                       const goalTodayTasks = (g.tasks || []).filter((t) => t.date === todayDate);
-                      const canManageGoal = isOwner || isGoalAssignedToMe(g.id);
+                      const canManageGoal = canEditGoal(g.id);
                       const completedCount = goalTodayTasks.filter((t) => t.completed).length;
                       const goalSubcategories = (g.subcategories || []).filter((s) => {
                         if (s.date) return s.date === todayDate;
@@ -2405,7 +2569,7 @@ export default function App() {
                       return (
                         <div
                           key={g.id}
-                          className="bg-white border border-slate-200/90 rounded-2xl p-5 shadow-xs space-y-4"
+                          className="bg-white border border-slate-200/90 rounded-2xl p-4 sm:p-5 shadow-xs space-y-4"
                         >
                           {/* Goal Header */}
                           <div className="flex items-center justify-between gap-3 pb-3 border-b border-slate-100">
@@ -2811,7 +2975,7 @@ export default function App() {
               <div className="space-y-6">
                 {/* Top Goal Bar */}
                 <div
-                  className={`bg-white border rounded-2xl p-6 shadow-xs transition-colors duration-200 ${
+                  className={`bg-white border rounded-2xl p-4 sm:p-6 shadow-xs transition-colors duration-200 ${
                     !isOwner ? 'border-purple-200/90 shadow-purple-950/5' : 'border-purple-200/80'
                   }`}
                 >
@@ -2901,7 +3065,7 @@ export default function App() {
                               className={`text-xs font-semibold px-2.5 py-1 rounded-lg border ${
                                 isOwner
                                   ? 'text-purple-900 bg-purple-100/90 border-purple-200'
-                                  : 'text-amber-950 bg-amber-100/90 border-amber-300'
+                                  : 'text-blue-950 bg-blue-100/90 border-blue-300'
                               }`}
                             >
                               {currentGoal.category || 'General'}
@@ -2910,12 +3074,12 @@ export default function App() {
                               className={`text-xs font-semibold px-2.5 py-1 rounded-lg border ${
                                 isOwner
                                   ? 'text-purple-800 bg-purple-50 border-purple-100'
-                                  : 'text-amber-900 bg-amber-50 border-amber-200'
+                                  : 'text-blue-900 bg-blue-50 border-blue-200'
                               }`}
                             >
                               Target: {formatFullMonth(currentGoal.targetDate)}
                             </span>
-                            {(isOwner || isGoalAssignedToMe(currentGoal.id)) && (
+                            {isOwner && (
                               <button
                                 type="button"
                                 onClick={() => {
@@ -2927,11 +3091,11 @@ export default function App() {
                                 className={`text-xs font-semibold px-2.5 py-1 rounded-lg transition cursor-pointer flex items-center gap-1 shadow-2xs border ${
                                   isOwner
                                     ? 'text-purple-900 hover:text-purple-950 bg-purple-50 hover:bg-purple-100 border-purple-200'
-                                    : 'text-amber-950 hover:text-amber-900 bg-amber-50 hover:bg-amber-100 border-amber-300'
+                                    : 'text-blue-950 hover:text-blue-900 bg-blue-50 hover:bg-blue-100 border-blue-300'
                                 }`}
                                 title="Edit Goal Details"
                               >
-                                <Edit2 className={`w-3.5 h-3.5 ${isOwner ? 'text-purple-700' : 'text-amber-700'}`} />
+                                <Edit2 className={`w-3.5 h-3.5 ${isOwner ? 'text-purple-700' : 'text-blue-700'}`} />
                                 <span>Edit Goal</span>
                               </button>
                             )}
@@ -2948,28 +3112,23 @@ export default function App() {
                       {!isOwner && (
                         <div
                           className={`mt-3 p-3.5 rounded-xl border flex items-center justify-between gap-2.5 text-xs font-semibold flex-wrap ${
-                            isGoalAssignedToMe(currentGoal.id)
-                              ? 'bg-amber-50/90 border-amber-300 text-amber-950 shadow-2xs'
-                              : 'bg-amber-50/80 border-amber-300 text-amber-900'
+                            canEditGoal(currentGoal.id)
+                              ? 'bg-blue-50/90 border-blue-300 text-blue-950 shadow-2xs'
+                              : 'bg-slate-50 border-slate-300 text-slate-700'
                           }`}
                         >
                           <div className="flex items-center gap-2">
-                            <ShieldCheck className="w-4 h-4 text-amber-600 flex-shrink-0" />
+                            <ShieldCheck
+                              className={`w-4 h-4 flex-shrink-0 ${
+                                canEditGoal(currentGoal.id) ? 'text-blue-600' : 'text-slate-500'
+                              }`}
+                            />
                             <span>
-                              {isGoalAssignedToMe(currentGoal.id)
+                              {canEditGoal(currentGoal.id)
                                 ? `Trainer Active Mode: Managing ${workspaceProfile?.displayName || 'Client'}'s roadmap as ${professionalRole || 'Professional'}. Routine subcategories and daily tasks sync directly to their view.`
-                                : `Editing access not yet enabled for this goal.`}
+                                : `View-only access: ${workspaceProfile?.displayName || 'your client'} shared this goal with you as ${professionalRole || 'Professional'} for review. Ask them for editing access to change routines and tasks.`}
                             </span>
                           </div>
-                          {!isGoalAssignedToMe(currentGoal.id) && (
-                            <button
-                              type="button"
-                              onClick={async () => await handleAssignGoalToMe(currentGoal.id)}
-                              className="bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs px-3 py-1.5 rounded-lg transition shadow-2xs cursor-pointer active:scale-98"
-                            >
-                              Enable Routine Access
-                            </button>
-                          )}
                         </div>
                       )}
 
@@ -2978,9 +3137,7 @@ export default function App() {
                           <span className="text-slate-500 font-medium">Assigned Professionals:</span>
                           {(() => {
                             const assigned = profile.collaborators.filter((c) =>
-                              c.assignedGoalIds !== undefined
-                                ? c.assignedGoalIds.includes(currentGoal.id)
-                                : true
+                              isGoalSharedWith(c, currentGoal.id)
                             );
                             if (assigned.length === 0) {
                               return <span className="text-slate-400 italic">None assigned</span>;
@@ -3007,21 +3164,19 @@ export default function App() {
                       )}
                     </div>
 
-                    <div className="flex items-center gap-2 self-start">
+                    <div className="flex items-center flex-wrap gap-2 self-start">
                       {isOwner && (
                         <>
                           {profile?.collaborators && profile.collaborators.length > 0 && (
                             <button
                               onClick={() => setManagingAssignedGoal(currentGoal)}
-                              className="text-xs text-purple-950 hover:text-purple-950 bg-purple-50/60 hover:bg-purple-100 border border-purple-200 px-3.5 py-1.5 rounded-xl transition font-semibold cursor-pointer flex items-center gap-1.5 shadow-2xs"
+                              className="hidden sm:flex text-xs text-purple-950 hover:text-purple-950 bg-purple-50/60 hover:bg-purple-100 border border-purple-200 px-3.5 py-1.5 rounded-xl transition font-semibold cursor-pointer items-center gap-1.5 shadow-2xs"
                               title="Manage assigned professionals"
                             >
                               <Users className="w-3.5 h-3.5 text-purple-700" />
                               <span>
                                 {profile.collaborators.filter((c) =>
-                                  c.assignedGoalIds !== undefined
-                                    ? c.assignedGoalIds.includes(currentGoal.id)
-                                    : true
+                                  isGoalSharedWith(c, currentGoal.id)
                                 ).length > 0
                                   ? 'Assigned Pros'
                                   : 'Assign Pros'}
@@ -3050,7 +3205,7 @@ export default function App() {
                     <DailyTaskSection
                       goal={currentGoal}
                       isOwner={isOwner}
-                      canManageCategories={isOwner || isGoalAssignedToMe(currentGoal.id)}
+                      canManageCategories={canEditGoal(currentGoal.id)}
                       professionalRole={professionalRole}
                       selectedMonthKey={selectedGoalMonth}
                       onSelectMonth={setSelectedGoalMonth}
@@ -3071,7 +3226,7 @@ export default function App() {
                     <MonthlyMilestoneSection
                       goal={currentGoal}
                       isOwner={isOwner}
-                      readOnly={!isOwner && !isGoalAssignedToMe(currentGoal.id)}
+                      readOnly={!canEditGoal(currentGoal.id)}
                       selectedMonthKey={selectedGoalMonth}
                       onSelectMonth={setSelectedGoalMonth}
                       onToggleMilestone={handleToggleMilestone}
@@ -3082,6 +3237,14 @@ export default function App() {
               </div>
             )}
 
+            {activeTab === 'professional' && isOwner && (
+              <ProfessionalProfilePanel
+                user={user}
+                profile={profile}
+                onError={setErrorMessage}
+              />
+            )}
+
             {activeTab === 'connect' && (
               <CollaboratorsPanel
                 user={user}
@@ -3089,7 +3252,7 @@ export default function App() {
                 incomingRequests={incomingRequests}
                 incomingError={incomingError}
                 outgoingRequests={outgoingRequests}
-                clientList={clientList}
+                clientList={visibleClients}
                 connectNotice={connectNotice}
                 workspaceUid={workspaceUid}
                 goals={goals}
@@ -3099,6 +3262,7 @@ export default function App() {
                 onRemove={handleRemoveCollaborator}
                 onUpdateAssignedGoals={handleUpdateAssignedGoals}
                 onSwitchWorkspace={handleSwitchWorkspace}
+                onRemoveClient={handleRemoveClient}
               />
             )}
           </>
@@ -3106,8 +3270,8 @@ export default function App() {
       </main>
 
       {/* FOOTER */}
-      <footer className="border-t border-slate-200 bg-white py-6 mt-12">
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-slate-500">
+      <footer className="border-t border-slate-200 bg-white py-3.5 sm:py-6 mt-6 sm:mt-12">
+        <div className="max-w-6xl mx-auto px-3 sm:px-6 flex flex-col sm:flex-row items-center justify-between gap-1.5 sm:gap-4 text-[11px] sm:text-xs text-slate-500 text-center sm:text-left">
           <div className="flex items-center gap-2">
             <span>Goal Path App</span>
             <span>•</span>
@@ -3150,6 +3314,23 @@ export default function App() {
         }}
         onExtendGoalDeadline={async (goalId, monthsToAdd) => {
           await handleExtendGoalDeadline(goalId, monthsToAdd);
+        }}
+      />
+
+      {/* FIRST-RUN QUESTION: asked once, changeable later from the account menu */}
+      <PersonaPrompt
+        isOpen={
+          !!user &&
+          !!profile &&
+          !dataLoading &&
+          !savingPersona &&
+          (!profile.persona && !personaPromptDismissed ? true : personaPickerOpen)
+        }
+        saving={savingPersona}
+        onChoose={handleChoosePersona}
+        onSkip={() => {
+          setPersonaPromptDismissed(true);
+          setPersonaPickerOpen(false);
         }}
       />
     </div>

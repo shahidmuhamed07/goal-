@@ -1,8 +1,19 @@
 import React, { useState } from 'react';
-import { LogOut, Check, Target, X } from 'lucide-react';
+import { LogOut, Check, Target, X, Eye, Pencil, Ban, BadgeCheck, ExternalLink, Trash2 } from 'lucide-react';
 import { User } from 'firebase/auth';
-import { UserProfile, AccessRequest, ProfessionalRole, Goal, Collaborator } from '../types';
-import { PROFESSIONAL_ROLES, formatMonthKey } from '../utils';
+import { doc, getDoc } from 'firebase/firestore';
+import { db } from '../firebase';
+import {
+  UserProfile,
+  AccessRequest,
+  ProfessionalRole,
+  Goal,
+  Collaborator,
+  GoalAccessLevel,
+  ProfessionalProfile,
+} from '../types';
+import { PROFESSIONAL_ROLES, formatMonthKey, formatJoinedDate, getGoalAccessLevel } from '../utils';
+import { ProfessionalProfileCard } from './ProfessionalProfilePanel';
 
 interface CollaboratorsPanelProps {
   user: User;
@@ -15,12 +26,21 @@ interface CollaboratorsPanelProps {
   workspaceUid: string | null;
   goals: Goal[];
   onRequestAccess: (rawCode: string, role: ProfessionalRole) => void;
-  onApprove: (request: AccessRequest, assignedGoalIds: string[]) => void;
+  onApprove: (request: AccessRequest, goalAccess: Record<string, GoalAccessLevel>) => void;
   onDeny: (request: AccessRequest) => void;
   onRemove: (professionalUid: string) => void;
-  onUpdateAssignedGoals: (professionalUid: string, assignedGoalIds: string[]) => void;
+  onUpdateAssignedGoals: (
+    professionalUid: string,
+    goalAccess: Record<string, GoalAccessLevel>
+  ) => void;
   onSwitchWorkspace: (uid: string) => void;
+  onRemoveClient: (clientId: string, clientName: string) => void;
 }
+
+const ACCESS_LEVELS: { value: GoalAccessLevel; label: string; icon: React.ReactNode }[] = [
+  { value: 'view', label: 'View', icon: <Eye className="w-3.5 h-3.5" /> },
+  { value: 'edit', label: 'Edit', icon: <Pencil className="w-3.5 h-3.5" /> },
+];
 
 export const CollaboratorsPanel: React.FC<CollaboratorsPanelProps> = ({
   user,
@@ -38,6 +58,7 @@ export const CollaboratorsPanel: React.FC<CollaboratorsPanelProps> = ({
   onRemove,
   onUpdateAssignedGoals,
   onSwitchWorkspace,
+  onRemoveClient,
 }) => {
   const [codeInput, setCodeInput] = useState('');
   const [role, setRole] = useState<ProfessionalRole>(PROFESSIONAL_ROLES[0]);
@@ -46,9 +67,39 @@ export const CollaboratorsPanel: React.FC<CollaboratorsPanelProps> = ({
   // Modal State for Assigning Goals
   const [modalTargetRequest, setModalTargetRequest] = useState<AccessRequest | null>(null);
   const [modalTargetCollaborator, setModalTargetCollaborator] = useState<Collaborator | null>(null);
-  const [selectedGoalIds, setSelectedGoalIds] = useState<string[]>([]);
+  const [goalAccess, setGoalAccess] = useState<Record<string, GoalAccessLevel>>({});
   const [confirmRemoveUid, setConfirmRemoveUid] = useState<string | null>(null);
   const [isRemoving, setIsRemoving] = useState(false);
+  const [confirmRemoveClientId, setConfirmRemoveClientId] = useState<string | null>(null);
+  const [isRemovingClient, setIsRemovingClient] = useState(false);
+
+  // A client reading a professional's credentials
+  const [credentialTarget, setCredentialTarget] = useState<Collaborator | null>(null);
+  const [credentialProfile, setCredentialProfile] = useState<ProfessionalProfile | null>(null);
+  const [credentialLoading, setCredentialLoading] = useState(false);
+
+  const handleOpenCredentials = async (collab: Collaborator) => {
+    setCredentialTarget(collab);
+    setCredentialProfile(null);
+    setCredentialLoading(true);
+    try {
+      const snap = await getDoc(doc(db, 'publicProfiles', collab.uid));
+      if (snap.exists()) {
+        const data = snap.data() as Partial<ProfessionalProfile>;
+        setCredentialProfile({
+          uid: collab.uid,
+          roles: [],
+          credentials: [],
+          showcase: [],
+          ...data,
+        } as ProfessionalProfile);
+      }
+    } catch (err) {
+      console.error('Load professional credentials:', err);
+    } finally {
+      setCredentialLoading(false);
+    }
+  };
 
   const pendingIn = (incomingRequests || []).filter((r) => r.status === 'pending');
   const pendingOut = (outgoingRequests || []).filter((r) => r.status === 'pending');
@@ -74,47 +125,42 @@ export const CollaboratorsPanel: React.FC<CollaboratorsPanelProps> = ({
   const handleOpenApproveModal = (req: AccessRequest) => {
     setModalTargetCollaborator(null);
     setModalTargetRequest(req);
-    // By default, pre-select all goals or let client choose
-    setSelectedGoalIds(goals.map((g) => g.id));
+    // Nothing is shared until the client picks it explicitly.
+    setGoalAccess({});
   };
 
   // Open modal to manage existing collaborator's assigned goals
   const handleOpenManageModal = (collab: Collaborator) => {
     setModalTargetRequest(null);
     setModalTargetCollaborator(collab);
-    // Load existing assignedGoalIds (if undefined/not set previously, default to all)
-    if (collab.assignedGoalIds !== undefined) {
-      setSelectedGoalIds(collab.assignedGoalIds);
-    } else {
-      setSelectedGoalIds(goals.map((g) => g.id));
-    }
+    const current: Record<string, GoalAccessLevel> = {};
+    goals.forEach((g) => {
+      const level = getGoalAccessLevel(collab, g.id);
+      if (level) current[g.id] = level;
+    });
+    setGoalAccess(current);
   };
 
   const handleCloseModal = () => {
     setModalTargetRequest(null);
     setModalTargetCollaborator(null);
-    setSelectedGoalIds([]);
+    setGoalAccess({});
   };
 
-  const handleToggleGoalSelect = (goalId: string) => {
-    setSelectedGoalIds((prev) =>
-      prev.includes(goalId) ? prev.filter((id) => id !== goalId) : [...prev, goalId]
-    );
-  };
-
-  const handleSelectAllGoals = () => {
-    if (selectedGoalIds.length === goals.length) {
-      setSelectedGoalIds([]);
-    } else {
-      setSelectedGoalIds(goals.map((g) => g.id));
-    }
+  const setGoalLevel = (goalId: string, level: GoalAccessLevel | null) => {
+    setGoalAccess((prev) => {
+      const next = { ...prev };
+      if (level) next[goalId] = level;
+      else delete next[goalId];
+      return next;
+    });
   };
 
   const handleConfirmAssignment = () => {
     if (modalTargetRequest) {
-      onApprove(modalTargetRequest, selectedGoalIds);
+      onApprove(modalTargetRequest, goalAccess);
     } else if (modalTargetCollaborator) {
-      onUpdateAssignedGoals(modalTargetCollaborator.uid, selectedGoalIds);
+      onUpdateAssignedGoals(modalTargetCollaborator.uid, goalAccess);
     }
     handleCloseModal();
   };
@@ -137,18 +183,18 @@ export const CollaboratorsPanel: React.FC<CollaboratorsPanelProps> = ({
     return (
       <div className="space-y-6 max-w-3xl">
         {/* ACTIVE CLIENT WORKSPACE BANNER WITH GREEN EXIT BUTTON */}
-        <div className="bg-gradient-to-r from-slate-900 via-amber-950/40 to-slate-900 border border-amber-400/50 text-white rounded-2xl p-4 sm:p-5 shadow-md flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div className="bg-gradient-to-r from-slate-900 via-blue-950/40 to-slate-900 border border-blue-400/50 text-white rounded-2xl p-4 sm:p-5 shadow-md flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div className="space-y-1">
             <div className="flex items-center gap-2">
-              <span className="w-2.5 h-2.5 rounded-full bg-amber-400 animate-pulse" />
-              <span className="text-[11px] font-bold uppercase tracking-wider text-amber-300">
+              <span className="w-2.5 h-2.5 rounded-full bg-blue-400 animate-pulse" />
+              <span className="text-[11px] font-bold uppercase tracking-wider text-blue-300">
                 Active Client Workspace
               </span>
             </div>
             <p className="text-sm font-bold text-white">
-              Currently viewing: <span className="text-amber-200">{activeClient?.displayName || activeClient?.email || 'Client'}</span>
+              Currently viewing: <span className="text-blue-200">{activeClient?.displayName || activeClient?.email || 'Client'}</span>
             </p>
-            <p className="text-xs text-amber-100/80">
+            <p className="text-xs text-blue-100/80">
               You are managing this client's workspace. You can edit their goals, routine subcategories, and daily task plans.
             </p>
           </div>
@@ -171,10 +217,10 @@ export const CollaboratorsPanel: React.FC<CollaboratorsPanelProps> = ({
         </div>
 
         {/* WHO ALL THE PEOPLE ARE COLLABORATED WITH THIS CLIENT */}
-        <div className="bg-white border border-amber-200/90 rounded-2xl p-6 shadow-xs">
+        <div className="bg-white border border-blue-200/90 rounded-2xl p-6 shadow-xs">
           <h2 className="text-sm font-bold text-slate-900 uppercase tracking-wider flex items-center gap-2">
             <span>People Connected with this Client</span>
-            <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-amber-100 text-amber-900">
+            <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-blue-100 text-blue-900">
               {collaborators.length}
             </span>
           </h2>
@@ -187,15 +233,16 @@ export const CollaboratorsPanel: React.FC<CollaboratorsPanelProps> = ({
             <ul className="space-y-3">
               {collaborators.map((c) => {
                 const isMe = c.uid === user.uid;
-                const assignedIds = c.assignedGoalIds !== undefined ? c.assignedGoalIds : goals.map((g) => g.id);
-                const assignedGoalList = goals.filter((g) => assignedIds.includes(g.id));
+                const sharedGoals = goals
+                  .map((g) => ({ goal: g, level: getGoalAccessLevel(c, g.id) }))
+                  .filter((entry) => entry.level !== null);
 
                 return (
                   <li
                     key={c.uid}
                     className={`border rounded-xl p-4 space-y-2.5 transition ${
                       isMe
-                        ? 'bg-amber-50/50 border-amber-300/80 shadow-2xs'
+                        ? 'bg-blue-50/50 border-blue-300/80 shadow-2xs'
                         : 'bg-white border-slate-200'
                     }`}
                   >
@@ -205,11 +252,11 @@ export const CollaboratorsPanel: React.FC<CollaboratorsPanelProps> = ({
                           {c.name || c.email || c.uid}
                         </span>
                         {isMe && (
-                          <span className="text-[10px] font-bold px-1.5 py-0.5 bg-amber-200 text-amber-950 rounded-md">
+                          <span className="text-[10px] font-bold px-1.5 py-0.5 bg-blue-200 text-blue-950 rounded-md">
                             You
                           </span>
                         )}
-                        <span className="text-xs font-semibold px-2 py-0.5 bg-amber-100 text-amber-900 rounded-md border border-amber-200">
+                        <span className="text-xs font-semibold px-2 py-0.5 bg-blue-100 text-blue-900 rounded-md border border-blue-200">
                           {c.role}
                         </span>
                       </div>
@@ -221,17 +268,26 @@ export const CollaboratorsPanel: React.FC<CollaboratorsPanelProps> = ({
                       <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mr-1">
                         Assigned Goals:
                       </span>
-                      {assignedGoalList.length === 0 ? (
-                        <span className="text-xs text-amber-800 font-medium bg-amber-100/70 px-2 py-0.5 rounded-md">
-                          Read-only access
+                      {sharedGoals.length === 0 ? (
+                        <span className="text-xs text-slate-500 font-medium bg-slate-100 px-2 py-0.5 rounded-md">
+                          No goals shared
                         </span>
                       ) : (
-                        assignedGoalList.map((g) => (
+                        sharedGoals.map(({ goal, level }) => (
                           <span
-                            key={g.id}
-                            className="text-xs bg-white text-slate-700 border border-slate-200 px-2 py-0.5 rounded-md font-medium shadow-2xs"
+                            key={goal.id}
+                            className={`text-xs px-2 py-0.5 rounded-md font-medium shadow-2xs border flex items-center gap-1 ${
+                              level === 'edit'
+                                ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                                : 'bg-sky-50 text-sky-800 border-sky-200'
+                            }`}
                           >
-                            {g.title}
+                            {level === 'edit' ? (
+                              <Pencil className="w-3 h-3" />
+                            ) : (
+                              <Eye className="w-3 h-3" />
+                            )}
+                            <span>{goal.title}</span>
                           </span>
                         ))
                       )}
@@ -244,7 +300,7 @@ export const CollaboratorsPanel: React.FC<CollaboratorsPanelProps> = ({
         </div>
 
         {/* ALL CLIENTS YOU SUPPORT */}
-        <div className="bg-white border border-amber-200/90 rounded-2xl p-6 shadow-xs">
+        <div className="bg-white border border-blue-200/90 rounded-2xl p-6 shadow-xs">
           <h2 className="text-sm font-bold text-slate-900 uppercase tracking-wider">All Clients You Work With</h2>
           <p className="text-xs text-slate-500 mt-1 mb-4">
             Switch between client accounts you have been approved to manage.
@@ -262,7 +318,7 @@ export const CollaboratorsPanel: React.FC<CollaboratorsPanelProps> = ({
                     key={c.id}
                     className={`flex items-center justify-between gap-3 border rounded-xl p-3.5 transition ${
                       isActive
-                        ? 'bg-amber-50/70 border-amber-300'
+                        ? 'bg-blue-50/70 border-blue-300'
                         : 'bg-white border-slate-200 hover:border-slate-300'
                     }`}
                   >
@@ -277,7 +333,7 @@ export const CollaboratorsPanel: React.FC<CollaboratorsPanelProps> = ({
                       onClick={() => onSwitchWorkspace(isActive ? user.uid : (c.id || ''))}
                       className={`text-xs font-semibold px-3 py-1.5 rounded-lg cursor-pointer transition ${
                         isActive
-                          ? 'bg-amber-700 text-white font-bold shadow-2xs'
+                          ? 'bg-blue-700 text-white font-bold shadow-2xs'
                           : 'border border-slate-200 text-slate-700 hover:bg-slate-50'
                       }`}
                     >
@@ -453,8 +509,9 @@ export const CollaboratorsPanel: React.FC<CollaboratorsPanelProps> = ({
         ) : (
           <ul className="space-y-3.5">
             {collaborators.map((c) => {
-              const assignedIds = c.assignedGoalIds !== undefined ? c.assignedGoalIds : goals.map((g) => g.id);
-              const assignedGoalList = goals.filter((g) => assignedIds.includes(g.id));
+              const sharedGoals = goals
+                .map((g) => ({ goal: g, level: getGoalAccessLevel(c, g.id) }))
+                .filter((entry) => entry.level !== null);
 
               return (
                 <li key={c.uid} className="border border-slate-200 rounded-xl p-4 bg-white space-y-3">
@@ -472,12 +529,22 @@ export const CollaboratorsPanel: React.FC<CollaboratorsPanelProps> = ({
                     <div className="flex items-center gap-2">
                       <button
                         type="button"
+                        onClick={() => handleOpenCredentials(c)}
+                        className="text-xs font-semibold text-slate-700 bg-slate-50 hover:bg-slate-100 border border-slate-200 px-3 py-1.5 rounded-lg transition cursor-pointer flex items-center gap-1.5"
+                        title="See this professional's qualifications and references"
+                      >
+                        <BadgeCheck className="w-3.5 h-3.5 text-emerald-600" />
+                        <span>Credentials</span>
+                      </button>
+
+                      <button
+                        type="button"
                         onClick={() => handleOpenManageModal(c)}
                         className="text-xs font-semibold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 px-3 py-1.5 rounded-lg transition cursor-pointer flex items-center gap-1.5"
                         title="Change which goals this professional can manage"
                       >
                         <Target className="w-3.5 h-3.5 text-emerald-600" />
-                        <span>Assign Goals ({assignedGoalList.length})</span>
+                        <span>Manage Access ({sharedGoals.length})</span>
                       </button>
 
                       {confirmRemoveUid === c.uid ? (
@@ -522,19 +589,28 @@ export const CollaboratorsPanel: React.FC<CollaboratorsPanelProps> = ({
                   {/* Assigned Goals tags */}
                   <div className="pt-2 border-t border-slate-100 flex items-center gap-1.5 flex-wrap">
                     <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mr-1">
-                      Assigned Goals:
+                      Shared Goals:
                     </span>
-                    {assignedGoalList.length === 0 ? (
-                      <span className="text-xs text-amber-600 font-medium bg-amber-50 px-2 py-0.5 rounded-md border border-amber-200">
-                        No goals assigned (Read-only access)
+                    {sharedGoals.length === 0 ? (
+                      <span className="text-xs text-slate-500 font-medium bg-slate-100 px-2 py-0.5 rounded-md border border-slate-200">
+                        No access to any goal
                       </span>
                     ) : (
-                      assignedGoalList.map((g) => (
+                      sharedGoals.map(({ goal, level }) => (
                         <span
-                          key={g.id}
-                          className="text-xs bg-slate-50 text-slate-700 border border-slate-200 px-2 py-0.5 rounded-md font-medium"
+                          key={goal.id}
+                          className={`text-xs px-2 py-0.5 rounded-md font-medium border flex items-center gap-1 ${
+                            level === 'edit'
+                              ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                              : 'bg-sky-50 text-sky-800 border-sky-200'
+                          }`}
                         >
-                          {g.title}
+                          {level === 'edit' ? (
+                            <Pencil className="w-3 h-3" />
+                          ) : (
+                            <Eye className="w-3 h-3" />
+                          )}
+                          <span>{goal.title}</span>
                         </span>
                       ))
                     )}
@@ -556,25 +632,76 @@ export const CollaboratorsPanel: React.FC<CollaboratorsPanelProps> = ({
           <ul className="space-y-3">
             {clientList.map((c) => {
               const myCollab = (c.collaborators || []).find((x) => x.uid === user.uid);
-              const myRole = myCollab?.role;
               const active = workspaceUid === c.id;
+              const joinedOn = formatJoinedDate(c.createdAt);
+              const connectedOn = formatJoinedDate(myCollab?.addedAt);
+              const clientName = c.displayName || c.email || 'Client';
               return (
-                <li key={c.id} className="flex items-center justify-between gap-3 border border-slate-200 rounded-xl p-3.5">
-                  <div>
-                    <div className="text-sm font-semibold text-slate-900">{c.displayName || c.email || 'Client'}</div>
-                    <div className="text-xs text-slate-500">Your role: {myRole || '—'}</div>
+                <li
+                  key={c.id}
+                  className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 border border-slate-200 rounded-xl px-3.5 py-3"
+                >
+                  <div className="min-w-0">
+                    <div className="text-sm font-semibold text-slate-900">{clientName}</div>
+                    {(joinedOn || connectedOn) && (
+                      <div className="text-[11px] text-slate-400 mt-0.5">
+                        {joinedOn ? `Joined ${joinedOn}` : `Connected ${connectedOn}`}
+                      </div>
+                    )}
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => onSwitchWorkspace(active ? user.uid : (c.id || ''))}
-                    className={`text-xs font-semibold px-3 py-1.5 rounded-lg cursor-pointer ${
-                      active
-                        ? 'bg-slate-900 text-white'
-                        : 'border border-slate-200 text-slate-700 hover:bg-slate-50'
-                    }`}
-                  >
-                    {active ? 'Viewing Workspace' : 'Open Workspace'}
-                  </button>
+
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => onSwitchWorkspace(active ? user.uid : (c.id || ''))}
+                      className={`text-xs font-semibold px-2.5 py-1.5 rounded-lg cursor-pointer ${
+                        active
+                          ? 'bg-slate-900 text-white'
+                          : 'border border-slate-200 text-slate-700 hover:bg-slate-50'
+                      }`}
+                    >
+                      {active ? 'Viewing' : 'Open'}
+                    </button>
+
+                    {confirmRemoveClientId === c.id ? (
+                      <div className="flex items-center gap-1 bg-rose-50 border border-rose-200 p-1 rounded-lg">
+                        <button
+                          type="button"
+                          disabled={isRemovingClient}
+                          onClick={async () => {
+                            try {
+                              setIsRemovingClient(true);
+                              await onRemoveClient(c.id || '', clientName);
+                            } finally {
+                              setIsRemovingClient(false);
+                              setConfirmRemoveClientId(null);
+                            }
+                          }}
+                          className="text-[11px] font-bold bg-rose-600 hover:bg-rose-700 text-white px-2 py-1 rounded-md cursor-pointer transition shadow-2xs disabled:opacity-50"
+                        >
+                          {isRemovingClient ? '...' : 'Remove'}
+                        </button>
+                        <button
+                          type="button"
+                          disabled={isRemovingClient}
+                          onClick={() => setConfirmRemoveClientId(null)}
+                          className="text-[11px] font-semibold text-slate-600 hover:bg-slate-200 bg-slate-100 px-2 py-1 rounded-md cursor-pointer"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => setConfirmRemoveClientId(c.id || '')}
+                        aria-label={`Remove ${clientName} from your client list`}
+                        title="Remove this client"
+                        className="w-8 h-8 flex items-center justify-center rounded-lg text-rose-600 bg-rose-50 hover:bg-rose-100 border border-rose-200 cursor-pointer transition shrink-0"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                  </div>
                 </li>
               );
             })}
@@ -603,7 +730,9 @@ export const CollaboratorsPanel: React.FC<CollaboratorsPanelProps> = ({
                 Assign Goals to {targetPersonName}
               </h3>
               <p className="text-xs text-slate-500 mt-1 leading-relaxed">
-                Choose which goals this <strong>{targetPersonRole}</strong> is permitted to edit. They will only be able to add and edit daily tasks / subcategories tagged for their role inside assigned goals.
+                Choose what this <strong>{targetPersonRole}</strong> may do with each goal.{' '}
+                <strong>View</strong> is read-only, <strong>Edit</strong> also lets them add and change
+                routines and daily tasks. Goals left on <strong>No access</strong> stay invisible to them.
               </p>
             </div>
 
@@ -611,16 +740,32 @@ export const CollaboratorsPanel: React.FC<CollaboratorsPanelProps> = ({
             <div className="space-y-3">
               <div className="flex items-center justify-between text-xs">
                 <span className="font-semibold text-slate-700">
-                  Select Goals ({selectedGoalIds.length}/{goals.length} selected):
+                  Shared Goals ({Object.keys(goalAccess).length}/{goals.length}):
                 </span>
                 {goals.length > 0 && (
-                  <button
-                    type="button"
-                    onClick={handleSelectAllGoals}
-                    className="text-emerald-600 font-semibold hover:underline cursor-pointer text-xs"
-                  >
-                    {selectedGoalIds.length === goals.length ? 'Deselect All' : 'Select All'}
-                  </button>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const next: Record<string, GoalAccessLevel> = {};
+                        goals.forEach((g) => {
+                          next[g.id] = 'edit';
+                        });
+                        setGoalAccess(next);
+                      }}
+                      className="text-emerald-600 font-semibold hover:underline cursor-pointer text-xs"
+                    >
+                      Everyone can edit
+                    </button>
+                    <span className="text-slate-300">•</span>
+                    <button
+                      type="button"
+                      onClick={() => setGoalAccess({})}
+                      className="text-rose-600 font-semibold hover:underline cursor-pointer text-xs"
+                    >
+                      Clear
+                    </button>
+                  </div>
                 )}
               </div>
 
@@ -633,22 +778,18 @@ export const CollaboratorsPanel: React.FC<CollaboratorsPanelProps> = ({
               ) : (
                 <div className="max-h-60 overflow-y-auto space-y-2 pr-1">
                   {goals.map((g) => {
-                    const isChecked = selectedGoalIds.includes(g.id);
+                    const level = goalAccess[g.id];
+                    const cardTone =
+                      level === 'edit'
+                        ? 'bg-emerald-50/60 border-emerald-300'
+                        : level === 'view'
+                          ? 'bg-sky-50/60 border-sky-300'
+                          : 'bg-slate-50/40 border-slate-200 hover:bg-slate-50';
                     return (
-                      <label
+                      <div
                         key={g.id}
-                        className={`flex items-start gap-3 p-3 rounded-xl border transition cursor-pointer select-none ${
-                          isChecked
-                            ? 'bg-emerald-50/60 border-emerald-300 text-slate-900'
-                            : 'bg-slate-50/40 border-slate-200 text-slate-600 hover:bg-slate-50'
-                        }`}
+                        className={`flex items-start justify-between gap-3 p-3 rounded-xl border transition ${cardTone}`}
                       >
-                        <input
-                          type="checkbox"
-                          checked={isChecked}
-                          onChange={() => handleToggleGoalSelect(g.id)}
-                          className="w-4 h-4 mt-0.5 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 cursor-pointer"
-                        />
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2">
                             <span className="text-sm font-semibold text-slate-900 truncate">
@@ -667,7 +808,38 @@ export const CollaboratorsPanel: React.FC<CollaboratorsPanelProps> = ({
                             Target: {formatMonthKey(g.targetDate)} · {g.milestones?.length || 0} milestones
                           </div>
                         </div>
-                      </label>
+
+                        <div className="flex items-center gap-1 bg-white/80 border border-slate-200 rounded-lg p-0.5 flex-shrink-0">
+                          <button
+                            type="button"
+                            onClick={() => setGoalLevel(g.id, null)}
+                            title="No access"
+                            className={`px-1.5 py-1 rounded-md transition cursor-pointer ${
+                              !level ? 'bg-slate-700 text-white' : 'text-slate-400 hover:text-slate-600'
+                            }`}
+                          >
+                            <Ban className="w-3.5 h-3.5" />
+                          </button>
+                          {ACCESS_LEVELS.map((option) => (
+                            <button
+                              key={option.value}
+                              type="button"
+                              onClick={() => setGoalLevel(g.id, option.value)}
+                              title={option.value === 'view' ? 'Read-only' : 'Can edit'}
+                              className={`px-2 py-1 rounded-md text-[11px] font-semibold transition cursor-pointer flex items-center gap-1 ${
+                                level === option.value
+                                  ? option.value === 'edit'
+                                    ? 'bg-emerald-600 text-white'
+                                    : 'bg-sky-600 text-white'
+                                  : 'text-slate-500 hover:text-slate-700'
+                              }`}
+                            >
+                              {option.icon}
+                              <span>{option.label}</span>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
                     );
                   })}
                 </div>
@@ -691,9 +863,69 @@ export const CollaboratorsPanel: React.FC<CollaboratorsPanelProps> = ({
                 <Check className="w-3.5 h-3.5 stroke-[2.5]" />
                 <span>
                   {modalTargetRequest
-                    ? `Confirm & Approve (${selectedGoalIds.length} Goals)`
+                    ? `Confirm & Approve (${Object.keys(goalAccess).length} Goals)`
                     : 'Save Goal Access'}
                 </span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* CREDENTIALS MODAL: what a client can see about a connected professional */}
+      {credentialTarget && (
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-3xl max-w-xl w-full p-6 shadow-2xl border border-slate-200 max-h-[90vh] overflow-y-auto space-y-4">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-0.5 rounded-md">
+                  Professional profile
+                </span>
+                <h3 className="text-lg font-bold text-slate-900 mt-2">
+                  {credentialTarget.name || credentialTarget.email || 'Professional'}
+                </h3>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Shared by them. Qualifications link out to a source you can verify yourself.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setCredentialTarget(null)}
+                className="text-slate-400 hover:text-slate-600 p-1 rounded-lg hover:bg-slate-100 transition cursor-pointer shrink-0"
+                title="Close"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {credentialLoading ? (
+              <p className="text-xs font-semibold text-slate-500 py-6 text-center">
+                Loading profile...
+              </p>
+            ) : credentialProfile ? (
+              <ProfessionalProfileCard value={credentialProfile} />
+            ) : (
+              <div className="border border-dashed border-slate-300 rounded-2xl p-6 text-center space-y-1">
+                <p className="text-xs font-semibold text-slate-600">
+                  This professional has not added a profile yet.
+                </p>
+                <p className="text-[11px] text-slate-400">
+                  You can still see the goals they have been given access to.
+                </p>
+              </div>
+            )}
+
+            <div className="pt-3 border-t border-slate-100 flex items-center justify-between gap-3">
+              <span className="text-[11px] text-slate-400 flex items-center gap-1.5">
+                <ExternalLink className="w-3 h-3" />
+                Links open in a new tab
+              </span>
+              <button
+                type="button"
+                onClick={() => setCredentialTarget(null)}
+                className="text-xs font-semibold px-4 py-2 rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50 transition cursor-pointer"
+              >
+                Close
               </button>
             </div>
           </div>

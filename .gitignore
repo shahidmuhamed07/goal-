@@ -2,7 +2,11 @@ node_modules/
 build/
 dist/
 coverage/
+.firebase/
+__preview.*
+__chrome.html
 .DS_Store
 *.log
 .env*
 !.env.example
+goal-path-9f4cc-firebase-adminsdk-fbsvc-d063bff0ea.json

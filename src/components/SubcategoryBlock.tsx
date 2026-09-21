@@ -100,19 +100,19 @@ export const SubcategoryBlock: React.FC<SubcategoryBlockProps> = ({
   return (
     <div
       className={`rounded-xl border overflow-hidden bg-white shadow-2xs ${
-        !isOwner ? 'border-amber-200/80' : 'border-emerald-200/80'
+        !isOwner ? 'border-blue-200/80' : 'border-purple-200/80'
       }`}
     >
       <div
         className={`flex flex-wrap sm:flex-nowrap items-center justify-between gap-1.5 p-2 border-b transition ${
-          !isOwner ? 'bg-amber-50/50 border-amber-100/80' : 'bg-emerald-50/40 border-emerald-100/80'
+          !isOwner ? 'bg-blue-50/50 border-blue-100/80' : 'bg-purple-50/40 border-purple-100/80'
         }`}
       >
         {/* Toggle Expand / Collapse Button */}
         <div className="flex items-center gap-1.5 min-w-0 flex-1">
           <GlassIconButton
             onClick={onToggle}
-            variant={!isOwner ? 'amber' : 'emerald'}
+            variant={!isOwner ? 'blue' : 'purple'}
             size="sm"
             title={expanded ? 'Collapse group' : 'Expand group to see tasks'}
             aria-expanded={expanded}
@@ -143,8 +143,8 @@ export const SubcategoryBlock: React.FC<SubcategoryBlockProps> = ({
                 autoFocus
                 className={`flex-1 min-w-[140px] text-sm font-semibold text-slate-900 bg-white border rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-2 ${
                   !isOwner
-                    ? 'border-amber-500 focus:ring-amber-500/20'
-                    : 'border-emerald-500 focus:ring-emerald-500/20'
+                    ? 'border-blue-500 focus:ring-blue-500/20'
+                    : 'border-purple-500 focus:ring-purple-500/20'
                 }`}
                 placeholder="Subcategory name..."
               />
@@ -154,8 +154,8 @@ export const SubcategoryBlock: React.FC<SubcategoryBlockProps> = ({
                   onClick={handleSaveRename}
                   className={`px-3 py-1.5 text-white rounded-lg text-xs font-semibold shadow-2xs transition cursor-pointer flex items-center gap-1 active:scale-95 ${
                     !isOwner
-                      ? 'bg-amber-700 hover:bg-amber-800'
-                      : 'bg-emerald-700 hover:bg-emerald-800'
+                      ? 'bg-blue-700 hover:bg-blue-800'
+                      : 'bg-purple-700 hover:bg-purple-800'
                   }`}
                   title="Save changes"
                 >
@@ -183,7 +183,7 @@ export const SubcategoryBlock: React.FC<SubcategoryBlockProps> = ({
             >
               <span
                 className={`block text-sm font-bold text-slate-800 transition-colors truncate ${
-                  !isOwner ? 'group-hover:text-amber-700' : 'group-hover:text-emerald-700'
+                  !isOwner ? 'group-hover:text-blue-700' : 'group-hover:text-purple-700'
                 }`}
               >
                 {name}
@@ -198,8 +198,8 @@ export const SubcategoryBlock: React.FC<SubcategoryBlockProps> = ({
             <span
               className={`text-[11px] font-semibold tabular-nums px-1.5 sm:px-2 py-0.5 rounded-md bg-white border shadow-2xs ${
                 !isOwner
-                  ? 'text-amber-950 border-amber-200'
-                  : 'text-emerald-900 border-emerald-200'
+                  ? 'text-blue-950 border-blue-200'
+                  : 'text-purple-900 border-purple-200'
               }`}
             >
               {done}/{tasks.length}
@@ -212,8 +212,8 @@ export const SubcategoryBlock: React.FC<SubcategoryBlockProps> = ({
                 onChange={(e) => onSetRole(e.target.value)}
                 className={`text-[10px] sm:text-[11px] font-medium text-slate-700 bg-white border border-slate-200 rounded-lg px-1.5 sm:px-2 py-1 max-w-[6.5rem] sm:max-w-[8.5rem] cursor-pointer focus:ring-1 focus:outline-none shadow-2xs ${
                   !isOwner
-                    ? 'hover:border-amber-300 focus:ring-amber-500'
-                    : 'hover:border-emerald-300 focus:ring-emerald-500'
+                    ? 'hover:border-blue-300 focus:ring-blue-500'
+                    : 'hover:border-purple-300 focus:ring-purple-500'
                 }`}
                 title="Assign role to this subcategory"
               >
@@ -228,8 +228,8 @@ export const SubcategoryBlock: React.FC<SubcategoryBlockProps> = ({
               <span
                 className={`text-[10px] font-bold px-1.5 py-0.5 rounded-md border ${
                   !isOwner
-                    ? 'text-amber-900 bg-amber-50 border-amber-200'
-                    : 'text-emerald-800 bg-emerald-50 border-emerald-200'
+                    ? 'text-blue-900 bg-blue-50 border-blue-200'
+                    : 'text-purple-800 bg-purple-50 border-purple-200'
                 }`}
               >
                 {editorRole}
@@ -243,7 +243,7 @@ export const SubcategoryBlock: React.FC<SubcategoryBlockProps> = ({
                   setEditVal(name);
                   setEditing(true);
                 }}
-                variant={!isOwner ? 'amber' : 'emerald'}
+                variant={!isOwner ? 'blue' : 'purple'}
                 size="sm"
                 title="Edit / Rename Subcategory"
               >
@@ -271,7 +271,7 @@ export const SubcategoryBlock: React.FC<SubcategoryBlockProps> = ({
       {expanded && (
         <div
           className={`border-t p-2.5 sm:p-3 space-y-2 bg-white ${
-            !isOwner ? 'border-amber-100' : 'border-emerald-100'
+            !isOwner ? 'border-blue-100' : 'border-purple-100'
           }`}
         >
           {canAdd && onAddTask && (
@@ -284,8 +284,8 @@ export const SubcategoryBlock: React.FC<SubcategoryBlockProps> = ({
                   onChange={(e) => setText(e.target.value)}
                   className={`flex-1 text-xs sm:text-sm bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-800 placeholder-slate-400 focus:outline-none focus:bg-white focus:ring-2 ${
                     !isOwner
-                      ? 'focus:ring-amber-500/20 focus:border-amber-600'
-                      : 'focus:ring-emerald-500/20 focus:border-emerald-600'
+                      ? 'focus:ring-blue-500/20 focus:border-blue-600'
+                      : 'focus:ring-purple-500/20 focus:border-purple-600'
                   }`}
                 />
                 <button
@@ -293,8 +293,8 @@ export const SubcategoryBlock: React.FC<SubcategoryBlockProps> = ({
                   disabled={!text.trim()}
                   className={`px-3 sm:px-4 py-2 disabled:opacity-40 text-white text-xs sm:text-sm font-semibold rounded-xl transition cursor-pointer shrink-0 shadow-2xs ${
                     !isOwner
-                      ? 'bg-amber-700 hover:bg-amber-800'
-                      : 'bg-emerald-700 hover:bg-emerald-800'
+                      ? 'bg-blue-700 hover:bg-blue-800'
+                      : 'bg-purple-700 hover:bg-purple-800'
                   }`}
                 >
                   Add
@@ -306,7 +306,7 @@ export const SubcategoryBlock: React.FC<SubcategoryBlockProps> = ({
                   value={priority}
                   onChange={(e) => setPriority(e.target.value as 'high' | 'medium' | 'low')}
                   className={`bg-slate-50 border border-slate-200 rounded-lg px-2 py-0.5 text-slate-700 focus:outline-none focus:ring-1 text-[11px] sm:text-xs ${
-                    !isOwner ? 'focus:ring-amber-500' : 'focus:ring-emerald-500'
+                    !isOwner ? 'focus:ring-blue-500' : 'focus:ring-purple-500'
                   }`}
                 >
                   <option value="high">High</option>
@@ -328,11 +328,11 @@ export const SubcategoryBlock: React.FC<SubcategoryBlockProps> = ({
                 className={`p-2.5 sm:p-3 rounded-xl border transition ${
                   t.completed
                     ? !isOwner
-                      ? 'bg-amber-50/20 border-amber-100 text-slate-400'
-                      : 'bg-emerald-50/20 border-emerald-100 text-slate-400'
+                      ? 'bg-blue-50/20 border-blue-100 text-slate-400'
+                      : 'bg-purple-50/20 border-purple-100 text-slate-400'
                     : !isOwner
-                    ? 'bg-white border-slate-200 text-slate-800 shadow-2xs hover:border-amber-200'
-                    : 'bg-white border-slate-200 text-slate-800 shadow-2xs hover:border-emerald-200'
+                    ? 'bg-white border-slate-200 text-slate-800 shadow-2xs hover:border-blue-200'
+                    : 'bg-white border-slate-200 text-slate-800 shadow-2xs hover:border-purple-200'
                 }`}
               >
                 {editingTaskId === t.id ? (
@@ -343,8 +343,8 @@ export const SubcategoryBlock: React.FC<SubcategoryBlockProps> = ({
                       onChange={(e) => setEditTaskText(e.target.value)}
                       className={`w-full text-xs sm:text-sm bg-slate-50 border border-slate-300 rounded-lg px-3 py-1.5 text-slate-800 focus:outline-none focus:bg-white focus:ring-2 font-medium ${
                         !isOwner
-                          ? 'focus:ring-amber-500/20 focus:border-amber-600'
-                          : 'focus:ring-emerald-500/20 focus:border-emerald-600'
+                          ? 'focus:ring-blue-500/20 focus:border-blue-600'
+                          : 'focus:ring-purple-500/20 focus:border-purple-600'
                       }`}
                       autoFocus
                     />
@@ -372,8 +372,8 @@ export const SubcategoryBlock: React.FC<SubcategoryBlockProps> = ({
                           }}
                           className={`px-2.5 py-1 text-white rounded-md text-xs font-semibold cursor-pointer shadow-2xs ${
                             !isOwner
-                              ? 'bg-amber-700 hover:bg-amber-800'
-                              : 'bg-emerald-700 hover:bg-emerald-800'
+                              ? 'bg-blue-700 hover:bg-blue-800'
+                              : 'bg-purple-700 hover:bg-purple-800'
                           }`}
                         >
                           Save
@@ -398,8 +398,8 @@ export const SubcategoryBlock: React.FC<SubcategoryBlockProps> = ({
                         onChange={() => onToggleTask && onToggleTask(goal.id, t.id)}
                         className={`w-4 h-4 mt-0.5 rounded border-slate-300 disabled:opacity-40 shrink-0 cursor-pointer ${
                           !isOwner
-                            ? 'text-amber-700 focus:ring-amber-500'
-                            : 'text-emerald-700 focus:ring-emerald-500'
+                            ? 'accent-blue-700 text-blue-700 focus:ring-blue-500'
+                            : 'accent-purple-700 text-purple-700 focus:ring-purple-500'
                         }`}
                       />
                       <div className="flex flex-col min-w-0">
@@ -424,7 +424,7 @@ export const SubcategoryBlock: React.FC<SubcategoryBlockProps> = ({
                             setEditTaskText(t.text);
                             setEditTaskPriority(t.priority || 'medium');
                           }}
-                          variant={!isOwner ? 'amber' : 'emerald'}
+                          variant={!isOwner ? 'blue' : 'purple'}
                           size="xs"
                           title="Edit task"
                         >
