@@ -85,7 +85,7 @@ export const AppSelect: React.FC<AppSelectProps> = ({
           <div
             role="listbox"
             aria-label={ariaLabel}
-            className={`absolute z-50 mt-1.5 w-max min-w-full max-w-[min(18rem,calc(100vw-1.5rem))] bg-white border border-slate-200 rounded-2xl shadow-lg p-1.5 max-h-72 overflow-y-auto ${
+            className={`neu absolute z-50 mt-1.5 w-max min-w-full max-w-[min(18rem,calc(100vw-1.5rem))] rounded-2xl p-1.5 max-h-72 overflow-y-auto ${
               align === 'right' ? 'right-0' : 'left-0'
             }`}
           >
@@ -100,8 +100,8 @@ export const AppSelect: React.FC<AppSelectProps> = ({
                   onClick={() => pick(option.value)}
                   className={`w-full text-left px-2.5 py-2 rounded-xl text-xs font-semibold transition flex items-center gap-2 cursor-pointer ${
                     isSelected
-                      ? 'bg-emerald-50 text-emerald-900'
-                      : 'text-slate-700 hover:bg-slate-50 hover:text-slate-900'
+                      ? 'neu-inset-sm text-emerald-800'
+                      : 'text-slate-700 hover:text-slate-900'
                   }`}
                 >
                   <span className="min-w-0 flex-1">

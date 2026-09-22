@@ -45,6 +45,7 @@ import {
   ArrowRight,
   Sparkles,
   Briefcase,
+  Copy,
   ListChecks,
   CalendarCheck,
   UsersRound,
@@ -377,6 +378,7 @@ export default function App() {
   // Realtime client list & active client profile listener
   const [activeClientProfile, setActiveClientProfile] = useState<UserProfile | null>(null);
   const [isAccountMenuOpen, setIsAccountMenuOpen] = useState(false);
+  const [copiedEmail, setCopiedEmail] = useState(false);
 
   /**
    * A professional who removes a client marks the shared request "removed".
@@ -1832,14 +1834,14 @@ export default function App() {
               </div>
             ) : visibleClients.length > 0 ? (
               <div className="flex items-center gap-1 bg-slate-100 p-0.5 sm:p-1 rounded-xl text-xs font-semibold min-w-0 shrink">
-                <span className="text-[10px] text-slate-400 uppercase font-bold pl-1 hidden md:inline">
-                  Workspace:
+                <span className="text-[10px] text-slate-500 font-bold pl-1 hidden md:inline">
+                  Workspace
                 </span>
                 <AppSelect
                   value={workspaceUid || user.uid}
                   onChange={handleSwitchWorkspace}
                   ariaLabel="Switch workspace"
-                  className="bg-white border border-slate-200 rounded-lg px-1.5 py-0.5 sm:px-2 sm:py-1 text-slate-800 text-[10.5px] sm:text-xs font-bold hover:border-slate-300 focus:outline-none focus:ring-1 focus:ring-emerald-500 w-full min-w-0 max-w-[118px] sm:max-w-[180px]"
+                  className="neu-sm press px-2.5 py-1.5 rounded-xl text-slate-800 text-[11px] sm:text-xs font-bold w-full min-w-0 max-w-[130px] sm:max-w-[190px]"
                   options={[
                     { value: user.uid, label: 'My Workspace' },
                     ...visibleClients.map((c) => {
@@ -2059,7 +2061,7 @@ export default function App() {
                       + in the tab bar is where new goals come from. */}
                   <div className="relative z-10 flex items-center justify-between gap-3 flex-wrap">
                     <h1 className="text-xl sm:text-2xl font-extrabold text-slate-800 tracking-tight">
-                      Your Goals
+                      Overview
                     </h1>
 
                     {/* Clickable neumorphic keys */}
@@ -2130,29 +2132,30 @@ export default function App() {
                   </>
                 )}
 
-                {/* Client Workspaces You Support (Shown if you are a professional connected to clients) */}
+                {/* Clients you work with: one row each, and the whole row is the
+                    control, so nobody has to guess that a name is clickable. */}
                 {isOwner && visibleClients.length > 0 && (
-                  <div className="rise rise-2 neu-deep text-white rounded-2xl p-5 sm:p-6 space-y-3.5">
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <span className="neu-sm text-[10px] font-bold uppercase tracking-wider text-emerald-800 px-2 py-0.5 rounded-md">
-                            Professional Access
-                          </span>
-                          <span className="text-xs text-slate-600">
-                            {visibleClients.length} Connected Client{visibleClients.length > 1 ? 's' : ''}
-                          </span>
+                  <section className="rise rise-2 neu-deep p-4 sm:p-5">
+                    <div className="flex items-center justify-between gap-3 mb-3">
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <span className="neu-sm w-9 h-9 rounded-xl grid place-items-center shrink-0">
+                          <UsersRound className="w-4 h-4 text-blue-700" />
+                        </span>
+                        <div className="min-w-0">
+                          <h2 className="text-sm sm:text-base font-bold text-slate-800 truncate">
+                            Clients you work with
+                          </h2>
+                          <p className="hidden sm:block text-[11px] text-slate-600 truncate">
+                            Open a workspace to plan their routines and tasks.
+                          </p>
                         </div>
-                        <h3 className="text-base sm:text-lg font-bold text-slate-800 mt-1">
-                          Client Workspaces You Support
-                        </h3>
-                        <p className="text-xs text-slate-600 max-w-2xl leading-relaxed">
-                          You are approved as a professional for the following clients. Switch to their workspace to design routines, add subcategories, and manage daily task plans.
-                        </p>
                       </div>
+                      <span className="neu-sm shrink-0 text-[11px] font-bold text-slate-700 px-2.5 py-1 rounded-lg tabular-nums">
+                        {visibleClients.length}
+                      </span>
                     </div>
 
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5 pt-1">
+                    <ul className="space-y-2.5">
                       {visibleClients.map((client) => {
                         const collab = (client.collaborators || []).find((c) => c.uid === user.uid);
                         // Goals are shared through the client's own records, so the
@@ -2161,54 +2164,52 @@ export default function App() {
                         const assignedCount = sharedGoals.filter(
                           (g) => g.userId === client.id
                         ).length;
+                        const joined =
+                          formatJoinedDate(client.createdAt) || formatJoinedDate(collab?.addedAt);
+                        const initial = (client.displayName || client.email || 'C')
+                          .charAt(0)
+                          .toUpperCase();
 
                         return (
-                          <div
-                            key={client.id}
-                            className="lift neu-sm rounded-xl p-4 flex flex-col justify-between space-y-3"
-                          >
-                            <div>
-                              <div className="flex items-center justify-between gap-2">
-                                <span className="text-sm font-bold text-slate-800 truncate">
-                                  {client.displayName || client.email || 'Client'}
-                                </span>
-                                <span className="text-[10px] font-bold text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded-md">
-                                  Client
-                                </span>
-                              </div>
-                              <p className="text-[11px] text-slate-400 truncate mt-0.5">
-                                {client.email}
-                              </p>
-                              {(formatJoinedDate(client.createdAt) || formatJoinedDate(collab?.addedAt)) && (
-                                <p className="text-[11px] text-slate-400 mt-0.5">
-                                  {formatJoinedDate(client.createdAt)
-                                    ? `Joined ${formatJoinedDate(client.createdAt)}`
-                                    : `Connected ${formatJoinedDate(collab?.addedAt)}`}
-                                </p>
-                              )}
-                              <div className="text-xs text-slate-600 mt-2.5 flex items-center gap-1.5 font-medium">
-                                <Target className="w-3.5 h-3.5 text-emerald-600" />
-                                <span>
-                                  {assignedCount === 'All'
-                                    ? 'All Goals Assigned'
-                                    : `${assignedCount} Assigned Session(s)`}
-                                </span>
-                              </div>
-                            </div>
-
+                          <li key={client.id}>
                             <button
                               type="button"
                               onClick={() => handleSwitchWorkspace(client.id || '')}
-                              className="w-full bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold py-2 px-3 rounded-lg shadow-2xs transition cursor-pointer flex items-center justify-center gap-1.5 active:scale-98"
+                              title={`Open ${client.displayName || client.email || 'client'}'s workspace`}
+                              className="neu lift group w-full flex items-center gap-3 p-3 rounded-2xl text-left cursor-pointer"
                             >
-                              <span>Open Roadmap & Edit Subcategories</span>
-                              <ArrowRight className="w-3.5 h-3.5" />
+                              <span className="neu-inset-sm w-10 h-10 rounded-full grid place-items-center text-sm font-black text-purple-700 shrink-0">
+                                {initial}
+                              </span>
+                              <span className="min-w-0 flex-1">
+                                <span className="block text-sm font-bold text-slate-800 truncate">
+                                  {client.displayName || 'Client'}
+                                </span>
+                                {/* Two clients can share a name, so the email sits
+                                    right under it as the real identifier. */}
+                                <span className="block text-[11px] font-medium text-slate-600 truncate">
+                                  {client.email}
+                                </span>
+                                <span className="mt-1 flex items-center gap-1.5 text-[11px] font-semibold text-slate-600 flex-wrap">
+                                  <Target className="w-3 h-3 text-emerald-600 shrink-0" />
+                                  <span>
+                                    {assignedCount === 0
+                                      ? 'No sessions assigned'
+                                      : `${assignedCount} assigned session${assignedCount > 1 ? 's' : ''}`}
+                                  </span>
+                                  {joined && <span className="text-slate-500">joined {joined}</span>}
+                                </span>
+                              </span>
+                              <span className="neu-sm shrink-0 flex items-center gap-1 px-3 py-2 rounded-xl text-[11px] font-bold text-emerald-800">
+                                <span>Open</span>
+                                <ArrowRight className="w-3 h-3 group-hover:translate-x-0.5 transition-transform" />
+                              </span>
                             </button>
-                          </div>
+                          </li>
                         );
                       })}
-                    </div>
-                  </div>
+                    </ul>
+                  </section>
                 )}
 
                 {/* Filter and Search Bar */}
@@ -2598,9 +2599,10 @@ export default function App() {
                                   setSelectedGoalId(g.id);
                                   setActiveTab('detail');
                                 }}
-                                className="text-xs font-semibold text-emerald-600 hover:text-emerald-800 hover:underline cursor-pointer"
+                                className="neu-sm press flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-bold text-emerald-800 cursor-pointer"
                               >
-                                View Roadmap →
+                                <span>View Roadmap</span>
+                                <ArrowRight className="w-3 h-3" />
                               </button>
                             </div>
                           </div>
@@ -3256,9 +3258,28 @@ export default function App() {
             <span>•</span>
             <span>Firestore Cloud Sync Active</span>
           </div>
-          <div className="flex items-center gap-2">
-            <span>Logged in as: <span className="font-medium text-slate-700">{user.email}</span></span>
-          </div>
+          {/* The address is the one thing here worth acting on, so it is a button
+              that copies itself rather than a line of text. */}
+          <button
+            type="button"
+            onClick={() => {
+              if (!user.email) return;
+              void navigator.clipboard?.writeText(user.email).catch(() => {});
+              setCopiedEmail(true);
+              window.setTimeout(() => setCopiedEmail(false), 2000);
+            }}
+            title="Copy your email address"
+            className="neu-sm press flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg font-semibold text-slate-700 cursor-pointer"
+          >
+            {copiedEmail ? (
+              <Check className="w-3 h-3 text-emerald-700" />
+            ) : (
+              <Copy className="w-3 h-3 text-slate-500" />
+            )}
+            <span className="truncate max-w-[190px]">
+              {copiedEmail ? 'Email copied' : user.email}
+            </span>
+          </button>
         </div>
       </footer>
 
