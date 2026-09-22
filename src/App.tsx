@@ -830,6 +830,138 @@ export default function App() {
     window.scrollTo({ top: 0, behavior: 'auto' });
   };
 
+  // ------------------------------------------------- back-button nav
+  /**
+   * Browser / phone back button should walk inside the app first:
+   *   detail -> Goals, Today/Connect/Profile -> Goals,
+   *   Goals (1st back) -> "press back again" toast, Goals (2nd back) -> leave.
+   * Modals and menus close first. One history trap keeps the first back
+   * interceptable on laptop and phone instead of exiting / getting stuck.
+   */
+  const [exitPromptVisible, setExitPromptVisible] = useState(false);
+  const lastBackPressRef = useRef(0);
+  const exitPromptTimerRef = useRef<number | null>(null);
+  const navStateRef = useRef({
+    activeTab,
+    selectedGoalId,
+    isModalOpen,
+    managingAssignedGoal,
+    giveUpTargetGoal,
+    personaPickerOpen,
+    isAccountMenuOpen,
+    isEditingGoalHeader,
+  });
+  navStateRef.current = {
+    activeTab,
+    selectedGoalId,
+    isModalOpen,
+    managingAssignedGoal,
+    giveUpTargetGoal,
+    personaPickerOpen,
+    isAccountMenuOpen,
+    isEditingGoalHeader,
+  };
+
+  useEffect(() => {
+    if (!user) return;
+    // Trap so the first system-back press fires popstate while we are inside.
+    try {
+      window.history.pushState({ goalPathBackTrap: true }, '');
+    } catch {
+      /* history unavailable (e.g. tests) - in-app tabs still work */
+    }
+
+    const reTrap = () => {
+      try {
+        window.history.pushState({ goalPathBackTrap: true }, '');
+      } catch {
+        /* ignore */
+      }
+    };
+
+    const goHome = () => {
+      setTabDirection(-1);
+      setSelectedGoalId(null);
+      setActiveTab('dashboard');
+      window.scrollTo({ top: 0, behavior: 'auto' });
+    };
+
+    const handlePopState = () => {
+      const s = navStateRef.current;
+
+      // 1. Close topmost layer first.
+      if (s.isAccountMenuOpen) {
+        setIsAccountMenuOpen(false);
+        reTrap();
+        return;
+      }
+      if (s.isModalOpen) {
+        setIsModalOpen(false);
+        reTrap();
+        return;
+      }
+      if (s.managingAssignedGoal) {
+        setManagingAssignedGoal(null);
+        reTrap();
+        return;
+      }
+      if (s.giveUpTargetGoal) {
+        setGiveUpTargetGoal(null);
+        reTrap();
+        return;
+      }
+      if (s.personaPickerOpen) {
+        setPersonaPickerOpen(false);
+        reTrap();
+        return;
+      }
+      if (s.isEditingGoalHeader) {
+        setIsEditingGoalHeader(false);
+        reTrap();
+        return;
+      }
+
+      // 2. Goal detail -> Goals home.
+      if (s.activeTab === 'detail' || s.selectedGoalId) {
+        goHome();
+        reTrap();
+        return;
+      }
+
+      // 3. Any other tab (Today / Connect / Profile) -> Goals home.
+      if (s.activeTab !== 'dashboard') {
+        goHome();
+        reTrap();
+        return;
+      }
+
+      // 4. Already on Goals: ask for a second back within 2s to leave.
+      const now = Date.now();
+      if (now - lastBackPressRef.current < 2000) {
+        setExitPromptVisible(false);
+        // No re-trap: let the browser actually go back / close the app.
+        return;
+      }
+      lastBackPressRef.current = now;
+      setExitPromptVisible(true);
+      reTrap();
+      if (exitPromptTimerRef.current !== null) {
+        window.clearTimeout(exitPromptTimerRef.current);
+      }
+      exitPromptTimerRef.current = window.setTimeout(() => {
+        setExitPromptVisible(false);
+      }, 2000);
+    };
+
+    window.addEventListener('popstate', handlePopState);
+    return () => {
+      window.removeEventListener('popstate', handlePopState);
+      if (exitPromptTimerRef.current !== null) {
+        window.clearTimeout(exitPromptTimerRef.current);
+      }
+    };
+  }, [user]);
+
   // The pill that glides between tabs, measured separately for each bar.
   const desktopNav = useSegmentedTrack(activeTab);
   const phoneNav = useSegmentedTrack(activeTab);
@@ -3316,6 +3448,15 @@ export default function App() {
           await handleExtendGoalDeadline(goalId, monthsToAdd);
         }}
       />
+
+      {/* DOUBLE-BACK EXIT HINT: phone + laptop, above the tab bar */}
+      {exitPromptVisible && (
+        <div className="fixed bottom-20 sm:bottom-8 inset-x-0 z-50 flex justify-center px-4 pointer-events-none">
+          <div className="bg-slate-900 text-white text-xs font-semibold px-4 py-2.5 rounded-full shadow-lg animate-in fade-in duration-150">
+            Press back again to leave
+          </div>
+        </div>
+      )}
 
       {/* PHONE TAB BAR: a floating pill that stays on screen while you scroll */}
       <nav className="sm:hidden fixed bottom-0 inset-x-0 z-40 px-3 safe-bottom pointer-events-none">
