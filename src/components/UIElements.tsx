@@ -47,6 +47,77 @@ export const GoalPathLogo: React.FC<{ size?: 'sm' | 'md' | 'lg'; showText?: bool
   );
 };
 
+/**
+ * Full-screen friendly loader: the brand mark on top, then the "snake"
+ * connecting two heads — a dot travels the winding path from one ball to
+ * the other while the line itself flows. It unmounts when loading finishes,
+ * so the animation simply stops.
+ */
+export const GoalPathLoader: React.FC<{ message?: string }> = ({
+  message = 'Loading goals from cloud...',
+}) => {
+  const pathD = 'M 20 32 C 55 32, 55 12, 90 32 S 125 52, 160 32';
+  return (
+    <div
+      role="status"
+      aria-live="polite"
+      className="flex flex-col items-center justify-center text-center py-20 min-h-[55vh] w-full"
+    >
+      <GoalPathLogo size="lg" showText={true} />
+      <svg
+        width="180"
+        height="64"
+        viewBox="0 0 180 64"
+        fill="none"
+        aria-hidden="true"
+        className="mt-6"
+      >
+        {/* Faint track the snake travels on */}
+        <path
+          d={pathD}
+          stroke="var(--color-slate-200)"
+          strokeWidth="6"
+          strokeLinecap="round"
+        />
+        {/* Flowing snake segment */}
+        <path
+          d={pathD}
+          stroke="var(--color-emerald-600)"
+          strokeWidth="6"
+          strokeLinecap="round"
+          className="gp-loader-flow"
+        />
+        {/* Start ball */}
+        <circle cx="20" cy="32" r="9" fill="var(--color-emerald-100)" />
+        <circle
+          cx="20"
+          cy="32"
+          r="9"
+          stroke="var(--color-emerald-600)"
+          strokeWidth="2.5"
+        />
+        <circle cx="20" cy="32" r="3.5" fill="var(--color-emerald-700)" />
+        {/* End ball with a soft pulse as the head arrives */}
+        <circle cx="160" cy="32" r="9" fill="var(--color-emerald-100)" />
+        <circle
+          cx="160"
+          cy="32"
+          r="9"
+          stroke="var(--color-emerald-600)"
+          strokeWidth="2.5"
+          className="gp-loader-ball-pulse"
+        />
+        <circle cx="160" cy="32" r="3.5" fill="var(--color-emerald-700)" />
+        {/* Travelling head: reaches from one ball to the other */}
+        <circle r="5" fill="var(--color-emerald-700)">
+          <animateMotion dur="1.6s" repeatCount="indefinite" path={pathD} />
+        </circle>
+      </svg>
+      <span className="mt-4 text-xs font-semibold text-slate-600">{message}</span>
+    </div>
+  );
+};
+
 export const PriorityBadge: React.FC<{ priority?: 'high' | 'medium' | 'low' | string }> = ({ priority }) => {
   const colors: Record<string, string> = {
     high: 'bg-rose-100 text-rose-950 border-rose-300 font-bold',

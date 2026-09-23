@@ -84,7 +84,7 @@ import {
 
 import { LoginScreen } from './components/LoginScreen';
 import { AppSelect } from './components/AppSelect';
-import { PriorityBadge, ProgressBar, GoalPathLogo, GlassIconButton, GlassBadge } from './components/UIElements';
+import { PriorityBadge, ProgressBar, GoalPathLogo, GoalPathLoader, GlassIconButton, GlassBadge } from './components/UIElements';
 import { DailyTaskSection } from './components/DailyTaskSection';
 import { MonthlyMilestoneSection } from './components/MonthlyMilestoneSection';
 import { CollaboratorsPanel } from './components/CollaboratorsPanel';
@@ -1837,11 +1837,8 @@ export default function App() {
   // LOADING & LOGIN GATES
   if (authLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-50">
-        <div className="flex flex-col items-center gap-3">
-          <div className="w-8 h-8 border-2 border-emerald-600 border-t-transparent rounded-full animate-spin"></div>
-          <span className="text-xs font-semibold text-slate-500">Checking authentication...</span>
-        </div>
+      <div className="min-h-screen flex items-center justify-center">
+        <GoalPathLoader message="Checking authentication..." />
       </div>
     );
   }
@@ -2112,7 +2109,7 @@ export default function App() {
                   {typeof count === 'number' && count > 0 && (
                     <span
                       className={`text-[11px] font-bold tabular-nums ${
-                        active ? 'text-white/75' : 'text-slate-400'
+                        active ? 'text-white/75' : 'text-slate-600'
                       }`}
                     >
                       {count}
@@ -2140,14 +2137,7 @@ export default function App() {
         className="max-w-6xl mx-auto px-3 sm:px-6 pt-5 pb-28 sm:py-8 flex-1 w-full relative z-10"
       >
         {dataLoading && activeTab !== 'connect' && activeTab !== 'professional' ? (
-          <div className="text-center py-20">
-            <div
-              className={`w-8 h-8 border-2 ${
-                !isOwner ? 'border-blue-600' : 'border-emerald-600'
-              } border-t-transparent rounded-full animate-spin mx-auto mb-3`}
-            ></div>
-            <span className="text-xs font-semibold text-slate-400">Loading goals from cloud...</span>
-          </div>
+          <GoalPathLoader message="Loading goals from cloud..." />
         ) : (
           <div key={activeTab} className="tab-panel" data-dir={tabDirection}>
             {/* VIEW 1: ALL GOALS DASHBOARD */}
@@ -2212,7 +2202,7 @@ export default function App() {
                         <div className="text-[10px] font-semibold text-slate-600">
                           {!isOwner ? 'Client Goals' : 'Active Goals'}
                         </div>
-                        <div className="text-[9px] font-semibold text-slate-500 group-hover/card:text-purple-700 flex items-center justify-center sm:justify-start gap-0.5 mt-0.5 transition">
+                        <div className="text-[9px] font-bold text-slate-600 group-hover/card:text-purple-700 flex items-center justify-center sm:justify-start gap-0.5 mt-0.5 transition">
                           <span>View Grid</span>
                           <ArrowRight className="w-2.5 h-2.5 group-hover/card:translate-x-0.5 transition-transform" />
                         </div>
@@ -2231,7 +2221,7 @@ export default function App() {
                         <div className="text-[10px] font-semibold text-slate-600">
                           Tasks Today
                         </div>
-                        <div className="text-[9px] font-semibold text-slate-500 group-hover/card:text-emerald-700 flex items-center justify-center sm:justify-start gap-0.5 mt-0.5 transition">
+                        <div className="text-[9px] font-bold text-slate-600 group-hover/card:text-emerald-700 flex items-center justify-center sm:justify-start gap-0.5 mt-0.5 transition">
                           <span>Focus Mode</span>
                           <ArrowRight className="w-2.5 h-2.5 group-hover/card:translate-x-0.5 transition-transform" />
                         </div>
@@ -2253,7 +2243,7 @@ export default function App() {
                         <div className="text-[10px] font-semibold text-slate-600">
                           Progress
                         </div>
-                        <div className="text-[9px] font-semibold text-slate-500 group-hover/card:text-blue-700 flex items-center justify-center sm:justify-start gap-0.5 mt-0.5 transition">
+                        <div className="text-[9px] font-bold text-slate-600 group-hover/card:text-blue-700 flex items-center justify-center sm:justify-start gap-0.5 mt-0.5 transition">
                           <span>Roadmap</span>
                           <ArrowRight className="w-2.5 h-2.5 group-hover/card:translate-x-0.5 transition-transform" />
                         </div>
@@ -2347,13 +2337,13 @@ export default function App() {
                 {/* Filter and Search Bar */}
                 <div id="goals-grid" className="flex flex-col sm:flex-row items-center justify-between gap-3 scroll-mt-24">
                   <div className="relative w-full sm:w-72">
-                    <Search className="absolute left-2.5 top-2.5 text-slate-400 w-3.5 h-3.5" />
+                    <Search className="absolute left-2.5 top-2.5 text-slate-600 w-3.5 h-3.5" />
                     <input
                       type="text"
                       placeholder="Search goals or descriptions..."
                       value={searchQuery}
                       onChange={(e) => setSearchQuery(e.target.value)}
-                      className={`w-full text-xs bg-white border rounded-xl pl-8 pr-3 py-2 text-slate-800 placeholder-slate-400 focus:outline-none ${
+                      className={`w-full text-xs bg-white border rounded-xl pl-8 pr-3 py-2 text-slate-800 placeholder-slate-500 focus:outline-none ${
                         !isOwner
                           ? 'border-purple-200 focus:ring-2 focus:ring-purple-500/20 focus:border-purple-600'
                           : 'border-slate-200 focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600'
@@ -2362,7 +2352,7 @@ export default function App() {
                   </div>
 
                   <div className="flex items-center gap-2 w-full sm:w-auto overflow-x-auto pb-1">
-                    <span className="text-xs text-slate-400 font-medium flex-shrink-0">Category:</span>
+                    <span className="text-xs text-slate-700 font-bold flex-shrink-0">Category:</span>
                     {categories.map((cat) => (
                       <button
                         key={cat}
@@ -2396,7 +2386,7 @@ export default function App() {
                       <Target className="w-7 h-7" />
                     </div>
                     <h3 className="text-base font-semibold text-slate-800">No matching goals found</h3>
-                    <p className="text-slate-400 text-sm max-w-sm mx-auto mt-1 mb-5">
+                    <p className="text-slate-600 font-medium text-sm max-w-sm mx-auto mt-1 mb-5">
                       {searchQuery
                         ? 'Try clearing your search query or create a new goal.'
                         : isOwner
@@ -2458,7 +2448,7 @@ export default function App() {
                               >
                                 {goal.category || 'General'}
                               </span>
-                              <span className="text-xs font-medium text-slate-400">
+                              <span className="text-xs font-bold text-slate-600">
                                 Target: {formatMonthKey(goal.targetDate)}
                               </span>
                             </div>
@@ -2538,14 +2528,14 @@ export default function App() {
                             )}
 
                             {goal.description && (
-                              <p className="text-slate-500 text-xs line-clamp-2 leading-relaxed mb-4">
+                              <p className="text-slate-700 font-medium text-xs line-clamp-2 leading-relaxed mb-4">
                                 {goal.description}
                               </p>
                             )}
 
                             {/* Current milestone spotlight */}
                             <div className="bg-slate-50 border border-slate-100 rounded-xl p-3 mb-4">
-                              <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1 flex items-center justify-between">
+                              <div className="text-[10px] font-bold text-slate-600 uppercase tracking-wider mb-1 flex items-center justify-between">
                                 <span>Current Horizon</span>
                                 <span>{curMilestone ? formatMonthKey(curMilestone.monthKey) : ''}</span>
                               </div>
@@ -2570,14 +2560,14 @@ export default function App() {
 
                           <div className="space-y-2 pt-2 border-t border-slate-100">
                             <div className="flex justify-between items-center text-xs font-medium">
-                              <span className="text-slate-400">
+                              <span className="text-slate-600 font-semibold">
                                 Milestones ({doneM}/{totalM})
                               </span>
                               <span className="text-slate-800 font-semibold">{pct}%</span>
                             </div>
                             <ProgressBar value={pct} height="h-1.5" />
 
-                            <div className="flex items-center justify-between text-[11px] text-slate-400 pt-1">
+                            <div className="flex items-center justify-between text-[11px] font-medium text-slate-600 pt-1">
                               <span>Today's Actions</span>
                               <span className="font-semibold text-slate-700">
                                 {doneTodayTasks}/{goalTodayTasks.length} completed
@@ -2622,21 +2612,21 @@ export default function App() {
                       <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-600 bg-emerald-50 px-2.5 py-0.5 rounded-md">
                         Today's Action Focus
                       </span>
-                      <span className="text-xs font-semibold text-slate-400">
+                      <span className="text-xs font-bold text-slate-600">
                         {formatFullMonth(curMonthKey)}
                       </span>
                     </div>
                     <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 mt-1">
                       {formatDisplayDate(todayDate)}
                     </h1>
-                    <p className="text-slate-500 text-xs sm:text-sm mt-0.5">
+                    <p className="text-slate-700 font-medium text-xs sm:text-sm mt-0.5">
                       Your complete task breakdown and subcategories for today across all goals.
                     </p>
                   </div>
 
                   <div className="flex items-center gap-4 bg-slate-50 border border-slate-200/80 px-5 py-3 rounded-2xl self-start sm:self-auto">
                     <div>
-                      <div className="text-xs text-slate-400 font-medium">Today's Progress</div>
+                      <div className="text-xs text-slate-600 font-bold">Today's Progress</div>
                       <div className="text-2xl font-black text-emerald-600">
                         {allTodayTasks.filter((t) => t.completed).length} / {allTodayTasks.length}
                       </div>
@@ -2658,7 +2648,7 @@ export default function App() {
 
                 {/* Goals Work Breakdown for Today */}
                 {goals.length === 0 ? (
-                  <div className="rise neu rounded-3xl p-12 text-center text-slate-400 text-sm">
+                  <div className="rise neu rounded-3xl p-12 text-center font-medium text-slate-600 text-sm">
                     No active goals yet. Create a goal to start planning your daily tasks.
                   </div>
                 ) : allTodayTasks.length === 0 ? (
@@ -2948,30 +2938,6 @@ export default function App() {
                                             </label>
                                             <div className="flex items-center gap-2 flex-shrink-0">
                                               <PriorityBadge priority={task.priority} />
-                                              {canEditThis && (
-                                                <>
-                                                  <button
-                                                    type="button"
-                                                    onClick={() => {
-                                                      setTodayEditingTaskId(task.id);
-                                                      setTodayEditTaskText(task.text);
-                                                      setTodayEditTaskPriority(task.priority);
-                                                    }}
-                                                    className="text-slate-400 hover:text-emerald-700 p-1 text-xs transition cursor-pointer"
-                                                    title="Edit task text or priority"
-                                                  >
-                                                    <Edit2 className="w-3.5 h-3.5" />
-                                                  </button>
-                                                  <button
-                                                    type="button"
-                                                    onClick={() => handleDeleteTask(g.id, task.id)}
-                                                    className="text-slate-300 hover:text-rose-500 p-1 text-xs transition cursor-pointer"
-                                                    title="Delete task"
-                                                  >
-                                                    <Trash2 className="w-3.5 h-3.5" />
-                                                  </button>
-                                                </>
-                                              )}
                                             </div>
                                           </div>
                                         );
@@ -3023,16 +2989,6 @@ export default function App() {
                                       </label>
                                       <div className="flex items-center gap-2 flex-shrink-0">
                                         <PriorityBadge priority={task.priority} />
-                                        {canEditTaskRecord(g.id, task) && (
-                                          <button
-                                            type="button"
-                                            onClick={() => handleDeleteTask(g.id, task.id)}
-                                            className="text-slate-300 hover:text-rose-500 p-0.5 text-xs transition cursor-pointer"
-                                            title="Delete task"
-                                          >
-                                            <Trash2 className="w-3.5 h-3.5" />
-                                          </button>
-                                        )}
                                       </div>
                                     </div>
                                   ))}
