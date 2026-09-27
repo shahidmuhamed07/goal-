@@ -49,9 +49,9 @@ export const GoalPathLogo: React.FC<{ size?: 'sm' | 'md' | 'lg' | 'xl'; showText
 };
 
 /**
- * Full-screen loader: the app's own logo, huge and breathing, with a winding
- * path flowing above it. A dot travels the path top to bottom, like a journey
- * progressing from start to goal. The animation loops until loading finishes.
+ * Full-screen loader: the app's logo with a winding snake animating inside it.
+ * The snake travels through the logo box top to bottom, showing activity while
+ * the app loads. The logo box itself breathes gently.
  */
 export const GoalPathLoader: React.FC<{ message?: string }> = ({
   message,
@@ -62,61 +62,56 @@ export const GoalPathLoader: React.FC<{ message?: string }> = ({
     className="flex flex-col items-center justify-center text-center py-20 min-h-[55vh] w-full"
   >
     <div className="gp-loader-container">
-      {/* Winding path with traveling dot */}
-      <svg
-        width="140"
-        height="180"
-        viewBox="0 0 140 180"
-        fill="none"
-        className="gp-loader-path-svg"
-        aria-hidden="true"
-      >
-        {/* Faint track the dot travels on */}
-        <path
-          d="M 70 10 Q 40 30, 40 60 Q 40 90, 70 110 Q 100 130, 70 160"
-          stroke="var(--color-emerald-100)"
-          strokeWidth="5"
-          strokeLinecap="round"
-        />
-        {/* Glowing path segment */}
-        <path
-          d="M 70 10 Q 40 30, 40 60 Q 40 90, 70 110 Q 100 130, 70 160"
-          stroke="var(--color-emerald-600)"
-          strokeWidth="5"
-          strokeLinecap="round"
-          className="gp-loader-flow"
-        />
-        {/* Start point */}
-        <circle cx="70" cy="10" r="6" fill="var(--color-emerald-100)" />
-        <circle
-          cx="70"
-          cy="10"
-          r="6"
-          stroke="var(--color-emerald-600)"
-          strokeWidth="2"
-        />
-        {/* Travelling dot */}
-        <circle r="4" fill="var(--color-emerald-700)" className="gp-loader-dot">
-          <animateMotion
-            dur="2s"
-            repeatCount="indefinite"
-            path="M 70 10 Q 40 30, 40 60 Q 40 90, 70 110 Q 100 130, 70 160"
-          />
-        </circle>
-        {/* End point (goal) */}
-        <circle cx="70" cy="160" r="6" fill="var(--color-emerald-100)" />
-        <circle
-          cx="70"
-          cy="160"
-          r="6"
-          stroke="var(--color-emerald-600)"
-          strokeWidth="2"
-        />
-      </svg>
+      {/* Logo with internal animation */}
+      <div className="gp-loader-mark gp-loader-logo-wrapper">
+        <svg
+          width="96"
+          height="96"
+          viewBox="0 0 96 96"
+          fill="none"
+          className="gp-loader-logo-box"
+          aria-hidden="true"
+        >
+          {/* Background box */}
+          <rect width="96" height="96" rx="16" fill="url(#logoGradient)" />
 
-      {/* Logo below the path */}
-      <div className="gp-loader-mark mt-4">
-        <GoalPathLogo size="xl" showText={false} />
+          {/* Winding snake path inside the logo */}
+          {/* Faint track */}
+          <path
+            d="M 48 12 Q 28 24, 28 40 Q 28 56, 48 68 Q 68 80, 48 84"
+            stroke="rgba(255, 255, 255, 0.3)"
+            strokeWidth="3"
+            strokeLinecap="round"
+            fill="none"
+          />
+
+          {/* Animated glowing segment */}
+          <path
+            d="M 48 12 Q 28 24, 28 40 Q 28 56, 48 68 Q 68 80, 48 84"
+            stroke="rgba(255, 255, 255, 0.9)"
+            strokeWidth="3"
+            strokeLinecap="round"
+            fill="none"
+            className="gp-loader-snake"
+          />
+
+          {/* Travelling dot */}
+          <circle r="2.5" fill="white" className="gp-loader-snake-dot">
+            <animateMotion
+              dur="2s"
+              repeatCount="indefinite"
+              path="M 48 12 Q 28 24, 28 40 Q 28 56, 48 68 Q 68 80, 48 84"
+            />
+          </circle>
+
+          {/* Gradient definition */}
+          <defs>
+            <linearGradient id="logoGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" stopColor="#10b981" />
+              <stop offset="100%" stopColor="#0d9488" />
+            </linearGradient>
+          </defs>
+        </svg>
       </div>
     </div>
   </div>

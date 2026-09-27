@@ -500,34 +500,42 @@ input[type="radio"] {
   z-index: 10;
 }
 
-/* Loader container: logo below, path above */
+/* Loader container: centered logo */
 .gp-loader-container {
   display: flex;
-  flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 1rem;
 }
 
-/* SVG path container */
-.gp-loader-path-svg {
-  max-width: 140px;
-  height: auto;
+/* Logo wrapper with breathing animation */
+.gp-loader-logo-wrapper {
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
-/* Glowing path segment that animates */
-@keyframes gp-loader-flow {
+/* SVG logo box */
+.gp-loader-logo-box {
+  width: 96px;
+  height: 96px;
+  filter: drop-shadow(0 8px 20px rgba(16, 185, 129, 0.3));
+}
+
+/* Glowing snake segment that animates */
+@keyframes gp-loader-snake-glow {
   from {
     stroke-dashoffset: 0;
+    stroke-opacity: 0.5;
   }
   to {
-    stroke-dashoffset: -160;
+    stroke-dashoffset: -120;
+    stroke-opacity: 1;
   }
 }
 
-.gp-loader-flow {
-  stroke-dasharray: 40 120;
-  animation: gp-loader-flow 2s linear infinite;
+.gp-loader-snake {
+  stroke-dasharray: 25 95;
+  animation: gp-loader-snake-glow 2s linear infinite;
 }
 
 /* Interactive surfaces answer the pointer */
