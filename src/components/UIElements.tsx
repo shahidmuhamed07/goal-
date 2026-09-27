@@ -49,8 +49,8 @@ export const GoalPathLogo: React.FC<{ size?: 'sm' | 'md' | 'lg' | 'xl'; showText
 };
 
 /**
- * Full-screen loader: Route logo with dot animation traveling along the path
- * from top circle to bottom circle. Just the logo, nothing else.
+ * Full-screen loader: Just the Route logo, breathing gently.
+ * No animation, no text. Pure logo.
  */
 export const GoalPathLoader: React.FC<{ message?: string }> = () => (
   <div
@@ -59,47 +59,7 @@ export const GoalPathLoader: React.FC<{ message?: string }> = () => (
     className="flex items-center justify-center min-h-screen w-full"
   >
     <div className="gp-loader-mark">
-      <div className="gp-loader-logo-with-animation">
-        <GoalPathLogo size="xl" showText={false} />
-
-        {/* SVG overlay with animating dot */}
-        <svg
-          width="80"
-          height="80"
-          viewBox="0 0 80 80"
-          fill="none"
-          className="gp-loader-animation-overlay"
-          aria-hidden="true"
-        >
-          {/* Path from top circle to bottom circle - matches the Route icon */}
-          <path
-            d="M 40 12 Q 32 18, 32 28 Q 32 38, 40 42 Q 48 46, 48 56 Q 48 66, 40 68"
-            stroke="rgba(255, 255, 255, 0.3)"
-            strokeWidth="2"
-            strokeLinecap="round"
-            fill="none"
-          />
-
-          {/* Glowing segment that travels */}
-          <path
-            d="M 40 12 Q 32 18, 32 28 Q 32 38, 40 42 Q 48 46, 48 56 Q 48 66, 40 68"
-            stroke="rgba(255, 255, 255, 0.9)"
-            strokeWidth="2"
-            strokeLinecap="round"
-            fill="none"
-            className="gp-loader-traveling"
-          />
-
-          {/* Traveling dot: starts at top circle, ends at bottom circle */}
-          <circle r="2.5" fill="white" className="gp-loader-dot">
-            <animateMotion
-              dur="2.4s"
-              repeatCount="indefinite"
-              path="M 40 12 Q 32 18, 32 28 Q 32 38, 40 42 Q 48 46, 48 56 Q 48 66, 40 68"
-            />
-          </circle>
-        </svg>
-      </div>
+      <GoalPathLogo size="xl" showText={false} />
     </div>
   </div>
 );
