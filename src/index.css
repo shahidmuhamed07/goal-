@@ -496,6 +496,39 @@ input[type="radio"] {
 .gp-loader-mark {
   transform-origin: center;
   animation: gp-loader-breathe 3.4s var(--ease-glide) infinite;
+  position: relative;
+  z-index: 10;
+}
+
+/* Loader container positions the ring and logo together */
+.gp-loader-container {
+  position: relative;
+  width: 160px;
+  height: 160px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Spinning ring around the logo */
+@keyframes gp-loader-spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.gp-loader-ring {
+  position: absolute;
+  width: 140px;
+  height: 140px;
+  border: 3px solid transparent;
+  border-top: 3px solid var(--color-emerald-600);
+  border-right: 3px solid var(--color-emerald-500);
+  border-radius: 50%;
+  animation: gp-loader-spin 2s linear infinite;
 }
 
 /* Interactive surfaces answer the pointer */

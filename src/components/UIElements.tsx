@@ -13,7 +13,7 @@ export const GoalPathMark: React.FC<{ className?: string }> = ({ className = '' 
   <Route className={className} strokeWidth={2.2} aria-hidden="true" />
 );
 
-export const GoalPathLogo: React.FC<{ size?: 'sm' | 'md' | 'lg'; showText?: boolean; className?: string }> = ({
+export const GoalPathLogo: React.FC<{ size?: 'sm' | 'md' | 'lg' | 'xl'; showText?: boolean; className?: string }> = ({
   size = 'md',
   showText = true,
   className = '',
@@ -22,6 +22,7 @@ export const GoalPathLogo: React.FC<{ size?: 'sm' | 'md' | 'lg'; showText?: bool
     sm: 'w-7 h-7',
     md: 'w-8 h-8 sm:w-9 sm:h-9',
     lg: 'w-10 h-10 sm:w-11 sm:h-11',
+    xl: 'w-20 h-20 sm:w-24 sm:h-24',
   };
 
   return (
@@ -48,23 +49,26 @@ export const GoalPathLogo: React.FC<{ size?: 'sm' | 'md' | 'lg'; showText?: bool
 };
 
 /**
- * Full-screen loader: the app's own logo, breathing gently while the cloud read
- * finishes. No separate mascot or progress doodle — the logo you see in the
- * header is what you see while the app loads. It unmounts when loading ends, so
- * the animation simply stops.
+ * Full-screen loader: the app's own logo, big and breathing with a spinning ring
+ * around it. The spinner shows activity while the cloud read finishes.
+ * It unmounts when loading ends, so the animation simply stops.
  */
 export const GoalPathLoader: React.FC<{ message?: string }> = ({
-  message = 'Loading goals from cloud...',
+  message,
 }) => (
   <div
     role="status"
     aria-live="polite"
     className="flex flex-col items-center justify-center text-center py-20 min-h-[55vh] w-full"
   >
-    <div className="gp-loader-mark">
-      <GoalPathLogo size="lg" showText={true} />
+    <div className="gp-loader-container">
+      {/* Spinning ring around the logo */}
+      <div className="gp-loader-ring" />
+      {/* Logo inside the ring */}
+      <div className="gp-loader-mark">
+        <GoalPathLogo size="xl" showText={false} />
+      </div>
     </div>
-    <span className="mt-5 text-xs font-semibold text-slate-600">{message}</span>
   </div>
 );
 
