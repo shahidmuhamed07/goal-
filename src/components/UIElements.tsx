@@ -49,9 +49,8 @@ export const GoalPathLogo: React.FC<{ size?: 'sm' | 'md' | 'lg' | 'xl'; showText
 };
 
 /**
- * Full-screen loader: the app's logo with a winding snake animating inside it.
- * The snake travels through the logo box top to bottom, showing activity while
- * the app loads. The logo box itself breathes gently.
+ * Full-screen loader: the original Route logo with a glowing segment animating
+ * along the path, traveling from top to bottom like a journey from start to goal.
  */
 export const GoalPathLoader: React.FC<{ message?: string }> = ({
   message,
@@ -62,56 +61,47 @@ export const GoalPathLoader: React.FC<{ message?: string }> = ({
     className="flex flex-col items-center justify-center text-center py-20 min-h-[55vh] w-full"
   >
     <div className="gp-loader-container">
-      {/* Logo with internal animation */}
-      <div className="gp-loader-mark gp-loader-logo-wrapper">
-        <svg
-          width="96"
-          height="96"
-          viewBox="0 0 96 96"
-          fill="none"
-          className="gp-loader-logo-box"
-          aria-hidden="true"
-        >
-          {/* Background box */}
-          <rect width="96" height="96" rx="16" fill="url(#logoGradient)" />
+      {/* Logo with animation overlay */}
+      <div className="gp-loader-mark">
+        <div className="gp-loader-logo-with-animation">
+          <GoalPathLogo size="xl" showText={false} />
 
-          {/* Winding snake path inside the logo */}
-          {/* Faint track */}
-          <path
-            d="M 48 12 Q 28 24, 28 40 Q 28 56, 48 68 Q 68 80, 48 84"
-            stroke="rgba(255, 255, 255, 0.3)"
-            strokeWidth="3"
-            strokeLinecap="round"
+          {/* SVG overlay with animating path */}
+          <svg
+            width="80"
+            height="80"
+            viewBox="0 0 80 80"
             fill="none"
-          />
-
-          {/* Animated glowing segment */}
-          <path
-            d="M 48 12 Q 28 24, 28 40 Q 28 56, 48 68 Q 68 80, 48 84"
-            stroke="rgba(255, 255, 255, 0.9)"
-            strokeWidth="3"
-            strokeLinecap="round"
-            fill="none"
-            className="gp-loader-snake"
-          />
-
-          {/* Travelling dot */}
-          <circle r="2.5" fill="white" className="gp-loader-snake-dot">
-            <animateMotion
-              dur="2s"
-              repeatCount="indefinite"
-              path="M 48 12 Q 28 24, 28 40 Q 28 56, 48 68 Q 68 80, 48 84"
+            className="gp-loader-animation-overlay"
+            aria-hidden="true"
+          >
+            {/* Faint track along the route path */}
+            <path
+              d="M 40 10 Q 20 20, 20 35 Q 20 50, 40 60 Q 60 70, 40 70"
+              stroke="rgba(255, 255, 255, 0.2)"
+              strokeWidth="2.5"
+              strokeLinecap="round"
             />
-          </circle>
 
-          {/* Gradient definition */}
-          <defs>
-            <linearGradient id="logoGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-              <stop offset="0%" stopColor="#10b981" />
-              <stop offset="100%" stopColor="#0d9488" />
-            </linearGradient>
-          </defs>
-        </svg>
+            {/* Glowing animated segment */}
+            <path
+              d="M 40 10 Q 20 20, 20 35 Q 20 50, 40 60 Q 60 70, 40 70"
+              stroke="rgba(255, 255, 255, 0.8)"
+              strokeWidth="2.5"
+              strokeLinecap="round"
+              className="gp-loader-traveling"
+            />
+
+            {/* Traveling dot from start to finish */}
+            <circle r="2" fill="white">
+              <animateMotion
+                dur="2.4s"
+                repeatCount="indefinite"
+                path="M 40 10 Q 20 20, 20 35 Q 20 50, 40 60 Q 60 70, 40 70"
+              />
+            </circle>
+          </svg>
+        </div>
       </div>
     </div>
   </div>

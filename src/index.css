@@ -507,35 +507,36 @@ input[type="radio"] {
   justify-content: center;
 }
 
-/* Logo wrapper with breathing animation */
-.gp-loader-logo-wrapper {
-  display: flex;
-  align-items: center;
-  justify-content: center;
+/* Logo with animation overlay */
+.gp-loader-logo-with-animation {
+  position: relative;
+  width: fit-content;
+  height: fit-content;
 }
 
-/* SVG logo box */
-.gp-loader-logo-box {
-  width: 96px;
-  height: 96px;
-  filter: drop-shadow(0 8px 20px rgba(16, 185, 129, 0.3));
+/* SVG overlay positioned on top of logo */
+.gp-loader-animation-overlay {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 80px;
+  height: 80px;
 }
 
-/* Glowing snake segment that animates */
-@keyframes gp-loader-snake-glow {
+/* Glowing traveling segment animation */
+@keyframes gp-loader-traveling-flow {
   from {
     stroke-dashoffset: 0;
-    stroke-opacity: 0.5;
   }
   to {
-    stroke-dashoffset: -120;
-    stroke-opacity: 1;
+    stroke-dashoffset: -150;
   }
 }
 
-.gp-loader-snake {
-  stroke-dasharray: 25 95;
-  animation: gp-loader-snake-glow 2s linear infinite;
+.gp-loader-traveling {
+  stroke-dasharray: 30 120;
+  animation: gp-loader-traveling-flow 2.4s linear infinite;
 }
 
 /* Interactive surfaces answer the pointer */
