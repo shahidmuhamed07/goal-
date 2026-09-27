@@ -1993,7 +1993,8 @@ export default function App() {
                 type="button"
                 onClick={() => setIsModalOpen(true)}
                 aria-label="New Goal"
-                className="hidden sm:flex bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white font-bold text-xs sm:text-sm px-2.5 sm:px-4 py-1.5 sm:py-2 rounded-xl shadow-2xs transition items-center gap-1.5 cursor-pointer shrink-0"
+                data-plain
+                className="hidden sm:flex bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white font-bold text-xs sm:text-sm px-2.5 sm:px-4 py-1.5 sm:py-2 rounded-xl shadow-[0_6px_16px_-6px_rgb(69_120_119/0.9)] transition items-center gap-1.5 cursor-pointer shrink-0"
               >
                 <Plus className="w-3.5 h-3.5 sm:w-4 sm:h-4 stroke-[2.5]" />
                 <span className="hidden sm:inline">New Goal</span>
@@ -2109,7 +2110,7 @@ export default function App() {
                   {typeof count === 'number' && count > 0 && (
                     <span
                       className={`text-[11px] font-bold tabular-nums ${
-                        active ? 'text-white/75' : 'text-slate-600'
+                        active ? 'text-purple-700/70' : 'text-slate-600'
                       }`}
                     >
                       {count}
@@ -2117,9 +2118,7 @@ export default function App() {
                   )}
                   {badge > 0 && (
                     <span
-                      className={`inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 text-[10px] font-bold rounded-full leading-none shrink-0 ${
-                        active ? 'bg-white/25 text-white' : 'bg-purple-100 text-purple-800'
-                      }`}
+                      className="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 text-[10px] font-bold rounded-full leading-none shrink-0 bg-purple-100 text-purple-800"
                     >
                       {badge}
                     </span>
@@ -2396,7 +2395,8 @@ export default function App() {
                     {isOwner && (
                       <button
                         onClick={() => setIsModalOpen(true)}
-                        className="bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white font-bold text-sm px-5 py-2.5 rounded-xl shadow-sm transition flex items-center gap-2 mx-auto cursor-pointer"
+                        data-plain
+                        className="bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white font-bold text-sm px-5 py-2.5 rounded-xl shadow-[0_8px_20px_-8px_rgb(69_120_119/0.9)] transition flex items-center gap-2 mx-auto cursor-pointer"
                       >
                         <Plus className="w-4 h-4 stroke-[2.5]" />
                         <span>Create Your First Goal</span>
@@ -3438,7 +3438,8 @@ export default function App() {
               onClick={() => setIsModalOpen(true)}
               aria-label="New Goal"
               title="New Goal"
-              className="press -mt-6 w-12 h-12 shrink-0 rounded-full bg-emerald-600 hover:bg-emerald-700 text-white shadow-lg ring-4 ring-white/70 flex items-center justify-center cursor-pointer"
+              data-plain
+              className="press -mt-6 w-12 h-12 shrink-0 rounded-full bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white ring-4 ring-white flex items-center justify-center cursor-pointer shadow-[0_10px_22px_-8px_rgb(69_120_119/0.95)]"
             >
               <Plus className="w-5 h-5 stroke-[2.5]" />
             </button>

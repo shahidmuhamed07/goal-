@@ -361,11 +361,14 @@ input[type="radio"] {
   gap: 0.25rem;
   padding: 0.25rem;
   border-radius: 0.9rem;
-  background: var(--neu-base);
-  /* The bar is a groove cut into the surface, the way the specimen does it */
+  /* The bar is a groove cut into the surface, so it sits a shade lighter than
+     the page and lifts off it with one clean shadow. Without that shadow the
+     bar dissolves into the canvas and the active tab reads as a smudge. */
+  background: linear-gradient(150deg, #e7eafc, #dde1f7);
   box-shadow:
-    inset 3px 3px 7px var(--neu-dark),
-    inset -3px -3px 7px var(--neu-light);
+    inset 2px 2px 5px var(--neu-dark),
+    inset -2px -2px 5px var(--neu-light),
+    0 8px 20px -10px rgb(39 43 68 / 0.5);
 }
 
 .segmented-track {
@@ -374,11 +377,13 @@ input[type="radio"] {
   bottom: 0.25rem;
   left: 0;
   border-radius: 0.7rem;
-  /* ...and the active tab is pressed a little further into it */
-  background: linear-gradient(145deg, #cfd3f4, #e5e7fb);
+  /* The active tab is a crisp white chip resting in the groove. A flat fill and
+     a real drop shadow read as a deliberate selection; the old near-identical
+     gradient with inset shadows read as a blur. */
+  background: #ffffff;
   box-shadow:
-    inset 3px 3px 7px var(--neu-dark),
-    inset -3px -3px 7px var(--neu-light);
+    0 2px 5px rgb(39 43 68 / 0.24),
+    0 1px 1px rgb(39 43 68 / 0.1);
   transition: transform 0.44s var(--ease-glide), width 0.44s var(--ease-glide);
   will-change: transform, width;
 }
@@ -398,13 +403,11 @@ input[type="radio"] {
 .segmented-tab[data-active="true"] {
   color: var(--color-purple-700);
   font-weight: 800;
-  text-shadow: 0 1px 0 rgb(255 255 255 / 0.65);
 }
 
 .segmented-tab[data-active="false"] {
   color: var(--color-slate-700);
   font-weight: 700;
-  text-shadow: 0 1px 0 rgb(255 255 255 / 0.55);
 }
 
 .segmented-tab[data-active="false"]:hover {
@@ -413,10 +416,10 @@ input[type="radio"] {
 
 /* Trainer-mode tint for the same control */
 .segmented[data-tone="warm"] .segmented-track {
-  background: linear-gradient(145deg, #d6e2ec, #e6eef4);
+  background: #ffffff;
   box-shadow:
-    inset 3px 3px 7px var(--neu-dark),
-    inset -3px -3px 7px var(--neu-light);
+    0 2px 5px rgb(52 74 92 / 0.24),
+    0 1px 1px rgb(52 74 92 / 0.1);
 }
 
 .segmented[data-tone="warm"] .segmented-tab[data-active="true"] {
@@ -478,34 +481,21 @@ input[type="radio"] {
   animation: gp-grow 0.9s var(--ease-glide) both;
 }
 
-/* Brand loader: snake segment flows from one ball to the other */
-@keyframes gp-loader-dash {
-  to {
-    stroke-dashoffset: -110;
-  }
-}
-
-@keyframes gp-loader-pulse {
+/* Brand loader: the app's logo, breathing gently. Transform-only, so nothing
+   ever dims or greys out while the cloud read finishes. */
+@keyframes gp-loader-breathe {
   0%,
   100% {
     transform: scale(1);
-    opacity: 1;
   }
   50% {
-    transform: scale(1.28);
-    opacity: 0.75;
+    transform: scale(1.02);
   }
 }
 
-.gp-loader-flow {
-  stroke-dasharray: 22 88;
-  animation: gp-loader-dash 1.6s linear infinite;
-}
-
-.gp-loader-ball-pulse {
-  transform-box: fill-box;
+.gp-loader-mark {
   transform-origin: center;
-  animation: gp-loader-pulse 1.6s ease-in-out infinite;
+  animation: gp-loader-breathe 3.4s var(--ease-glide) infinite;
 }
 
 /* Interactive surfaces answer the pointer */
@@ -595,8 +585,7 @@ input[type="radio"] {
   .fade,
   .tab-panel,
   .bar-grow,
-  .gp-loader-flow,
-  .gp-loader-ball-pulse {
+  .gp-loader-mark {
     animation: none !important;
   }
   .lift,
