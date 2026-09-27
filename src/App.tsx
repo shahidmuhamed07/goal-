@@ -1835,10 +1835,10 @@ export default function App() {
   };
 
   // LOADING & LOGIN GATES
-  if (authLoading) {
+  if (authLoading || (user && dataLoading)) {
     return (
       <div className="min-h-screen flex items-center justify-center">
-        <GoalPathLoader message="Checking authentication..." />
+        <GoalPathLoader message="Loading your goals..." />
       </div>
     );
   }
@@ -2135,10 +2135,7 @@ export default function App() {
         ref={contentRef}
         className="max-w-6xl mx-auto px-3 sm:px-6 pt-5 pb-28 sm:py-8 flex-1 w-full relative z-10"
       >
-        {dataLoading && activeTab !== 'connect' && activeTab !== 'professional' ? (
-          <GoalPathLoader message="Loading goals from cloud..." />
-        ) : (
-          <div key={activeTab} className="tab-panel" data-dir={tabDirection}>
+        <div key={activeTab} className="tab-panel" data-dir={tabDirection}>
             {/* VIEW 1: ALL GOALS DASHBOARD */}
             {activeTab === 'dashboard' && (
               <div className="space-y-6">
@@ -3335,7 +3332,6 @@ export default function App() {
               />
             )}
           </div>
-        )}
       </main>
 
       {/* FOOTER */}
