@@ -49,9 +49,9 @@ export const GoalPathLogo: React.FC<{ size?: 'sm' | 'md' | 'lg' | 'xl'; showText
 };
 
 /**
- * Full-screen loader: the app's own logo, big and breathing with a spinning ring
- * around it. The spinner shows activity while the cloud read finishes.
- * It unmounts when loading ends, so the animation simply stops.
+ * Full-screen loader: the app's own logo, huge and breathing, with a winding
+ * path flowing above it. A dot travels the path top to bottom, like a journey
+ * progressing from start to goal. The animation loops until loading finishes.
  */
 export const GoalPathLoader: React.FC<{ message?: string }> = ({
   message,
@@ -62,10 +62,60 @@ export const GoalPathLoader: React.FC<{ message?: string }> = ({
     className="flex flex-col items-center justify-center text-center py-20 min-h-[55vh] w-full"
   >
     <div className="gp-loader-container">
-      {/* Spinning ring around the logo */}
-      <div className="gp-loader-ring" />
-      {/* Logo inside the ring */}
-      <div className="gp-loader-mark">
+      {/* Winding path with traveling dot */}
+      <svg
+        width="140"
+        height="180"
+        viewBox="0 0 140 180"
+        fill="none"
+        className="gp-loader-path-svg"
+        aria-hidden="true"
+      >
+        {/* Faint track the dot travels on */}
+        <path
+          d="M 70 10 Q 40 30, 40 60 Q 40 90, 70 110 Q 100 130, 70 160"
+          stroke="var(--color-emerald-100)"
+          strokeWidth="5"
+          strokeLinecap="round"
+        />
+        {/* Glowing path segment */}
+        <path
+          d="M 70 10 Q 40 30, 40 60 Q 40 90, 70 110 Q 100 130, 70 160"
+          stroke="var(--color-emerald-600)"
+          strokeWidth="5"
+          strokeLinecap="round"
+          className="gp-loader-flow"
+        />
+        {/* Start point */}
+        <circle cx="70" cy="10" r="6" fill="var(--color-emerald-100)" />
+        <circle
+          cx="70"
+          cy="10"
+          r="6"
+          stroke="var(--color-emerald-600)"
+          strokeWidth="2"
+        />
+        {/* Travelling dot */}
+        <circle r="4" fill="var(--color-emerald-700)" className="gp-loader-dot">
+          <animateMotion
+            dur="2s"
+            repeatCount="indefinite"
+            path="M 70 10 Q 40 30, 40 60 Q 40 90, 70 110 Q 100 130, 70 160"
+          />
+        </circle>
+        {/* End point (goal) */}
+        <circle cx="70" cy="160" r="6" fill="var(--color-emerald-100)" />
+        <circle
+          cx="70"
+          cy="160"
+          r="6"
+          stroke="var(--color-emerald-600)"
+          strokeWidth="2"
+        />
+      </svg>
+
+      {/* Logo below the path */}
+      <div className="gp-loader-mark mt-4">
         <GoalPathLogo size="xl" showText={false} />
       </div>
     </div>

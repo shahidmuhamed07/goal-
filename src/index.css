@@ -500,35 +500,34 @@ input[type="radio"] {
   z-index: 10;
 }
 
-/* Loader container positions the ring and logo together */
+/* Loader container: logo below, path above */
 .gp-loader-container {
-  position: relative;
-  width: 160px;
-  height: 160px;
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
+  gap: 1rem;
 }
 
-/* Spinning ring around the logo */
-@keyframes gp-loader-spin {
+/* SVG path container */
+.gp-loader-path-svg {
+  max-width: 140px;
+  height: auto;
+}
+
+/* Glowing path segment that animates */
+@keyframes gp-loader-flow {
   from {
-    transform: rotate(0deg);
+    stroke-dashoffset: 0;
   }
   to {
-    transform: rotate(360deg);
+    stroke-dashoffset: -160;
   }
 }
 
-.gp-loader-ring {
-  position: absolute;
-  width: 140px;
-  height: 140px;
-  border: 3px solid transparent;
-  border-top: 3px solid var(--color-emerald-600);
-  border-right: 3px solid var(--color-emerald-500);
-  border-radius: 50%;
-  animation: gp-loader-spin 2s linear infinite;
+.gp-loader-flow {
+  stroke-dasharray: 40 120;
+  animation: gp-loader-flow 2s linear infinite;
 }
 
 /* Interactive surfaces answer the pointer */
