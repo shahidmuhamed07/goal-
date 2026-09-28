@@ -606,6 +606,11 @@ input[type="radio"] {
   padding-bottom: calc(0.75rem + env(safe-area-inset-bottom, 0px));
 }
 
+/* A full-height panel header clears the status bar / notch on phones */
+.safe-top {
+  padding-top: calc(0.75rem + env(safe-area-inset-top, 0px));
+}
+
 /* Thin, unobtrusive scrollbars inside scroll regions */
 .slim-scroll {
   scrollbar-width: thin;
@@ -623,6 +628,26 @@ input[type="radio"] {
   background: transparent;
 }
 
+/* A streak whose day is still empty gets a gentle flame flicker — enough to draw
+   the eye to something the user is about to lose, without the whole button
+   throbbing. Applied only to the flame's own container. */
+@keyframes gp-flame-flicker {
+  0%,
+  100% {
+    transform: scale(1);
+    filter: brightness(1);
+  }
+  50% {
+    transform: scale(1.08);
+    filter: brightness(1.12);
+  }
+}
+
+.gp-flame-live {
+  animation: gp-flame-flicker 1.8s var(--ease-glide, ease-in-out) infinite;
+  transform-origin: center;
+}
+
 @media (prefers-reduced-motion: reduce) {
   html {
     scroll-behavior: auto;
@@ -632,6 +657,7 @@ input[type="radio"] {
   .fade,
   .tab-panel,
   .bar-grow,
+  .gp-flame-live,
   .gp-loader-mark {
     animation: none !important;
   }

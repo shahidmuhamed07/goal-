@@ -63,6 +63,7 @@ import {
   Collaborator,
   GoalAccessLevel,
   AccountPersona,
+  ChatThread,
 } from './types';
 import {
   getTodayDateString,
@@ -80,11 +81,12 @@ import {
   buildGoalAccessArrays,
   getGoalAccessLevel,
   isGoalSharedWith,
+  computeStreak,
 } from './utils';
 
 import { LoginScreen } from './components/LoginScreen';
 import { AppSelect } from './components/AppSelect';
-import { PriorityBadge, ProgressBar, GoalPathLogo, GoalPathLoader, GlassIconButton, GlassBadge } from './components/UIElements';
+import { PriorityBadge, ProgressBar, GoalPathLogo, GoalPathLoader, GlassIconButton, GlassBadge, StreakBadge } from './components/UIElements';
 import { DailyTaskSection } from './components/DailyTaskSection';
 import { MonthlyMilestoneSection } from './components/MonthlyMilestoneSection';
 import { CollaboratorsPanel } from './components/CollaboratorsPanel';
@@ -94,6 +96,8 @@ import { GiveUpInterventionModal } from './components/GiveUpInterventionModal';
 
 import { ProfessionalProfilePanel } from './components/ProfessionalProfilePanel';
 import { PersonaPrompt } from './components/PersonaPrompt';
+import { ChatPanel } from './components/ChatPanel';
+import { threadHasUnread } from './chat';
 
 /**
  * Slides a pill behind the active item of a segmented control.
@@ -276,6 +280,10 @@ export default function App() {
   const [connectNotice, setConnectNotice] = useState<{ type: 'ok' | 'error'; text: string } | null>(null);
   const [incomingError, setIncomingError] = useState<string | null>(null);
 
+  // Client ↔ professional chat
+  const [chatThreads, setChatThreads] = useState<ChatThread[]>([]);
+  const [chatTarget, setChatTarget] = useState<{ uid: string; name: string; role?: string } | null>(null);
+
   /**
    * The clients actually shown in the interface: everyone connected except the
    * ones this professional has removed.
@@ -374,6 +382,40 @@ export default function App() {
       unsubOut();
     };
   }, [user]);
+
+  // All conversations this user is part of, for the message threads and their
+  // unread markers. Kept account-wide (not workspace-scoped) so a new message
+  // shows up wherever the user is.
+  useEffect(() => {
+    if (!user) {
+      setChatThreads([]);
+      return undefined;
+    }
+    const threadsQ = query(
+      collection(db, 'chats'),
+      where('participantUids', 'array-contains', user.uid)
+    );
+    const unsub = onSnapshot(
+      threadsQ,
+      (snap) => setChatThreads(snap.docs.map((d) => ({ id: d.id, ...d.data() } as ChatThread))),
+      (err) => console.error('Chat threads listener:', err)
+    );
+    return () => unsub();
+  }, [user]);
+
+  // Uids this user has an unread message from, and the total, for the badges.
+  const unreadChatUids = useMemo(() => {
+    const set = new Set<string>();
+    if (!user) return set;
+    chatThreads.forEach((thread) => {
+      if (threadHasUnread(thread, user.uid)) {
+        (thread.participantUids || []).forEach((uid) => {
+          if (uid !== user.uid) set.add(uid);
+        });
+      }
+    });
+    return set;
+  }, [chatThreads, user]);
 
   // Realtime client list & active client profile listener
   const [activeClientProfile, setActiveClientProfile] = useState<UserProfile | null>(null);
@@ -784,6 +826,10 @@ export default function App() {
     );
   }, [goals, todayDate]);
 
+  // Daily-completion streak for whichever workspace is open (the owner's own
+  // goals, or the client's while a professional is helping them).
+  const streakStats = useMemo(() => computeStreak(goals, todayDate), [goals, todayDate]);
+
   // The tabs reachable from the phone tab bar, in swipe order.
   type NavTab = {
     key: 'dashboard' | 'today' | 'connect' | 'professional';
@@ -803,13 +849,13 @@ export default function App() {
     const tabs: NavTab[] = [
       { key: 'dashboard', label: 'Goals', longLabel: 'All Goals', Icon: ListChecks, badge: 0, count: goals.length },
       { key: 'today', label: 'Today', longLabel: "Today's Focus", Icon: CalendarCheck, badge: openTaskCount },
-      { key: 'connect', label: 'Connect', longLabel: 'Collaborate', Icon: UsersRound, badge: pendingIncoming.length },
+      { key: 'connect', label: 'Connect', longLabel: 'Collaborate', Icon: UsersRound, badge: pendingIncoming.length + unreadChatUids.size },
     ];
     if (isOwner && profile?.persona === 'professional') {
       tabs.push({ key: 'professional', label: 'Profile', longLabel: 'Professional', Icon: Briefcase, badge: 0 });
     }
     return tabs;
-  }, [isOwner, profile?.persona, openTaskCount, pendingIncoming.length, goals.length]);
+  }, [isOwner, profile?.persona, openTaskCount, pendingIncoming.length, unreadChatUids.size, goals.length]);
 
   const isTabActive = (key: NavTab['key']) =>
     activeTab === key || (key === 'dashboard' && activeTab === 'detail');
@@ -2175,6 +2221,7 @@ export default function App() {
                         {allTodayTasks.filter((t) => t.completed).length}/{allTodayTasks.length} today
                       </span>
                       <span>{overallProgress}%</span>
+                      <StreakBadge stats={streakStats} compact />
                     </div>
                   </div>
                 ) : (
@@ -2186,9 +2233,12 @@ export default function App() {
                   {/* Content Container: one short heading and the numbers. The green
                       + in the tab bar is where new goals come from. */}
                   <div className="relative z-10 flex items-center justify-between gap-3 flex-wrap">
-                    <h1 className="text-xl sm:text-2xl font-extrabold text-slate-800 tracking-tight">
-                      Overview
-                    </h1>
+                    <div className="flex items-center gap-3 flex-wrap">
+                      <h1 className="text-xl sm:text-2xl font-extrabold text-slate-800 tracking-tight">
+                        Overview
+                      </h1>
+                      <StreakBadge stats={streakStats} onClick={() => setActiveTab('today')} />
+                    </div>
 
                     {/* Clickable neumorphic keys */}
                     <div className="grid grid-cols-3 gap-2.5 sm:gap-3 flex-shrink-0">
@@ -3337,10 +3387,20 @@ export default function App() {
                 onUpdateAssignedGoals={handleUpdateAssignedGoals}
                 onSwitchWorkspace={handleSwitchWorkspace}
                 onRemoveClient={handleRemoveClient}
+                onOpenChat={setChatTarget}
+                unreadChatUids={unreadChatUids}
               />
             )}
           </div>
       </main>
+
+      {chatTarget && user && (
+        <ChatPanel
+          me={{ uid: user.uid, name: profile?.displayName || user.displayName || user.email || 'You' }}
+          other={chatTarget}
+          onClose={() => setChatTarget(null)}
+        />
+      )}
 
       {/* FOOTER */}
       <footer className="neu border-x-0 border-b-0 rounded-none py-3.5 sm:py-6 mt-6 sm:mt-12">

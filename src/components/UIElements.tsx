@@ -1,5 +1,6 @@
 import React from 'react';
-import { Route } from 'lucide-react';
+import { Route, Flame } from 'lucide-react';
+import type { StreakStats } from '../utils';
 
 /**
  * The Goal Path brand mark.
@@ -210,6 +211,97 @@ export const GlassIconButton: React.FC<{
       className={`inline-flex items-center justify-center transition-all duration-150 cursor-pointer select-none active:scale-95 disabled:opacity-35 disabled:pointer-events-none disabled:active:scale-100 focus:outline-none focus:ring-2 focus:ring-emerald-400/40 ${sizeClasses[size]} ${variantClasses[variant]} ${className}`}
     >
       {children}
+    </button>
+  );
+};
+
+/**
+ * Daily-completion streak, as a tappable key in the dashboard hero.
+ *
+ * Three states carry the whole story without a legend: a lit amber flame when
+ * today is already done, a hollow "at risk" flame when the run is alive but the
+ * day is still empty, and a quiet resting state inviting the first day. Tapping
+ * it jumps to Today's Focus, where a streak is kept or started.
+ */
+export const StreakBadge: React.FC<{
+  stats: StreakStats;
+  onClick?: () => void;
+  /** Compact chip form for tight rows (e.g. a client-workspace banner). */
+  compact?: boolean;
+}> = ({ stats, onClick, compact = false }) => {
+  const { current, longest, doneToday, atRisk } = stats;
+  const none = current === 0;
+
+  if (compact) {
+    return (
+      <span
+        title={
+          none
+            ? 'No active streak'
+            : `${current}-day streak${atRisk ? ' — at risk today' : ''}`
+        }
+        className={`inline-flex items-center gap-1 text-[11px] font-bold tabular-nums px-1.5 py-0.5 rounded-md border ${
+          none
+            ? 'text-slate-500 bg-slate-100/70 border-slate-200'
+            : atRisk
+            ? 'text-amber-700 bg-amber-50 border-amber-200'
+            : 'text-orange-700 bg-orange-50 border-orange-200'
+        }`}
+      >
+        <Flame
+          className="w-3 h-3"
+          strokeWidth={2.4}
+          fill={none || atRisk ? 'none' : 'currentColor'}
+        />
+        {current}
+      </span>
+    );
+  }
+
+  const label = none ? 'Start streak' : atRisk ? 'Keep it alive' : 'Day streak';
+
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      title={
+        none
+          ? 'Complete a task today to start a streak'
+          : `${current}-day streak${
+              atRisk ? ' — complete a task today to keep it' : ''
+            }${longest > current ? ` · best ${longest}` : ''}`
+      }
+      className="neu-sm press group/streak select-none flex items-center gap-2.5 px-3 py-2 cursor-pointer rounded-xl transition"
+    >
+      <span
+        className={`w-8 h-8 sm:w-9 sm:h-9 rounded-xl grid place-items-center shrink-0 shadow-sm ${
+          atRisk ? 'gp-flame-live' : ''
+        } ${
+          none
+            ? 'bg-slate-200 text-slate-500'
+            : atRisk
+            ? 'bg-gradient-to-br from-amber-300 to-amber-500 text-white'
+            : 'bg-gradient-to-br from-amber-400 via-orange-500 to-rose-500 text-white'
+        }`}
+      >
+        <Flame
+          className="w-4 h-4 sm:w-[18px] sm:h-[18px]"
+          strokeWidth={2.4}
+          fill={doneToday ? 'currentColor' : 'none'}
+        />
+      </span>
+      <span className="text-left leading-none">
+        <span
+          className={`block text-lg sm:text-xl font-black tabular-nums ${
+            none ? 'text-slate-500' : atRisk ? 'text-amber-700' : 'text-orange-700'
+          }`}
+        >
+          {current}
+        </span>
+        <span className="block text-[10px] font-semibold text-slate-600 mt-0.5">
+          {label}
+        </span>
+      </span>
     </button>
   );
 };

@@ -139,6 +139,46 @@ service cloud.firestore {
 
       allow delete: if isGoalOwner();
     }
+
+    // ------------------------------------------------------------------ chats
+    // A one-to-one conversation between a client and a professional, stored at
+    // chats/{pairId} where the id is the two member uids sorted and joined. Only
+    // the two members can read it or post to it, and the member list is fixed at
+    // creation so nobody can add themselves to an existing thread.
+    match /chats/{chatId} {
+      function isMember() {
+        return isSignedIn() && request.auth.uid in resource.data.participantUids;
+      }
+
+      allow read: if isMember();
+
+      allow create: if isSignedIn()
+        && request.auth.uid in request.resource.data.participantUids
+        && request.resource.data.participantUids.size() == 2;
+
+      // Members may update thread metadata (last message, read markers) but not
+      // the participant list.
+      allow update: if isMember()
+        && request.resource.data.participantUids == resource.data.participantUids;
+
+      allow delete: if false;
+
+      match /messages/{messageId} {
+        function threadMembers() {
+          return get(/databases/$(database)/documents/chats/$(chatId)).data.participantUids;
+        }
+
+        allow read: if isSignedIn() && request.auth.uid in threadMembers();
+
+        // A message is written by its own sender, into a thread they belong to,
+        // and is immutable once sent.
+        allow create: if isSignedIn()
+          && request.auth.uid == request.resource.data.senderUid
+          && request.auth.uid in threadMembers();
+
+        allow update, delete: if false;
+      }
+    }
   }
 }
 

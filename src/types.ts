@@ -139,3 +139,31 @@ export interface AccessRequest {
 }
 
 export type ProfessionalRole = 'Trainer' | 'Dietitian' | 'Doctor';
+
+/** One message in a client↔professional conversation. */
+export interface ChatMessage {
+  id: string;
+  senderUid: string;
+  senderName: string;
+  text: string;
+  /** ISO timestamp, matching the string dates used elsewhere in the app. */
+  createdAt: string;
+}
+
+/**
+ * A one-to-one conversation, stored at `chats/{pairId}` where the id is the two
+ * member uids sorted and joined, so either side resolves the same document.
+ * Messages live in the `messages` subcollection.
+ */
+export interface ChatThread {
+  id: string;
+  participantUids: string[];
+  updatedAt?: string;
+  lastMessage?: {
+    text: string;
+    senderUid: string;
+    createdAt: string;
+  };
+  /** Last time each member opened the thread, keyed by uid, for unread counts. */
+  lastRead?: Record<string, string>;
+}
