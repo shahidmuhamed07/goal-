@@ -2,6 +2,65 @@ import { Collaborator, Goal, GoalAccessLevel } from './types';
 
 export const getTodayDateString = (): string => new Date().toISOString().split('T')[0];
 
+/** A "YYYY-MM-DD" day shifted by whole days, staying on the same calendar the
+ *  stored task dates use. */
+export const shiftDateString = (dateStr: string, deltaDays: number): string => {
+  const [y, m, d] = dateStr.split('-').map(Number);
+  const dt = new Date(Date.UTC(y, m - 1, d));
+  dt.setUTCDate(dt.getUTCDate() + deltaDays);
+  return dt.toISOString().split('T')[0];
+};
+
+export interface StreakStats {
+  /** Consecutive days, ending today (or yesterday if today has nothing yet),
+   *  with at least one completed task. */
+  current: number;
+  /** The best run this workspace has ever put together. */
+  longest: number;
+  /** A task has already been completed today, so the streak is safe. */
+  doneToday: boolean;
+  /** The streak is alive but today is still empty — one task keeps it going. */
+  atRisk: boolean;
+}
+
+/**
+ * The daily-completion streak for a set of goals.
+ *
+ * A day counts the moment one task on it is completed. Today being empty does
+ * not break the streak yet — it only puts it "at risk" until the day ends — so a
+ * user who has not checked anything off today still sees the run they are about
+ * to lose, which is the whole point of showing a streak.
+ */
+export const computeStreak = (goals: Goal[], today: string): StreakStats => {
+  const doneDates = new Set<string>();
+  goals.forEach((goal) => {
+    (goal.tasks || []).forEach((task) => {
+      if (task.completed && task.date) doneDates.add(task.date);
+    });
+  });
+
+  const doneToday = doneDates.has(today);
+  let current = 0;
+  let cursor = doneToday ? today : shiftDateString(today, -1);
+  while (doneDates.has(cursor)) {
+    current += 1;
+    cursor = shiftDateString(cursor, -1);
+  }
+
+  let longest = 0;
+  let run = 0;
+  let prev: string | null = null;
+  Array.from(doneDates)
+    .sort()
+    .forEach((day) => {
+      run = prev && shiftDateString(prev, 1) === day ? run + 1 : 1;
+      if (run > longest) longest = run;
+      prev = day;
+    });
+
+  return { current, longest, doneToday, atRisk: current > 0 && !doneToday };
+};
+
 /**
  * Permission a connected professional holds for one goal, or null when the goal
  * was never shared with them. Older accounts only stored `assignedGoalIds`,

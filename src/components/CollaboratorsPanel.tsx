@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { LogOut, Check, Target, X, Eye, Pencil, Ban, BadgeCheck, ExternalLink, Trash2 } from 'lucide-react';
+import { LogOut, Check, Target, X, Eye, Pencil, Ban, BadgeCheck, ExternalLink, Trash2, MessageCircle } from 'lucide-react';
 import { User } from 'firebase/auth';
 import { doc, getDoc } from 'firebase/firestore';
 import { db } from '../firebase';
@@ -35,7 +35,29 @@ interface CollaboratorsPanelProps {
   ) => void;
   onSwitchWorkspace: (uid: string) => void;
   onRemoveClient: (clientId: string, clientName: string) => void;
+  onOpenChat: (other: { uid: string; name: string; role?: string }) => void;
+  /** Uids this user has an unread message from. */
+  unreadChatUids: Set<string>;
 }
+
+/** A compact "Message" button with an unread dot, shared by both roster lists. */
+const MessageButton: React.FC<{ onClick: () => void; hasUnread: boolean }> = ({
+  onClick,
+  hasUnread,
+}) => (
+  <button
+    type="button"
+    onClick={onClick}
+    title="Open conversation"
+    className="relative text-xs font-semibold text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 px-3 py-1.5 rounded-lg transition cursor-pointer flex items-center gap-1.5"
+  >
+    <MessageCircle className="w-3.5 h-3.5 text-blue-600" />
+    <span>Message</span>
+    {hasUnread && (
+      <span className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-rose-500 border-2 border-white" />
+    )}
+  </button>
+);
 
 const ACCESS_LEVELS: { value: GoalAccessLevel; label: string; icon: React.ReactNode }[] = [
   { value: 'view', label: 'View', icon: <Eye className="w-3.5 h-3.5" /> },
@@ -59,6 +81,8 @@ export const CollaboratorsPanel: React.FC<CollaboratorsPanelProps> = ({
   onUpdateAssignedGoals,
   onSwitchWorkspace,
   onRemoveClient,
+  onOpenChat,
+  unreadChatUids,
 }) => {
   const [codeInput, setCodeInput] = useState('');
   const [role, setRole] = useState<ProfessionalRole>(PROFESSIONAL_ROLES[0]);
@@ -526,7 +550,18 @@ export const CollaboratorsPanel: React.FC<CollaboratorsPanelProps> = ({
                       <div className="text-xs text-slate-500 mt-0.5">{c.email}</div>
                     </div>
 
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <MessageButton
+                        onClick={() =>
+                          onOpenChat({
+                            uid: c.uid,
+                            name: c.name || c.email || 'Professional',
+                            role: c.role,
+                          })
+                        }
+                        hasUnread={unreadChatUids.has(c.uid)}
+                      />
+
                       <button
                         type="button"
                         onClick={() => handleOpenCredentials(c)}
@@ -650,7 +685,14 @@ export const CollaboratorsPanel: React.FC<CollaboratorsPanelProps> = ({
                     )}
                   </div>
 
-                  <div className="flex items-center gap-1.5 shrink-0">
+                  <div className="flex items-center gap-1.5 shrink-0 flex-wrap justify-end">
+                    <MessageButton
+                      onClick={() =>
+                        onOpenChat({ uid: c.id || '', name: clientName })
+                      }
+                      hasUnread={unreadChatUids.has(c.id || '')}
+                    />
+
                     <button
                       type="button"
                       onClick={() => onSwitchWorkspace(active ? user.uid : (c.id || ''))}
