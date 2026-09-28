@@ -3368,7 +3368,7 @@ export default function App() {
             ) : (
               <Copy className="w-3 h-3 text-slate-500" />
             )}
-            <span className="truncate max-w-[190px]">
+            <span className="truncate max-w-[190px] text-slate-800 font-semibold">
               {copiedEmail ? 'Email copied' : user.email}
             </span>
           </button>
