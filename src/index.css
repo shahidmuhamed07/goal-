@@ -11,31 +11,31 @@
    stock greens.
    --------------------------------------------------------------------------- */
 @theme {
-  /* Neutrals: cool periwinkle greys pulled from the canvas, never pure black */
-  --color-slate-50: #f7f8fe;
-  --color-slate-100: #eef0fb;
-  --color-slate-200: #e0e3f5;
-  --color-slate-300: #c9cee9;
-  --color-slate-400: #8d94bf;
-  --color-slate-500: #6c739d;
-  --color-slate-600: #565d88;
-  --color-slate-700: #4a5074;
-  --color-slate-800: #383d5b;
-  --color-slate-900: #272b44;
-  --color-slate-950: #191c2f;
+  /* Neutrals: enhanced contrast, darker and clearer */
+  --color-slate-50: #f9fafb;
+  --color-slate-100: #f3f4f8;
+  --color-slate-200: #e5e8f0;
+  --color-slate-300: #d1d7e8;
+  --color-slate-400: #9ca3ba;
+  --color-slate-500: #7a8399;
+  --color-slate-600: #5a6378;
+  --color-slate-700: #4a5264;
+  --color-slate-800: #35394e;
+  --color-slate-900: #1f2333;
+  --color-slate-950: #0f1219;
 
-  /* Primary: Half Baked teal */
-  --color-emerald-50: #f1f9f8;
-  --color-emerald-100: #dff2f1;
-  --color-emerald-200: #c3e5e4;
-  --color-emerald-300: #a4d6d5;
-  --color-emerald-400: #8cc6c5;
-  --color-emerald-500: #6fafae;
-  --color-emerald-600: #569594;
-  --color-emerald-700: #457877;
-  --color-emerald-800: #38605f;
-  --color-emerald-900: #2d4c4b;
-  --color-emerald-950: #183030;
+  /* Primary: Vibrant teal - enhanced saturation */
+  --color-emerald-50: #f0faf9;
+  --color-emerald-100: #d6f3f1;
+  --color-emerald-200: #a8e6e3;
+  --color-emerald-300: #7dd9d5;
+  --color-emerald-400: #5ac9c4;
+  --color-emerald-500: #3eb8ad;
+  --color-emerald-600: #2aa299;
+  --color-emerald-700: #1f8b82;
+  --color-emerald-800: #16726a;
+  --color-emerald-900: #0f5953;
+  --color-emerald-950: #073d37;
 
   --color-teal-50: #eff8f7;
   --color-teal-100: #d8eeed;
