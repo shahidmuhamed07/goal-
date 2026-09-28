@@ -94,7 +94,7 @@ export const MonthlyMilestoneSection: React.FC<MonthlyMilestoneSectionProps> = (
   return (
     <div
       className={`bg-white border rounded-2xl p-4 sm:p-5 shadow-xs space-y-4 transition-colors duration-200 ${
-        !isOwner ? 'border-blue-200/90 shadow-blue-950/5' : 'border-purple-200/80'
+        !isOwner ? 'border-blue-200/90 shadow-blue-950/5' : 'border-violet-200/80'
       }`}
     >
       {/* HEADER: SECTION LABEL AND TODAY'S DATE ONLY */}
@@ -104,10 +104,10 @@ export const MonthlyMilestoneSection: React.FC<MonthlyMilestoneSectionProps> = (
             className={`text-[11px] font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-md flex items-center gap-1 border ${
               !isOwner
                 ? 'text-blue-950 bg-blue-100 border-blue-300/80'
-                : 'text-purple-900 bg-purple-100 border-purple-200/90'
+                : 'text-violet-900 bg-violet-100 border-violet-200/90'
             }`}
           >
-            <Calendar className={`w-3 h-3 ${!isOwner ? 'text-blue-700' : 'text-purple-700'}`} />
+            <Calendar className={`w-3 h-3 ${!isOwner ? 'text-blue-700' : 'text-violet-800'}`} />
             <span>Monthly Milestone</span>
           </span>
         </div>
@@ -117,7 +117,7 @@ export const MonthlyMilestoneSection: React.FC<MonthlyMilestoneSectionProps> = (
           className={`text-[11px] font-semibold px-2.5 py-0.5 rounded-lg border ${
             !isOwner
               ? 'text-blue-950 bg-blue-50/80 border-blue-200/80'
-              : 'text-purple-950 bg-purple-50/80 border-purple-200/80'
+              : 'text-violet-950 bg-violet-50/80 border-violet-200/80'
           }`}
         >
           {formatDisplayDate(todayStr)}
@@ -130,7 +130,7 @@ export const MonthlyMilestoneSection: React.FC<MonthlyMilestoneSectionProps> = (
           className={`rounded-xl p-3.5 sm:p-4 space-y-3 shadow-2xs border ${
             !isOwner
               ? 'bg-blue-50/40 border-blue-200/80'
-              : 'bg-purple-50/30 border-purple-200/80'
+              : 'bg-violet-50/30 border-violet-200/80'
           }`}
         >
           <div className="flex items-start justify-between gap-3">
@@ -149,7 +149,7 @@ export const MonthlyMilestoneSection: React.FC<MonthlyMilestoneSectionProps> = (
                 className={`flex items-center gap-1.5 text-xs text-slate-700 cursor-pointer select-none bg-white border px-2.5 py-1.5 rounded-lg shadow-2xs transition ${
                   !isOwner
                     ? 'border-blue-200/90 hover:border-blue-300 hover:text-blue-950'
-                    : 'border-purple-200/90 hover:border-purple-300 hover:text-purple-950'
+                    : 'border-violet-200/90 hover:border-violet-300 hover:text-violet-950'
                 }`}
               >
                 <input
@@ -159,12 +159,12 @@ export const MonthlyMilestoneSection: React.FC<MonthlyMilestoneSectionProps> = (
                   className={`w-4 h-4 rounded border-slate-300 cursor-pointer ${
                     !isOwner
                       ? 'accent-blue-700 text-blue-700 focus:ring-blue-500'
-                      : 'accent-purple-700 text-purple-700 focus:ring-purple-500'
+                      : 'accent-violet-800 text-violet-800 focus:ring-violet-600'
                   }`}
                 />
                 <span
                   className={`font-semibold text-[11px] ${
-                    !isOwner ? 'text-blue-950' : 'text-purple-950'
+                    !isOwner ? 'text-blue-950' : 'text-violet-950'
                   }`}
                 >
                   {activeMilestone.completed ? 'Milestone Achieved' : 'Mark Achieved'}
@@ -191,7 +191,7 @@ export const MonthlyMilestoneSection: React.FC<MonthlyMilestoneSectionProps> = (
                 className={`flex-1 min-w-0 text-xs sm:text-sm bg-white border rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-2 ${
                   !isOwner
                     ? 'border-blue-200 focus:ring-blue-500/20 focus:border-blue-600'
-                    : 'border-purple-200 focus:ring-purple-500/20 focus:border-purple-600'
+                    : 'border-violet-200 focus:ring-violet-600/20 focus:border-violet-700'
                 }`}
                 autoFocus
               />
@@ -202,7 +202,7 @@ export const MonthlyMilestoneSection: React.FC<MonthlyMilestoneSectionProps> = (
                 className={`w-8 h-8 flex items-center justify-center rounded-lg text-white transition cursor-pointer shrink-0 ${
                   !isOwner
                     ? 'bg-blue-700 hover:bg-blue-800'
-                    : 'bg-purple-700 hover:bg-purple-800'
+                    : 'bg-violet-800 hover:bg-violet-900'
                 }`}
               >
                 <Check className="w-4 h-4" />
@@ -228,7 +228,7 @@ export const MonthlyMilestoneSection: React.FC<MonthlyMilestoneSectionProps> = (
                   ? 'bg-white/80 border border-slate-200/60'
                   : !isOwner
                   ? 'bg-white border border-blue-100 hover:border-blue-300 cursor-pointer group shadow-2xs'
-                  : 'bg-white border border-purple-100 hover:border-purple-300 cursor-pointer group shadow-2xs'
+                  : 'bg-white border border-violet-100 hover:border-violet-300 cursor-pointer group shadow-2xs'
               }`}
             >
               <span className="text-slate-600">
@@ -237,7 +237,7 @@ export const MonthlyMilestoneSection: React.FC<MonthlyMilestoneSectionProps> = (
               {!readOnly && (
                 <Edit3
                   className={`w-3.5 h-3.5 text-slate-400 transition-colors flex-shrink-0 ${
-                    !isOwner ? 'group-hover:text-blue-700' : 'group-hover:text-purple-700'
+                    !isOwner ? 'group-hover:text-blue-700' : 'group-hover:text-violet-800'
                   }`}
                 />
               )}
@@ -259,7 +259,7 @@ export const MonthlyMilestoneSection: React.FC<MonthlyMilestoneSectionProps> = (
                   className={`w-8 h-8 flex items-center justify-center rounded-lg border shadow-2xs transition cursor-pointer shrink-0 ${
                     !isOwner
                       ? 'border-blue-200/90 text-blue-800 bg-white hover:bg-blue-50 hover:border-blue-300'
-                      : 'border-purple-200/90 text-purple-800 bg-white hover:bg-purple-50 hover:border-purple-300'
+                      : 'border-violet-200/90 text-violet-900 bg-white hover:bg-violet-50 hover:border-violet-300'
                   }`}
                 >
                   <Edit3 className="w-3.5 h-3.5" />
@@ -271,13 +271,13 @@ export const MonthlyMilestoneSection: React.FC<MonthlyMilestoneSectionProps> = (
           {/* ONE-MONTH PROGRESSION BAR */}
           <div
             className={`pt-1.5 border-t space-y-1.5 ${
-              !isOwner ? 'border-blue-100/80' : 'border-purple-100/80'
+              !isOwner ? 'border-blue-100/80' : 'border-violet-100/80'
             }`}
           >
             <div className="flex items-center justify-between text-xs font-semibold">
               <span className="text-slate-600">Month Progression</span>
               <span
-                className={`font-bold ${!isOwner ? 'text-blue-950' : 'text-purple-950'}`}
+                className={`font-bold ${!isOwner ? 'text-blue-950' : 'text-violet-950'}`}
               >
                 {monthProgressPct}%
               </span>
@@ -285,7 +285,7 @@ export const MonthlyMilestoneSection: React.FC<MonthlyMilestoneSectionProps> = (
             <ProgressBar
               value={monthProgressPct}
               height="h-2"
-              color={!isOwner ? 'bg-blue-600' : 'bg-purple-600'}
+              color={!isOwner ? 'bg-blue-600' : 'bg-violet-700'}
             />
             <div className="flex items-center justify-between text-[11px] text-slate-400 pt-0.5">
               <span>
@@ -294,7 +294,7 @@ export const MonthlyMilestoneSection: React.FC<MonthlyMilestoneSectionProps> = (
                   : 'No tasks scheduled yet'}
               </span>
               <span
-                className={`font-medium ${!isOwner ? 'text-blue-900' : 'text-purple-900'}`}
+                className={`font-medium ${!isOwner ? 'text-blue-900' : 'text-violet-900'}`}
               >
                 {activeMilestone.completed ? 'Milestone: Achieved' : 'Milestone: In Progress'}
               </span>
@@ -320,7 +320,7 @@ export const MonthlyMilestoneSection: React.FC<MonthlyMilestoneSectionProps> = (
                 onClick={handlePrevMonth}
                 disabled={milestones.findIndex((m) => m.monthKey === activeMonth) === 0}
                 className={`p-1 rounded text-slate-600 disabled:opacity-30 cursor-pointer ${
-                  !isOwner ? 'hover:bg-blue-50 hover:text-blue-950' : 'hover:bg-purple-50 hover:text-purple-950'
+                  !isOwner ? 'hover:bg-blue-50 hover:text-blue-950' : 'hover:bg-violet-50 hover:text-violet-950'
                 }`}
                 title="Previous Month"
               >
@@ -331,7 +331,7 @@ export const MonthlyMilestoneSection: React.FC<MonthlyMilestoneSectionProps> = (
                 onClick={handleNextMonth}
                 disabled={milestones.findIndex((m) => m.monthKey === activeMonth) === milestones.length - 1}
                 className={`p-1 rounded text-slate-600 disabled:opacity-30 cursor-pointer ${
-                  !isOwner ? 'hover:bg-blue-50 hover:text-blue-950' : 'hover:bg-purple-50 hover:text-purple-950'
+                  !isOwner ? 'hover:bg-blue-50 hover:text-blue-950' : 'hover:bg-violet-50 hover:text-violet-950'
                 }`}
                 title="Next Month"
               >
@@ -361,12 +361,12 @@ export const MonthlyMilestoneSection: React.FC<MonthlyMilestoneSectionProps> = (
                         ? 'bg-blue-50 text-blue-900 border-blue-200 hover:bg-blue-100'
                         : 'bg-white text-slate-700 border-slate-200 hover:border-blue-300 hover:bg-blue-50/50'
                       : isSelected
-                      ? 'bg-purple-700 text-white border-purple-800 shadow-2xs font-bold'
+                      ? 'bg-violet-800 text-white border-violet-900 shadow-2xs font-bold'
                       : m.completed
-                      ? 'bg-purple-100 text-purple-950 border-purple-300 hover:bg-purple-200'
+                      ? 'bg-violet-100 text-violet-950 border-violet-300 hover:bg-violet-200'
                       : isCurrent
-                      ? 'bg-purple-50 text-purple-900 border-purple-200 hover:bg-purple-100'
-                      : 'bg-white text-slate-700 border-slate-200 hover:border-purple-200 hover:bg-purple-50/50'
+                      ? 'bg-violet-50 text-violet-900 border-violet-200 hover:bg-violet-100'
+                      : 'bg-white text-slate-700 border-slate-200 hover:border-violet-200 hover:bg-violet-50/50'
                   }`}
                 >
                   {m.completed && (
@@ -376,7 +376,7 @@ export const MonthlyMilestoneSection: React.FC<MonthlyMilestoneSectionProps> = (
                           ? 'text-white'
                           : !isOwner
                           ? 'text-blue-700'
-                          : 'text-purple-700'
+                          : 'text-violet-800'
                       }`}
                     />
                   )}
@@ -391,7 +391,7 @@ export const MonthlyMilestoneSection: React.FC<MonthlyMilestoneSectionProps> = (
       {/* MINIMAL OVERALL PROGRESSION FOOTER */}
       <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-[11px] text-slate-400 font-medium">
         <span>Full Goal Horizon: {overallPct}% complete</span>
-        <span className={!isOwner ? 'text-blue-900 font-semibold' : 'text-purple-900 font-semibold'}>
+        <span className={!isOwner ? 'text-blue-900 font-semibold' : 'text-violet-900 font-semibold'}>
           {completedMonths}/{totalMonths} months achieved
         </span>
       </div>

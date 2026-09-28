@@ -182,8 +182,8 @@ export const GlassIconButton: React.FC<{
 
   const variantClasses = {
     purple: active
-      ? 'bg-purple-600 text-white border-purple-500 shadow-xs ring-2 ring-purple-400/30'
-      : 'bg-purple-500/10 hover:bg-purple-500/20 active:bg-purple-500/30 text-purple-700 hover:text-purple-900 border border-purple-300/30 hover:border-purple-400/50 backdrop-blur-xs shadow-2xs hover:shadow-xs',
+      ? 'bg-violet-700 text-white border-violet-600 shadow-xs ring-2 ring-violet-500/30'
+      : 'bg-violet-600/10 hover:bg-violet-600/20 active:bg-violet-600/30 text-violet-800 hover:text-violet-900 border border-violet-300/30 hover:border-violet-500/50 backdrop-blur-xs shadow-2xs hover:shadow-xs',
     emerald: active
       ? 'bg-emerald-600 text-white border-emerald-500 shadow-xs ring-2 ring-emerald-400/30'
       : 'bg-emerald-500/10 hover:bg-emerald-500/20 active:bg-emerald-500/30 text-emerald-700 hover:text-emerald-900 border border-emerald-300/30 hover:border-emerald-400/50 backdrop-blur-xs shadow-2xs hover:shadow-xs',
@@ -312,7 +312,7 @@ export const GlassBadge: React.FC<{
   className?: string;
 }> = ({ children, variant = 'emerald', className = '' }) => {
   const styles = {
-    purple: 'bg-purple-500/10 text-purple-800 border-purple-300/40',
+    purple: 'bg-violet-600/10 text-violet-900 border-violet-300/40',
     emerald: 'bg-emerald-500/10 text-emerald-800 border-emerald-300/40',
     amber: 'bg-amber-500/10 text-amber-800 border-amber-300/40',
     blue: 'bg-blue-500/10 text-blue-800 border-blue-300/40',

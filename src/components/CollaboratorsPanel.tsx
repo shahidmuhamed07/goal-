@@ -451,7 +451,7 @@ export const CollaboratorsPanel: React.FC<CollaboratorsPanelProps> = ({
           </select>
           <button
             type="submit"
-            className="px-4 py-2.5 bg-purple-600 hover:bg-purple-700 text-white text-sm font-semibold rounded-xl press cursor-pointer"
+            className="px-4 py-2.5 bg-violet-700 hover:bg-violet-800 text-white text-sm font-semibold rounded-xl press cursor-pointer"
           >
             Request access
           </button>
@@ -698,7 +698,7 @@ export const CollaboratorsPanel: React.FC<CollaboratorsPanelProps> = ({
                       onClick={() => onSwitchWorkspace(active ? user.uid : (c.id || ''))}
                       className={`text-xs font-semibold px-2.5 py-1.5 rounded-lg cursor-pointer ${
                         active
-                          ? 'bg-purple-600 text-white shadow-2xs'
+                          ? 'bg-violet-700 text-white shadow-2xs'
                           : 'border border-slate-200 text-slate-700 hover:bg-slate-50'
                       }`}
                     >

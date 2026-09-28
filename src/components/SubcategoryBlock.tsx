@@ -100,12 +100,12 @@ export const SubcategoryBlock: React.FC<SubcategoryBlockProps> = ({
   return (
     <div
       className={`rounded-xl border overflow-hidden bg-white shadow-2xs ${
-        !isOwner ? 'border-blue-200/80' : 'border-purple-200/80'
+        !isOwner ? 'border-blue-200/80' : 'border-violet-200/80'
       }`}
     >
       <div
         className={`flex flex-wrap sm:flex-nowrap items-center justify-between gap-1.5 p-2 border-b transition ${
-          !isOwner ? 'bg-blue-50/50 border-blue-100/80' : 'bg-purple-50/40 border-purple-100/80'
+          !isOwner ? 'bg-blue-50/50 border-blue-100/80' : 'bg-violet-50/40 border-violet-100/80'
         }`}
       >
         {/* Toggle Expand / Collapse Button */}
@@ -144,7 +144,7 @@ export const SubcategoryBlock: React.FC<SubcategoryBlockProps> = ({
                 className={`flex-1 min-w-[140px] text-sm font-semibold text-slate-900 bg-white border rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-2 ${
                   !isOwner
                     ? 'border-blue-500 focus:ring-blue-500/20'
-                    : 'border-purple-500 focus:ring-purple-500/20'
+                    : 'border-violet-600 focus:ring-violet-600/20'
                 }`}
                 placeholder="Subcategory name..."
               />
@@ -155,7 +155,7 @@ export const SubcategoryBlock: React.FC<SubcategoryBlockProps> = ({
                   className={`px-3 py-1.5 text-white rounded-lg text-xs font-semibold shadow-2xs transition cursor-pointer flex items-center gap-1 active:scale-95 ${
                     !isOwner
                       ? 'bg-blue-700 hover:bg-blue-800'
-                      : 'bg-purple-700 hover:bg-purple-800'
+                      : 'bg-violet-800 hover:bg-violet-900'
                   }`}
                   title="Save changes"
                 >
@@ -183,7 +183,7 @@ export const SubcategoryBlock: React.FC<SubcategoryBlockProps> = ({
             >
               <span
                 className={`block text-sm font-bold text-slate-800 transition-colors truncate ${
-                  !isOwner ? 'group-hover:text-blue-700' : 'group-hover:text-purple-700'
+                  !isOwner ? 'group-hover:text-blue-700' : 'group-hover:text-violet-800'
                 }`}
               >
                 {name}
@@ -199,7 +199,7 @@ export const SubcategoryBlock: React.FC<SubcategoryBlockProps> = ({
               className={`text-[11px] font-semibold tabular-nums px-1.5 sm:px-2 py-0.5 rounded-md bg-white border shadow-2xs ${
                 !isOwner
                   ? 'text-blue-950 border-blue-200'
-                  : 'text-purple-900 border-purple-200'
+                  : 'text-violet-900 border-violet-200'
               }`}
             >
               {done}/{tasks.length}
@@ -213,7 +213,7 @@ export const SubcategoryBlock: React.FC<SubcategoryBlockProps> = ({
                 className={`text-[10px] sm:text-[11px] font-medium text-slate-700 bg-white border border-slate-200 rounded-lg px-1.5 sm:px-2 py-1 max-w-[6.5rem] sm:max-w-[8.5rem] cursor-pointer focus:ring-1 focus:outline-none shadow-2xs ${
                   !isOwner
                     ? 'hover:border-blue-300 focus:ring-blue-500'
-                    : 'hover:border-purple-300 focus:ring-purple-500'
+                    : 'hover:border-violet-300 focus:ring-violet-600'
                 }`}
                 title="Assign role to this subcategory"
               >
@@ -229,7 +229,7 @@ export const SubcategoryBlock: React.FC<SubcategoryBlockProps> = ({
                 className={`text-[10px] font-bold px-1.5 py-0.5 rounded-md border ${
                   !isOwner
                     ? 'text-blue-900 bg-blue-50 border-blue-200'
-                    : 'text-purple-800 bg-purple-50 border-purple-200'
+                    : 'text-violet-900 bg-violet-50 border-violet-200'
                 }`}
               >
                 {editorRole}
@@ -271,7 +271,7 @@ export const SubcategoryBlock: React.FC<SubcategoryBlockProps> = ({
       {expanded && (
         <div
           className={`border-t p-2.5 sm:p-3 space-y-2 bg-white ${
-            !isOwner ? 'border-blue-100' : 'border-purple-100'
+            !isOwner ? 'border-blue-100' : 'border-violet-100'
           }`}
         >
           {canAdd && onAddTask && (
@@ -285,7 +285,7 @@ export const SubcategoryBlock: React.FC<SubcategoryBlockProps> = ({
                   className={`flex-1 text-xs sm:text-sm bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-800 placeholder-slate-400 focus:outline-none focus:bg-white focus:ring-2 ${
                     !isOwner
                       ? 'focus:ring-blue-500/20 focus:border-blue-600'
-                      : 'focus:ring-purple-500/20 focus:border-purple-600'
+                      : 'focus:ring-violet-600/20 focus:border-violet-700'
                   }`}
                 />
                 <button
@@ -294,7 +294,7 @@ export const SubcategoryBlock: React.FC<SubcategoryBlockProps> = ({
                   className={`px-3 sm:px-4 py-2 disabled:opacity-40 text-white text-xs sm:text-sm font-semibold rounded-xl transition cursor-pointer shrink-0 shadow-2xs ${
                     !isOwner
                       ? 'bg-blue-700 hover:bg-blue-800'
-                      : 'bg-purple-700 hover:bg-purple-800'
+                      : 'bg-violet-800 hover:bg-violet-900'
                   }`}
                 >
                   Add
@@ -306,7 +306,7 @@ export const SubcategoryBlock: React.FC<SubcategoryBlockProps> = ({
                   value={priority}
                   onChange={(e) => setPriority(e.target.value as 'high' | 'medium' | 'low')}
                   className={`bg-slate-50 border border-slate-200 rounded-lg px-2 py-0.5 text-slate-700 focus:outline-none focus:ring-1 text-[11px] sm:text-xs ${
-                    !isOwner ? 'focus:ring-blue-500' : 'focus:ring-purple-500'
+                    !isOwner ? 'focus:ring-blue-500' : 'focus:ring-violet-600'
                   }`}
                 >
                   <option value="high">High</option>
@@ -329,10 +329,10 @@ export const SubcategoryBlock: React.FC<SubcategoryBlockProps> = ({
                   t.completed
                     ? !isOwner
                       ? 'bg-blue-50/20 border-blue-100 text-slate-400'
-                      : 'bg-purple-50/20 border-purple-100 text-slate-400'
+                      : 'bg-violet-50/20 border-violet-100 text-slate-400'
                     : !isOwner
                     ? 'bg-white border-slate-200 text-slate-800 shadow-2xs hover:border-blue-200'
-                    : 'bg-white border-slate-200 text-slate-800 shadow-2xs hover:border-purple-200'
+                    : 'bg-white border-slate-200 text-slate-800 shadow-2xs hover:border-violet-200'
                 }`}
               >
                 {editingTaskId === t.id ? (
@@ -344,7 +344,7 @@ export const SubcategoryBlock: React.FC<SubcategoryBlockProps> = ({
                       className={`w-full text-xs sm:text-sm bg-slate-50 border border-slate-300 rounded-lg px-3 py-1.5 text-slate-800 focus:outline-none focus:bg-white focus:ring-2 font-medium ${
                         !isOwner
                           ? 'focus:ring-blue-500/20 focus:border-blue-600'
-                          : 'focus:ring-purple-500/20 focus:border-purple-600'
+                          : 'focus:ring-violet-600/20 focus:border-violet-700'
                       }`}
                       autoFocus
                     />
@@ -373,7 +373,7 @@ export const SubcategoryBlock: React.FC<SubcategoryBlockProps> = ({
                           className={`px-2.5 py-1 text-white rounded-md text-xs font-semibold cursor-pointer shadow-2xs ${
                             !isOwner
                               ? 'bg-blue-700 hover:bg-blue-800'
-                              : 'bg-purple-700 hover:bg-purple-800'
+                              : 'bg-violet-800 hover:bg-violet-900'
                           }`}
                         >
                           Save
@@ -399,7 +399,7 @@ export const SubcategoryBlock: React.FC<SubcategoryBlockProps> = ({
                         className={`w-4 h-4 mt-0.5 rounded border-slate-300 disabled:opacity-40 shrink-0 cursor-pointer ${
                           !isOwner
                             ? 'accent-blue-700 text-blue-700 focus:ring-blue-500'
-                            : 'accent-purple-700 text-purple-700 focus:ring-purple-500'
+                            : 'accent-violet-800 text-violet-800 focus:ring-violet-600'
                         }`}
                       />
                       <div className="flex flex-col min-w-0">

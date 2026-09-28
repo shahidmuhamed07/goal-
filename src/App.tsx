@@ -162,7 +162,7 @@ const mapGoalDoc = (id: string, data: Record<string, unknown>): Goal => ({
  */
 const CATEGORY_ACCENTS: Record<string, string> = {
   Career: 'from-blue-400 to-blue-600',
-  Business: 'from-purple-400 to-purple-600',
+  Business: 'from-violet-500 to-violet-700',
   Health: 'from-emerald-300 to-emerald-500',
   Fitness: 'from-violet-400 to-violet-600',
   'Finance & Wealth': 'from-teal-300 to-teal-500',
@@ -171,7 +171,7 @@ const CATEGORY_ACCENTS: Record<string, string> = {
 };
 
 const categoryAccent = (category?: string): string =>
-  CATEGORY_ACCENTS[(category || '').trim()] || 'from-purple-400 to-purple-600';
+  CATEGORY_ACCENTS[(category || '').trim()] || 'from-violet-500 to-violet-700';
 
 async function ensureUserProfile(firebaseUser: User) {
   const userRef = doc(db, 'users', firebaseUser.uid);
@@ -2164,7 +2164,7 @@ export default function App() {
                   {typeof count === 'number' && count > 0 && (
                     <span
                       className={`text-[11px] font-bold tabular-nums ${
-                        active ? 'text-purple-700/70' : 'text-slate-600'
+                        active ? 'text-violet-800/70' : 'text-slate-600'
                       }`}
                     >
                       {count}
@@ -2172,7 +2172,7 @@ export default function App() {
                   )}
                   {badge > 0 && (
                     <span
-                      className="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 text-[10px] font-bold rounded-full leading-none shrink-0 bg-purple-100 text-purple-800"
+                      className="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 text-[10px] font-bold rounded-full leading-none shrink-0 bg-violet-100 text-violet-900"
                     >
                       {badge}
                     </span>
@@ -2252,11 +2252,11 @@ export default function App() {
                         className="neu-sm press group/card select-none text-center sm:text-left px-3 py-2.5 cursor-pointer"
                         title="Click to view all goals"
                       >
-                        <div className="text-lg sm:text-xl font-black text-purple-700">{goals.length}</div>
+                        <div className="text-lg sm:text-xl font-black text-violet-800">{goals.length}</div>
                         <div className="text-[10px] font-semibold text-slate-600">
                           {!isOwner ? 'Client Goals' : 'Active Goals'}
                         </div>
-                        <div className="text-[9px] font-bold text-slate-600 group-hover/card:text-purple-700 flex items-center justify-center sm:justify-start gap-0.5 mt-0.5 transition">
+                        <div className="text-[9px] font-bold text-slate-600 group-hover/card:text-violet-800 flex items-center justify-center sm:justify-start gap-0.5 mt-0.5 transition">
                           <span>View Grid</span>
                           <ArrowRight className="w-2.5 h-2.5 group-hover/card:translate-x-0.5 transition-transform" />
                         </div>
@@ -2269,13 +2269,13 @@ export default function App() {
                         className="neu-sm press group/card select-none text-center sm:text-left px-3 py-2.5 cursor-pointer"
                         title="Click to switch to Today's Focus"
                       >
-                        <div className="text-lg sm:text-xl font-black text-emerald-700">
+                        <div className="text-lg sm:text-xl font-black text-slate-900">
                           {allTodayTasks.filter((t) => t.completed).length}/{allTodayTasks.length}
                         </div>
                         <div className="text-[10px] font-semibold text-slate-600">
                           Tasks Today
                         </div>
-                        <div className="text-[9px] font-bold text-slate-600 group-hover/card:text-emerald-700 flex items-center justify-center sm:justify-start gap-0.5 mt-0.5 transition">
+                        <div className="text-[9px] font-bold text-slate-600 group-hover/card:text-violet-800 flex items-center justify-center sm:justify-start gap-0.5 mt-0.5 transition">
                           <span>Focus Mode</span>
                           <ArrowRight className="w-2.5 h-2.5 group-hover/card:translate-x-0.5 transition-transform" />
                         </div>
@@ -2293,11 +2293,11 @@ export default function App() {
                         className="neu-sm press group/card select-none text-center sm:text-left px-3 py-2.5 cursor-pointer"
                         title="Click to view progress roadmap"
                       >
-                        <div className="text-lg sm:text-xl font-black text-blue-700">{overallProgress}%</div>
+                        <div className="text-lg sm:text-xl font-black text-slate-900">{overallProgress}%</div>
                         <div className="text-[10px] font-semibold text-slate-600">
                           Progress
                         </div>
-                        <div className="text-[9px] font-bold text-slate-600 group-hover/card:text-blue-700 flex items-center justify-center sm:justify-start gap-0.5 mt-0.5 transition">
+                        <div className="text-[9px] font-bold text-slate-600 group-hover/card:text-violet-800 flex items-center justify-center sm:justify-start gap-0.5 mt-0.5 transition">
                           <span>Roadmap</span>
                           <ArrowRight className="w-2.5 h-2.5 group-hover/card:translate-x-0.5 transition-transform" />
                         </div>
@@ -2354,7 +2354,7 @@ export default function App() {
                               title={`Open ${client.displayName || client.email || 'client'}'s workspace`}
                               className="neu lift group w-full flex items-center gap-3 p-3 rounded-2xl text-left cursor-pointer"
                             >
-                              <span className="neu-inset-sm w-10 h-10 rounded-full grid place-items-center text-sm font-black text-purple-700 shrink-0">
+                              <span className="neu-inset-sm w-10 h-10 rounded-full grid place-items-center text-sm font-black text-violet-800 shrink-0">
                                 {initial}
                               </span>
                               <span className="min-w-0 flex-1">
@@ -2399,7 +2399,7 @@ export default function App() {
                       onChange={(e) => setSearchQuery(e.target.value)}
                       className={`w-full text-xs bg-white border rounded-xl pl-8 pr-3 py-2 text-slate-800 placeholder-slate-500 focus:outline-none ${
                         !isOwner
-                          ? 'border-purple-200 focus:ring-2 focus:ring-purple-500/20 focus:border-purple-600'
+                          ? 'border-violet-200 focus:ring-2 focus:ring-violet-600/20 focus:border-violet-700'
                           : 'border-slate-200 focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600'
                       }`}
                     />
@@ -2415,7 +2415,7 @@ export default function App() {
                           selectedCategory === cat
                             ? !isOwner
                               ? 'bg-blue-600 text-white shadow-2xs'
-                              : 'bg-purple-600 text-white shadow-2xs'
+                              : 'bg-violet-700 text-white shadow-2xs'
                             : !isOwner
                             ? 'bg-white/70 text-blue-900/80 border border-white/60 hover:bg-white'
                             : 'bg-white/70 text-slate-600 border border-white/60 hover:bg-white'
@@ -3128,13 +3128,13 @@ export default function App() {
                 {/* Top Goal Bar */}
                 <div
                   className={`neu rounded-2xl p-4 sm:p-6 transition-colors duration-200 ${
-                    !isOwner ? 'border-purple-200/90 shadow-purple-950/5' : 'border-purple-200/80'
+                    !isOwner ? 'border-violet-200/90 shadow-violet-950/5' : 'border-violet-200/80'
                   }`}
                 >
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0 flex-1">
                       {isEditingGoalHeader ? (
-                        <div className="bg-purple-50/40 border border-purple-200 rounded-xl p-4 space-y-3">
+                        <div className="bg-violet-50/40 border border-violet-200 rounded-xl p-4 space-y-3">
                           <div className="flex items-center justify-between">
                             <h3 className="text-sm font-bold text-slate-800">Edit Goal Details</h3>
                             <button
@@ -3152,7 +3152,7 @@ export default function App() {
                               type="text"
                               value={editGoalTitle}
                               onChange={(e) => setEditGoalTitle(e.target.value)}
-                              className="w-full text-sm bg-white border border-slate-300 rounded-lg px-3 py-2 text-slate-800 font-semibold focus:outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-purple-600"
+                              className="w-full text-sm bg-white border border-slate-300 rounded-lg px-3 py-2 text-slate-800 font-semibold focus:outline-none focus:ring-2 focus:ring-violet-600/20 focus:border-violet-700"
                             />
                           </div>
                           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -3162,7 +3162,7 @@ export default function App() {
                                 type="text"
                                 value={editGoalCategory}
                                 onChange={(e) => setEditGoalCategory(e.target.value)}
-                                className="w-full text-xs bg-white border border-slate-300 rounded-lg px-3 py-1.5 text-slate-800 focus:outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-purple-600"
+                                className="w-full text-xs bg-white border border-slate-300 rounded-lg px-3 py-1.5 text-slate-800 focus:outline-none focus:ring-2 focus:ring-violet-600/20 focus:border-violet-700"
                               />
                             </div>
                             <div>
@@ -3171,7 +3171,7 @@ export default function App() {
                                 type="text"
                                 value={editGoalDesc}
                                 onChange={(e) => setEditGoalDesc(e.target.value)}
-                                className="w-full text-xs bg-white border border-slate-300 rounded-lg px-3 py-1.5 text-slate-800 focus:outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-purple-600"
+                                className="w-full text-xs bg-white border border-slate-300 rounded-lg px-3 py-1.5 text-slate-800 focus:outline-none focus:ring-2 focus:ring-violet-600/20 focus:border-violet-700"
                                 placeholder="Goal description..."
                               />
                             </div>
@@ -3188,7 +3188,7 @@ export default function App() {
                                 });
                                 setIsEditingGoalHeader(false);
                               }}
-                              className="px-4 py-1.5 bg-purple-700 hover:bg-purple-800 text-white rounded-lg text-xs font-bold transition shadow-xs cursor-pointer active:scale-95"
+                              className="px-4 py-1.5 bg-violet-800 hover:bg-violet-900 text-white rounded-lg text-xs font-bold transition shadow-xs cursor-pointer active:scale-95"
                             >
                               Save Changes
                             </button>
@@ -3216,7 +3216,7 @@ export default function App() {
                             <span
                               className={`text-[11px] font-semibold px-2 py-0.5 rounded-md border ${
                                 isOwner
-                                  ? 'text-purple-900 bg-purple-50 border-purple-200'
+                                  ? 'text-violet-900 bg-violet-50 border-violet-200'
                                   : 'text-blue-950 bg-blue-50 border-blue-300'
                               }`}
                             >
@@ -3225,7 +3225,7 @@ export default function App() {
                             <span
                               className={`text-[11px] font-semibold px-2 py-0.5 rounded-md border ${
                                 isOwner
-                                  ? 'text-purple-800 bg-purple-50 border-purple-100'
+                                  ? 'text-violet-900 bg-violet-50 border-violet-100'
                                   : 'text-blue-900 bg-blue-50 border-blue-200'
                               }`}
                             >
@@ -3274,19 +3274,19 @@ export default function App() {
                             return assigned.map((c) => (
                               <span
                                 key={c.uid}
-                                className="inline-flex items-center gap-1 bg-purple-50 border border-purple-200 text-purple-900 font-semibold px-2 py-0.5 rounded-md text-[11px]"
+                                className="inline-flex items-center gap-1 bg-violet-50 border border-violet-200 text-violet-900 font-semibold px-2 py-0.5 rounded-md text-[11px]"
                               >
                                 <span>{c.name || c.email || 'Pro'}</span>
-                                <span className="text-purple-700 font-normal">({c.role})</span>
+                                <span className="text-violet-800 font-normal">({c.role})</span>
                               </span>
                             ));
                           })()}
                           <button
                             type="button"
                             onClick={() => setManagingAssignedGoal(currentGoal)}
-                            className="text-xs font-semibold text-purple-900 hover:text-purple-950 hover:bg-purple-100/70 bg-purple-50 px-2.5 py-1 rounded-lg border border-purple-200 transition cursor-pointer flex items-center gap-1"
+                            className="text-xs font-semibold text-violet-900 hover:text-violet-950 hover:bg-violet-100/70 bg-violet-50 px-2.5 py-1 rounded-lg border border-violet-200 transition cursor-pointer flex items-center gap-1"
                           >
-                            <Settings className="w-3 h-3 text-purple-700" />
+                            <Settings className="w-3 h-3 text-violet-800" />
                             <span>Manage Access</span>
                           </button>
                         </div>
