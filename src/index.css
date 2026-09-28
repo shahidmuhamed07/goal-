@@ -500,43 +500,49 @@ input[type="radio"] {
   z-index: 10;
 }
 
-/* Loader container: centered logo */
-.gp-loader-container {
-  display: flex;
-  align-items: center;
-  justify-content: center;
+.gp-loader-track {
+  stroke: rgba(255, 255, 255, 0.22);
 }
 
-/* Logo with animation overlay */
-.gp-loader-logo-with-animation {
-  position: relative;
-  width: fit-content;
-  height: fit-content;
+/* The mark's own route doubles as the progress track. One light runs it, from
+   the top-right node down to the bottom-left one: it grows out of the first
+   node, travels the line, and is swallowed by the second, so it never snaps
+   back to the start. Motion only, so the screen never dims while the read runs. */
+@keyframes gp-loader-run {
+  from {
+    stroke-dashoffset: 26;
+  }
+  to {
+    stroke-dashoffset: -100;
+  }
 }
 
-/* SVG overlay positioned on top of logo */
-.gp-loader-animation-overlay {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  width: 80px;
-  height: 80px;
+.gp-loader-body,
+.gp-loader-glow {
+  stroke-dasharray: 26 200;
+  stroke-linecap: round;
+  animation: gp-loader-run 1.8s linear infinite;
 }
 
-/* Glowing traveling segment animation */
-@keyframes gp-loader-traveling-flow {
+/* The bright dot rides the leading edge of its own tail: same speed, offset by
+   the tail's length, so the two never drift apart. */
+@keyframes gp-loader-run-head {
   from {
     stroke-dashoffset: 0;
   }
   to {
-    stroke-dashoffset: -150;
+    stroke-dashoffset: -126;
   }
 }
 
-.gp-loader-traveling {
-  stroke-dasharray: 30 120;
-  animation: gp-loader-traveling-flow 2.4s linear infinite;
+.gp-loader-head {
+  stroke-dasharray: 0.5 200;
+  stroke-linecap: round;
+  animation: gp-loader-run-head 1.8s linear infinite;
+}
+
+.gp-loader-node {
+  opacity: 0.72;
 }
 
 /* Interactive surfaces answer the pointer */
@@ -628,6 +634,20 @@ input[type="radio"] {
   .bar-grow,
   .gp-loader-mark {
     animation: none !important;
+  }
+  /* Loader: drop the running light, brighten the track it ran along, and hold
+     both nodes lit so the mark still reads as the brand. */
+  .gp-loader-body,
+  .gp-loader-glow,
+  .gp-loader-head {
+    animation: none !important;
+    display: none;
+  }
+  .gp-loader-track {
+    stroke: rgba(255, 255, 255, 0.9);
+  }
+  .gp-loader-node {
+    opacity: 0.95;
   }
   .lift,
   .press,
