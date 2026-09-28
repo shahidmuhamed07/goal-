@@ -3419,11 +3419,11 @@ export default function App() {
       )}
 
       {/* PHONE TAB BAR: a floating pill that stays on screen while you scroll */}
-      <nav className="sm:hidden fixed bottom-0 inset-x-0 z-40 px-3 safe-bottom pointer-events-none">
+      <nav className="sm:hidden fixed bottom-0 inset-x-0 z-50 px-3 safe-bottom pointer-events-none">
         <div
           ref={phoneNav.ref}
           data-tone={!isOwner ? 'warm' : 'cool'}
-          className="segmented mx-auto max-w-md justify-between pointer-events-auto shadow-lg"
+          className="segmented mx-auto max-w-md justify-between pointer-events-auto shadow-lg relative z-50"
         >
           <span
             className="segmented-track"
