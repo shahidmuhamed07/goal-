@@ -255,8 +255,10 @@ export const DailyTaskSection: React.FC<DailyTaskSectionProps> = ({
                 <select
                   value={activeMonthKey}
                   onChange={(e) => onSelectMonth(e.target.value)}
-                  className={`text-xs font-bold bg-transparent cursor-pointer focus:outline-none font-semibold ${
-                    !isOwner ? 'text-blue-900' : 'text-purple-900'
+                  className={`text-xs font-bold font-semibold cursor-pointer focus:outline-none px-3 py-1.5 rounded-lg border transition ${
+                    !isOwner
+                      ? 'bg-blue-50 text-blue-900 border-blue-200 hover:bg-blue-100 hover:border-blue-300'
+                      : 'bg-purple-50 text-purple-900 border-purple-200 hover:bg-purple-100 hover:border-purple-300'
                   }`}
                   title="Select month"
                 >
