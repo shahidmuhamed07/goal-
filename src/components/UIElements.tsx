@@ -49,17 +49,75 @@ export const GoalPathLogo: React.FC<{ size?: 'sm' | 'md' | 'lg' | 'xl'; showText
 };
 
 /**
- * Full-screen loader: Just the Route logo, breathing gently.
- * No animation, no text. Pure logo.
+ * The brand route, drawn right-to-left on purpose.
+ *
+ * Lucide's own "route" path runs bottom-left to top-right; reversing it lets the
+ * travelling light leave the top-right node and arrive at the bottom-left one,
+ * which is the direction a goal actually moves: from the far point back to where
+ * you stand today.
  */
-export const GoalPathLoader: React.FC<{ message?: string }> = () => (
+const LOADER_ROUTE_D = 'M15 5H6.5a3.5 3.5 0 0 0 0 7h11a3.5 3.5 0 0 1 0 7H9';
+
+/**
+ * Full-screen loader.
+ *
+ * The mark's own route becomes the progress track: a soft white line with a mint
+ * light running its length, each node lighting as the light reaches it. Motion
+ * only, so nothing dims or greys out while the first cloud read finishes.
+ */
+export const GoalPathLoader: React.FC<{ message?: string }> = ({ message }) => (
   <div
     role="status"
     aria-live="polite"
+    aria-label={message || 'Loading'}
     className="flex items-center justify-center min-h-screen w-full"
   >
     <div className="gp-loader-mark">
-      <GoalPathLogo size="xl" showText={false} />
+      <div className="w-24 h-24 sm:w-28 sm:h-28 rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-700 shadow-[0_16px_40px_-14px_rgba(13,148,136,0.8)] flex items-center justify-center">
+        <svg
+          viewBox="0 0 24 24"
+          fill="none"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          className="w-[62%] h-[62%]"
+          aria-hidden="true"
+        >
+          {/* The unlit track: the route as it looks at rest. */}
+          <path d={LOADER_ROUTE_D} strokeWidth="2" className="gp-loader-track" />
+          <circle cx="18" cy="5" r="3" strokeWidth="2" className="gp-loader-track" />
+          <circle cx="6" cy="19" r="3" strokeWidth="2" className="gp-loader-track" />
+
+          {/* One light. It grows out of the top-right node, runs the whole
+              route, and is swallowed by the bottom-left node, so it reads as a
+              single pass down the line rather than something that restarts. */}
+          <path
+            d={LOADER_ROUTE_D}
+            pathLength={100}
+            stroke="#6ee7b7"
+            strokeWidth="7"
+            opacity="0.22"
+            className="gp-loader-glow"
+          />
+          <path
+            d={LOADER_ROUTE_D}
+            pathLength={100}
+            stroke="#a7f3d0"
+            strokeWidth="2.6"
+            className="gp-loader-body"
+          />
+          <path
+            d={LOADER_ROUTE_D}
+            pathLength={100}
+            stroke="#f0fdf9"
+            strokeWidth="3.4"
+            className="gp-loader-head"
+          />
+
+          {/* Nodes, held softly lit so the mark still reads between passes. */}
+          <circle cx="18" cy="5" r="3" fill="#a7f3d0" className="gp-loader-node" />
+          <circle cx="6" cy="19" r="3" fill="#a7f3d0" className="gp-loader-node" />
+        </svg>
+      </div>
     </div>
   </div>
 );
@@ -176,5 +234,3 @@ export const GlassBadge: React.FC<{
     </span>
   );
 };
-
-
