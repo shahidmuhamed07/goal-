@@ -255,8 +255,8 @@ export const DailyTaskSection: React.FC<DailyTaskSectionProps> = ({
                 <select
                   value={activeMonthKey}
                   onChange={(e) => onSelectMonth(e.target.value)}
-                  className={`text-xs font-bold bg-transparent cursor-pointer focus:outline-none ${
-                    !isOwner ? 'text-blue-950' : 'text-purple-950'
+                  className={`text-xs font-bold bg-transparent cursor-pointer focus:outline-none font-semibold ${
+                    !isOwner ? 'text-blue-900' : 'text-purple-900'
                   }`}
                   title="Select month"
                 >

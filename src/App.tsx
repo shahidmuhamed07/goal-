@@ -3159,7 +3159,7 @@ export default function App() {
                                 setSelectedGoalId(null);
                                 setActiveTab('dashboard');
                               }}
-                              className="text-[11px] font-semibold text-emerald-700 hover:text-emerald-800 cursor-pointer"
+                              className="text-[11px] font-semibold text-emerald-600 hover:text-emerald-700 cursor-pointer"
                             >
                               ← Back
                             </button>
