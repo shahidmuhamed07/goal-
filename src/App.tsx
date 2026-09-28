@@ -486,25 +486,17 @@ export default function App() {
 
         setGoals(fetchedGoals);
         setDataLoading(false);
-        setFirstLoadDone(true);
       },
       (error) => {
         console.error('Firestore onSnapshot error:', error);
         setErrorMessage('Unable to load goals from cloud storage. Please check connection.');
         setDataLoading(false);
-        setFirstLoadDone(true);
       }
     );
 
     return () => unsubscribe();
   }, [user, workspaceUid]);
 
-  // Never let the loader become a hostage situation: if the first cloud read
-  // drags on, hand the app over anyway and let the data stream in behind it.
-  useEffect(() => {
-    const timer = window.setTimeout(() => setFirstLoadDone(true), 2500);
-    return () => window.clearTimeout(timer);
-  }, []);
 
   /**
    * Every goal shared with this professional, across all of their clients.
