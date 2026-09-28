@@ -486,16 +486,25 @@ export default function App() {
 
         setGoals(fetchedGoals);
         setDataLoading(false);
+        setFirstLoadDone(true);
       },
       (error) => {
         console.error('Firestore onSnapshot error:', error);
         setErrorMessage('Unable to load goals from cloud storage. Please check connection.');
         setDataLoading(false);
+        setFirstLoadDone(true);
       }
     );
 
     return () => unsubscribe();
   }, [user, workspaceUid]);
+
+  // Never let the loader become a hostage situation: if the first cloud read
+  // drags on, hand the app over anyway and let the data stream in behind it.
+  useEffect(() => {
+    const timer = window.setTimeout(() => setFirstLoadDone(true), 2500);
+    return () => window.clearTimeout(timer);
+  }, []);
 
   /**
    * Every goal shared with this professional, across all of their clients.
@@ -1185,6 +1194,13 @@ export default function App() {
         await updateDoc(doc(db, 'goals', createdId), { viewerUids, editorUids });
       }
 
+      // Firestore echoes the new document back a moment later. Until it does,
+      // the detail view has nothing to render and the screen would sit blank,
+      // so hand the list the goal we just created straight away.
+      const createdGoal: Goal = { ...docData, id: createdId };
+      setGoals((prev) =>
+        prev.some((g) => g.id === createdId) ? prev : [createdGoal, ...prev]
+      );
       setSelectedGoalId(createdId);
       setActiveTab('detail');
     } catch (err) {
@@ -1838,7 +1854,7 @@ export default function App() {
   if (authLoading || (user && dataLoading)) {
     return (
       <div className="min-h-screen flex items-center justify-center">
-        <GoalPathLoader message="Loading your goals..." />
+        <GoalPathLoader />
       </div>
     );
   }
