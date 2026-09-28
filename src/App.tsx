@@ -497,6 +497,7 @@ export default function App() {
     return () => unsubscribe();
   }, [user, workspaceUid]);
 
+
   /**
    * Every goal shared with this professional, across all of their clients.
    *
@@ -1185,6 +1186,13 @@ export default function App() {
         await updateDoc(doc(db, 'goals', createdId), { viewerUids, editorUids });
       }
 
+      // Firestore echoes the new document back a moment later. Until it does,
+      // the detail view has nothing to render and the screen would sit blank,
+      // so hand the list the goal we just created straight away.
+      const createdGoal: Goal = { ...docData, id: createdId };
+      setGoals((prev) =>
+        prev.some((g) => g.id === createdId) ? prev : [createdGoal, ...prev]
+      );
       setSelectedGoalId(createdId);
       setActiveTab('detail');
     } catch (err) {
@@ -1838,7 +1846,7 @@ export default function App() {
   if (authLoading || (user && dataLoading)) {
     return (
       <div className="min-h-screen flex items-center justify-center">
-        <GoalPathLoader message="Loading your goals..." />
+        <GoalPathLoader />
       </div>
     );
   }
