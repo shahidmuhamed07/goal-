@@ -63,7 +63,9 @@ export const DailyTaskSection: React.FC<DailyTaskSectionProps> = ({
   const [showPresets, setShowPresets] = useState(false);
   const [expandedIds, setExpandedIds] = useState<Record<string, boolean>>({});
   const [allExpanded, setAllExpanded] = useState<boolean>(true);
+  const [showMonthDropdown, setShowMonthDropdown] = useState(false);
   const dateScrollRef = useRef<HTMLDivElement>(null);
+  const dropdownRef = useRef<HTMLDivElement>(null);
 
   // Sync selectedDate when activeMonthKey changes
   useEffect(() => {
@@ -146,6 +148,19 @@ export const DailyTaskSection: React.FC<DailyTaskSectionProps> = ({
       }
     }
   }, [selectedDate, activeMonthKey]);
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setShowMonthDropdown(false);
+      }
+    };
+    if (showMonthDropdown) {
+      document.addEventListener('mousedown', handleClickOutside);
+      return () => document.removeEventListener('mousedown', handleClickOutside);
+    }
+  }, [showMonthDropdown]);
 
   const toggleExpanded = (id: string) => {
     setExpandedIds((prev) => ({
@@ -241,33 +256,55 @@ export const DailyTaskSection: React.FC<DailyTaskSectionProps> = ({
             {/* MONTH SELECTOR DROPDOWN / PILL */}
             {milestoneMonths.length > 0 && onSelectMonth ? (
               <div
-                className={`flex items-center gap-1.5 rounded-lg px-2 py-0.5 border ${
-                  !isOwner
-                    ? 'bg-blue-50/70 border-blue-200/90'
-                    : 'bg-purple-50/70 border-purple-200/90'
-                }`}
+                ref={dropdownRef}
+                className="relative"
               >
-                <Calendar
-                  className={`w-3.5 h-3.5 flex-shrink-0 ${
-                    !isOwner ? 'text-blue-700' : 'text-purple-700'
-                  }`}
-                />
-                <select
-                  value={activeMonthKey}
-                  onChange={(e) => onSelectMonth(e.target.value)}
-                  className={`text-xs font-bold font-semibold cursor-pointer focus:outline-none px-3 py-1.5 rounded-lg border transition ${
+                <button
+                  type="button"
+                  onClick={() => setShowMonthDropdown(!showMonthDropdown)}
+                  className={`flex items-center gap-1.5 text-xs font-bold font-semibold cursor-pointer px-3 py-1.5 rounded-xl border transition ${
                     !isOwner
                       ? 'bg-blue-50 text-blue-900 border-blue-200 hover:bg-blue-100 hover:border-blue-300'
                       : 'bg-purple-50 text-purple-900 border-purple-200 hover:bg-purple-100 hover:border-purple-300'
                   }`}
                   title="Select month"
                 >
-                  {milestoneMonths.map((m) => (
-                    <option key={m.monthKey} value={m.monthKey}>
-                      {formatFullMonth(m.monthKey)} {m.monthKey === currentCalendarMonth ? '(Current)' : ''}
-                    </option>
-                  ))}
-                </select>
+                  <Calendar className={`w-3.5 h-3.5 flex-shrink-0 ${!isOwner ? 'text-blue-700' : 'text-purple-700'}`} />
+                  <span>{formatFullMonth(activeMonthKey)} {activeMonthKey === currentCalendarMonth ? '(Current)' : ''}</span>
+                  <ChevronDown className="w-3.5 h-3.5 flex-shrink-0" />
+                </button>
+
+                {showMonthDropdown && (
+                  <div
+                    className={`absolute top-full left-0 mt-2 w-48 rounded-xl border shadow-lg z-10 py-1 overflow-hidden ${
+                      !isOwner
+                        ? 'bg-blue-50 border-blue-200'
+                        : 'bg-purple-50 border-purple-200'
+                    }`}
+                  >
+                    {milestoneMonths.map((m) => (
+                      <button
+                        key={m.monthKey}
+                        type="button"
+                        onClick={() => {
+                          onSelectMonth(m.monthKey);
+                          setShowMonthDropdown(false);
+                        }}
+                        className={`w-full text-left px-3 py-2 text-xs font-semibold transition ${
+                          m.monthKey === activeMonthKey
+                            ? !isOwner
+                              ? 'bg-blue-200 text-blue-950'
+                              : 'bg-purple-200 text-purple-950'
+                            : !isOwner
+                            ? 'text-blue-900 hover:bg-blue-100'
+                            : 'text-purple-900 hover:bg-purple-100'
+                        }`}
+                      >
+                        {formatFullMonth(m.monthKey)} {m.monthKey === currentCalendarMonth ? '(Current)' : ''}
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
             ) : (
               <div
