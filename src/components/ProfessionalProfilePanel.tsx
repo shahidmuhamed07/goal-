@@ -8,11 +8,13 @@ import {
   Copy,
   ExternalLink,
   Eye,
+  LogOut,
   Mail,
   Pencil,
   Plus,
   ShieldCheck,
   Trash2,
+  TriangleAlert,
   X,
 } from 'lucide-react';
 import { db } from '../firebase';
@@ -701,26 +703,36 @@ export const ProfessionalProfilePanel: React.FC<ProfessionalProfilePanelProps> =
       {!isEditing && (
         <div className="pt-4 mt-2 border-t border-slate-100">
           {confirmLeave ? (
-            <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4 space-y-3">
-              <p className="text-xs text-slate-600 leading-relaxed">
-                Switch back to a plain client account? Your professional profile is kept, so you can turn
-                it back on anytime. Clients you already support are not removed here — remove them from the
-                Connect tab if you want to end those.
-              </p>
+            <div className="rounded-2xl border border-rose-200 bg-rose-50/70 p-4 space-y-3">
+              <div className="flex items-start gap-2.5">
+                <span className="w-8 h-8 rounded-lg grid place-items-center bg-rose-100 text-rose-600 shrink-0">
+                  <TriangleAlert className="w-4 h-4" />
+                </span>
+                <div className="min-w-0">
+                  <p className="text-sm font-bold text-slate-900">Leave professional mode?</p>
+                  <p className="text-xs text-slate-600 leading-relaxed mt-1">
+                    You will be <strong>disconnected from all of your clients</strong> and will
+                    <strong> no longer show up as a professional</strong>. Your own goals stay, and your
+                    profile is kept so you can turn it back on later — but you would have to reconnect with
+                    each client again.
+                  </p>
+                </div>
+              </div>
               <div className="flex items-center gap-2">
                 <button
                   type="button"
                   disabled={switching}
                   onClick={onSwitchToClient}
-                  className="text-xs font-bold px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-900 text-white transition cursor-pointer disabled:opacity-60"
+                  className="text-xs font-bold px-4 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white shadow-xs transition cursor-pointer disabled:opacity-60 flex items-center gap-1.5"
                 >
-                  {switching ? 'Switching…' : 'Yes, switch to client'}
+                  <LogOut className="w-3.5 h-3.5" />
+                  <span>{switching ? 'Leaving…' : 'Yes, leave & remove my clients'}</span>
                 </button>
                 <button
                   type="button"
                   disabled={switching}
                   onClick={() => setConfirmLeave(false)}
-                  className="text-xs font-semibold px-3 py-2 rounded-xl border border-slate-200 text-slate-600 hover:bg-white transition cursor-pointer"
+                  className="text-xs font-semibold px-3 py-2.5 rounded-xl border border-slate-200 text-slate-600 hover:bg-white transition cursor-pointer"
                 >
                   Cancel
                 </button>
@@ -730,10 +742,10 @@ export const ProfessionalProfilePanel: React.FC<ProfessionalProfilePanelProps> =
             <button
               type="button"
               onClick={() => setConfirmLeave(true)}
-              className="text-[11px] font-semibold text-slate-500 hover:text-slate-700 cursor-pointer flex items-center gap-1.5"
+              className="w-full sm:w-auto text-sm font-bold text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 px-4 py-2.5 rounded-xl transition cursor-pointer flex items-center justify-center gap-2"
             >
-              <Briefcase className="w-3 h-3" />
-              <span>Leave professional mode &amp; switch to a client account</span>
+              <LogOut className="w-4 h-4" />
+              <span>Leave professional mode</span>
             </button>
           )}
         </div>

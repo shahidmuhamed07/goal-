@@ -1900,6 +1900,55 @@ export default function App() {
     }
   };
 
+  /**
+   * Leaving professional mode: disconnect from every client and flip the
+   * account back to a plain client. Each client link is marked "removed" and
+   * recorded as withdrawn, so the client's account drops this access on their
+   * next sign-in, the same as removing one client from the Connect tab.
+   */
+  const handleLeaveProfessional = async () => {
+    if (!user) return;
+    setSavingPersona(true);
+    try {
+      const clientIds = visibleClients.map((c) => c.id || '').filter(Boolean);
+      if (clientIds.length > 0) {
+        const nextWithdrawn = Array.from(new Set([...withdrawnClientIds, ...clientIds]));
+        setWithdrawnClientIds(nextWithdrawn);
+        await updateDoc(doc(db, 'users', user.uid), { withdrawnClients: nextWithdrawn });
+        for (const clientId of clientIds) {
+          const q = query(
+            collection(db, 'accessRequests'),
+            where('fromUid', '==', user.uid),
+            where('toUid', '==', clientId)
+          );
+          const snap = await getDocs(q);
+          for (const d of snap.docs) {
+            await updateDoc(d.ref, { status: 'removed' }).catch(() => {});
+          }
+        }
+      }
+
+      setWorkspaceUid(user.uid);
+      setSelectedGoalId(null);
+      const chosenAt = new Date().toISOString();
+      await updateDoc(doc(db, 'users', user.uid), { persona: 'client', personaChosenAt: chosenAt });
+      setProfile((prev) => (prev ? { ...prev, persona: 'client', personaChosenAt: chosenAt } : prev));
+      setActiveTab('professional');
+      setSuccessMessage(
+        clientIds.length > 0
+          ? `You've left professional mode and disconnected from ${clientIds.length} client${
+              clientIds.length > 1 ? 's' : ''
+            }. You're back to a client account.`
+          : "You've left professional mode. You're back to a client account."
+      );
+    } catch (err) {
+      console.error('Leave professional error:', err);
+      setErrorMessage('Could not switch back to a client account. Please try again.');
+    } finally {
+      setSavingPersona(false);
+    }
+  };
+
   // LOADING & LOGIN GATES
   if (authLoading || (user && dataLoading)) {
     return (
@@ -3376,7 +3425,7 @@ export default function App() {
                   profile={profile}
                   onError={setErrorMessage}
                   switching={savingPersona}
-                  onSwitchToClient={() => handleChoosePersona('client')}
+                  onSwitchToClient={handleLeaveProfessional}
                 />
               ) : (
                 <AccountProfilePanel
