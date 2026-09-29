@@ -53,6 +53,26 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ me, other, onClose }) => {
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
 
+  // On phones the software keyboard shrinks the *visual* viewport but not the
+  // layout viewport, so a full-height fixed panel keeps its size and the
+  // keyboard shoves the header and messages off the top. Tracking the visual
+  // viewport lets us size the panel to the space actually on screen — header at
+  // the top, composer just above the keyboard — the way a chat app behaves.
+  const [vv, setVv] = useState<{ height: number; top: number } | null>(null);
+  useEffect(() => {
+    const visualViewport = window.visualViewport;
+    if (!visualViewport) return undefined;
+    const update = () =>
+      setVv({ height: visualViewport.height, top: visualViewport.offsetTop });
+    update();
+    visualViewport.addEventListener('resize', update);
+    visualViewport.addEventListener('scroll', update);
+    return () => {
+      visualViewport.removeEventListener('resize', update);
+      visualViewport.removeEventListener('scroll', update);
+    };
+  }, []);
+
   // Marks the thread read for this user without clobbering the other side's
   // fields. Also creates the thread doc the first time it is opened.
   const markRead = () => {
@@ -85,11 +105,12 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ me, other, onClose }) => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [chatId]);
 
-  // Keep the newest message in view as the thread grows and on open.
+  // Keep the newest message in view as the thread grows, on open, and when the
+  // keyboard opens or closes (which changes the visible height).
   useEffect(() => {
     const el = scrollRef.current;
     if (el) el.scrollTop = el.scrollHeight;
-  }, [messages, loading]);
+  }, [messages, loading, vv]);
 
   // Focus the composer when the panel opens.
   useEffect(() => {
@@ -153,7 +174,10 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ me, other, onClose }) => {
   let lastDay = '';
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-stretch sm:items-center justify-center sm:p-4 fade">
+    <div
+      className="fixed inset-x-0 z-[60] flex items-stretch sm:items-center justify-center sm:p-4 fade"
+      style={vv ? { top: vv.top, height: vv.height } : { top: 0, bottom: 0 }}
+    >
       <div
         className="absolute inset-0 bg-slate-900/50 backdrop-blur-md"
         onClick={onClose}
