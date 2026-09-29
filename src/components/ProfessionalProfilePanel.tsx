@@ -52,10 +52,12 @@ const newId = (prefix: string) => `${prefix}-${Date.now()}-${Math.floor(Math.ran
  * Read-only presentation of a professional profile. Used by the owner to
  * preview their own profile and by clients viewing someone they work with.
  */
-export const ProfessionalProfileCard: React.FC<{ value: ProfessionalProfile; compact?: boolean }> = ({
-  value,
-  compact = false,
-}) => {
+export const ProfessionalProfileCard: React.FC<{
+  value: ProfessionalProfile;
+  compact?: boolean;
+  /** Owner-only actions shown at the top-right of the header (edit, leave). */
+  headerActions?: React.ReactNode;
+}> = ({ value, compact = false, headerActions }) => {
   const credentials = value.credentials || [];
   const showcase = value.showcase || [];
 
@@ -65,7 +67,7 @@ export const ProfessionalProfileCard: React.FC<{ value: ProfessionalProfile; com
         <span className="w-11 h-11 rounded-2xl bg-emerald-100 text-emerald-800 border border-emerald-200 flex items-center justify-center text-sm font-bold shrink-0">
           {(value.displayName || 'P').charAt(0).toUpperCase()}
         </span>
-        <div className="min-w-0">
+        <div className="min-w-0 flex-1">
           <div className="text-base font-bold text-slate-900 truncate">
             {value.displayName || 'Professional'}
           </div>
@@ -92,6 +94,9 @@ export const ProfessionalProfileCard: React.FC<{ value: ProfessionalProfile; com
             )}
           </div>
         </div>
+        {headerActions && (
+          <div className="shrink-0 flex items-center gap-1.5">{headerActions}</div>
+        )}
       </div>
 
       {(value.yearsExperience || value.languages) && (
@@ -365,29 +370,41 @@ export const ProfessionalProfilePanel: React.FC<ProfessionalProfilePanelProps> =
             What your connected clients see. Only people whose requests you approved can read this.
           </p>
         </div>
-        {!isEditing && (
-          <div className="flex items-center gap-2 shrink-0">
-            {saved && (
-              <span className="text-[11px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-1 rounded-lg flex items-center gap-1">
-                <Check className="w-3 h-3" />
-                Saved
-              </span>
-            )}
-            <button
-              type="button"
-              onClick={() => setIsEditing(true)}
-              className="text-xs font-semibold text-white bg-emerald-600 hover:bg-emerald-700 px-4 py-2 rounded-xl transition cursor-pointer flex items-center gap-1.5 shadow-xs"
-            >
-              <Pencil className="w-3.5 h-3.5" />
-              <span>Edit profile</span>
-            </button>
-          </div>
+        {!isEditing && saved && (
+          <span className="shrink-0 text-[11px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-1 rounded-lg flex items-center gap-1">
+            <Check className="w-3 h-3" />
+            Saved
+          </span>
         )}
       </div>
 
       {!isEditing ? (
         <div className="neu rounded-2xl p-5 sm:p-6">
-          <ProfessionalProfileCard value={value} />
+          <ProfessionalProfileCard
+            value={value}
+            headerActions={
+              <>
+                <button
+                  type="button"
+                  onClick={() => setConfirmLeave(true)}
+                  title="Leave professional mode"
+                  aria-label="Leave professional mode"
+                  className="w-9 h-9 grid place-items-center rounded-xl text-rose-600 bg-rose-50 hover:bg-rose-100 border border-rose-200 transition cursor-pointer"
+                >
+                  <LogOut className="w-4 h-4" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIsEditing(true)}
+                  title="Edit profile"
+                  aria-label="Edit profile"
+                  className="w-9 h-9 grid place-items-center rounded-xl text-white bg-emerald-600 hover:bg-emerald-700 transition cursor-pointer shadow-xs"
+                >
+                  <Pencil className="w-4 h-4" />
+                </button>
+              </>
+            }
+          />
         </div>
       ) : (
         <div className="space-y-5">
@@ -700,54 +717,44 @@ export const ProfessionalProfilePanel: React.FC<ProfessionalProfilePanelProps> =
         </button>
       )}
 
-      {!isEditing && (
-        <div className="pt-4 mt-2 border-t border-slate-100">
-          {confirmLeave ? (
-            <div className="rounded-2xl border border-rose-200 bg-rose-50/70 p-4 space-y-3">
-              <div className="flex items-start gap-2.5">
-                <span className="w-8 h-8 rounded-lg grid place-items-center bg-rose-100 text-rose-600 shrink-0">
-                  <TriangleAlert className="w-4 h-4" />
-                </span>
-                <div className="min-w-0">
-                  <p className="text-sm font-bold text-slate-900">Leave professional mode?</p>
-                  <p className="text-xs text-slate-600 leading-relaxed mt-1">
-                    You will be <strong>disconnected from all of your clients</strong> and will
-                    <strong> no longer show up as a professional</strong>. Your own goals stay, and your
-                    profile is kept so you can turn it back on later — but you would have to reconnect with
-                    each client again.
-                  </p>
-                </div>
-              </div>
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  disabled={switching}
-                  onClick={onSwitchToClient}
-                  className="text-xs font-bold px-4 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white shadow-xs transition cursor-pointer disabled:opacity-60 flex items-center gap-1.5"
-                >
-                  <LogOut className="w-3.5 h-3.5" />
-                  <span>{switching ? 'Leaving…' : 'Yes, leave & remove my clients'}</span>
-                </button>
-                <button
-                  type="button"
-                  disabled={switching}
-                  onClick={() => setConfirmLeave(false)}
-                  className="text-xs font-semibold px-3 py-2.5 rounded-xl border border-slate-200 text-slate-600 hover:bg-white transition cursor-pointer"
-                >
-                  Cancel
-                </button>
+      {/* Leave-professional confirm: only appears when the red icon is tapped. */}
+      {confirmLeave && (
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-md flex items-center justify-center p-4 z-50 fade">
+          <div className="bg-white rounded-3xl max-w-sm w-full p-6 shadow-2xl border border-slate-200 space-y-4 pop">
+            <div className="flex items-start gap-3">
+              <span className="w-10 h-10 rounded-xl grid place-items-center bg-rose-100 text-rose-600 shrink-0">
+                <TriangleAlert className="w-5 h-5" />
+              </span>
+              <div className="min-w-0">
+                <h3 className="text-base font-bold text-slate-900">Leave professional mode?</h3>
+                <p className="text-xs text-slate-600 leading-relaxed mt-1.5">
+                  You will be <strong>disconnected from all of your clients</strong> and will
+                  <strong> no longer show up as a professional</strong>. Your own goals stay, and your
+                  profile is kept so you can turn it back on later — but you would have to reconnect with
+                  each client again.
+                </p>
               </div>
             </div>
-          ) : (
-            <button
-              type="button"
-              onClick={() => setConfirmLeave(true)}
-              className="w-full sm:w-auto text-sm font-bold text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 px-4 py-2.5 rounded-xl transition cursor-pointer flex items-center justify-center gap-2"
-            >
-              <LogOut className="w-4 h-4" />
-              <span>Leave professional mode</span>
-            </button>
-          )}
+            <div className="flex items-center justify-end gap-2 pt-1">
+              <button
+                type="button"
+                disabled={switching}
+                onClick={() => setConfirmLeave(false)}
+                className="text-xs font-semibold px-4 py-2.5 rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50 transition cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={switching}
+                onClick={onSwitchToClient}
+                className="text-xs font-bold px-4 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white shadow-xs transition cursor-pointer disabled:opacity-60 flex items-center gap-1.5"
+              >
+                <LogOut className="w-3.5 h-3.5" />
+                <span>{switching ? 'Leaving…' : 'Yes, leave & remove clients'}</span>
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>
