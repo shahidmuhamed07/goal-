@@ -15,7 +15,6 @@ import {
   ShieldCheck,
   Trash2,
   TriangleAlert,
-  UserRoundX,
   X,
 } from 'lucide-react';
 import { db } from '../firebase';
@@ -401,7 +400,7 @@ export const ProfessionalProfilePanel: React.FC<ProfessionalProfilePanelProps> =
                   aria-label="Leave professional mode"
                   className="w-9 h-9 grid place-items-center rounded-xl text-rose-600 bg-rose-50 hover:bg-rose-100 border border-rose-200 transition cursor-pointer"
                 >
-                  <UserRoundX className="w-4 h-4" />
+                  <Briefcase className="w-4 h-4" />
                 </button>
               </>
             }
