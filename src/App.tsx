@@ -1019,11 +1019,6 @@ export default function App() {
   // The pill that glides between tabs, measured separately for each bar.
   const desktopNav = useSegmentedTrack(activeTab);
   const phoneNav = useSegmentedTrack(activeTab);
-  // On the phone bar the + button splits the tabs into two groups. Each group
-  // carries its own pill so the highlight only ever slides within one side and
-  // never travels across the + in the middle.
-  const phoneLeftNav = useSegmentedTrack(activeTab);
-  const phoneRightNav = useSegmentedTrack(activeTab);
 
   // One button in the phone tab bar.
   const renderNavButton = ({ key, label, Icon, badge }: NavTab) => {
@@ -3553,70 +3548,46 @@ export default function App() {
           read as passing through it — the active tab gets a static chip. */}
       <nav className="sm:hidden fixed bottom-0 inset-x-0 z-50 px-3 safe-bottom pointer-events-none">
         <div
+          ref={phoneNav.ref}
           data-tone={!isOwner ? 'warm' : 'cool'}
           className="segmented mx-auto max-w-md pointer-events-auto shadow-lg relative z-50"
         >
+          {/* One pill for the whole bar: it glides continuously from any tab to
+              any tab. The + button is raised above it, so the pill slides
+              smoothly underneath the + instead of jumping across the middle. */}
+          <span
+            className="segmented-track"
+            aria-hidden="true"
+            style={{
+              transform: `translateX(${phoneNav.track.x}px)`,
+              width: phoneNav.track.width,
+              opacity: phoneNav.track.ready ? 1 : 0,
+            }}
+          />
+
           {isOwner ? (
-            (() => {
-              const mid = Math.ceil(navTabs.length / 2);
-              const leftTabs = navTabs.slice(0, mid);
-              const rightTabs = navTabs.slice(mid);
-              const activeInLeft = leftTabs.some((t) => isTabActive(t.key));
-              const activeInRight = rightTabs.some((t) => isTabActive(t.key));
-              return (
-                <>
-                  <div ref={phoneLeftNav.ref} className="segmented-group flex flex-1 items-stretch gap-1">
-                    <span
-                      className="segmented-track"
-                      aria-hidden="true"
-                      style={{
-                        transform: `translateX(${phoneLeftNav.track.x}px)`,
-                        width: phoneLeftNav.track.width,
-                        opacity: activeInLeft && phoneLeftNav.track.ready ? 1 : 0,
-                      }}
-                    />
-                    {leftTabs.map(renderNavButton)}
-                  </div>
+            <>
+              <div className="flex flex-1 items-stretch gap-1">
+                {navTabs.slice(0, Math.ceil(navTabs.length / 2)).map(renderNavButton)}
+              </div>
 
-                  <button
-                    type="button"
-                    onClick={() => setIsModalOpen(true)}
-                    aria-label="New Goal"
-                    title="New Goal"
-                    data-plain
-                    className="press -mt-6 w-12 h-12 shrink-0 rounded-full bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white ring-4 ring-white flex items-center justify-center cursor-pointer shadow-[0_10px_22px_-8px_rgb(69_120_119/0.95)]"
-                  >
-                    <Plus className="w-5 h-5 stroke-[2.5]" />
-                  </button>
+              <button
+                type="button"
+                onClick={() => setIsModalOpen(true)}
+                aria-label="New Goal"
+                title="New Goal"
+                data-plain
+                className="press relative z-20 -mt-6 w-12 h-12 shrink-0 rounded-full bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white ring-4 ring-white flex items-center justify-center cursor-pointer shadow-[0_10px_22px_-8px_rgb(69_120_119/0.95)]"
+              >
+                <Plus className="w-5 h-5 stroke-[2.5]" />
+              </button>
 
-                  <div ref={phoneRightNav.ref} className="segmented-group flex flex-1 items-stretch gap-1">
-                    <span
-                      className="segmented-track"
-                      aria-hidden="true"
-                      style={{
-                        transform: `translateX(${phoneRightNav.track.x}px)`,
-                        width: phoneRightNav.track.width,
-                        opacity: activeInRight && phoneRightNav.track.ready ? 1 : 0,
-                      }}
-                    />
-                    {rightTabs.map(renderNavButton)}
-                  </div>
-                </>
-              );
-            })()
+              <div className="flex flex-1 items-stretch gap-1">
+                {navTabs.slice(Math.ceil(navTabs.length / 2)).map(renderNavButton)}
+              </div>
+            </>
           ) : (
-            <div ref={phoneNav.ref} className="segmented-group flex flex-1 items-stretch gap-1">
-              <span
-                className="segmented-track"
-                aria-hidden="true"
-                style={{
-                  transform: `translateX(${phoneNav.track.x}px)`,
-                  width: phoneNav.track.width,
-                  opacity: phoneNav.track.ready ? 1 : 0,
-                }}
-              />
-              {navTabs.map(renderNavButton)}
-            </div>
+            navTabs.map(renderNavButton)
           )}
         </div>
       </nav>

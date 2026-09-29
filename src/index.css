@@ -405,17 +405,6 @@ input[type="radio"] {
   font-weight: 800;
 }
 
-/* A group of tabs that carries its own sliding pill. Used on the phone bar,
-   where the + button splits the tabs into two groups: each side slides its own
-   pill, so the highlight never travels across the + in the middle. The pill
-   fills the group's height (the group sits inside the bar's groove already). */
-.segmented-group {
-  position: relative;
-}
-.segmented-group > .segmented-track {
-  top: 0;
-  bottom: 0;
-}
 
 .segmented-tab[data-active="false"] {
   color: var(--color-slate-700);
