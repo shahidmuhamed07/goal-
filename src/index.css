@@ -405,20 +405,16 @@ input[type="radio"] {
   font-weight: 800;
 }
 
-/* Phone bar variant: no sliding pill (it would cross behind the center + button
-   and read as passing "through" it). The active tab gets a static white chip
-   instead, so selection is crisp and nothing animates across the + button. */
-.segmented-static .segmented-tab {
-  transition: color 0.25s var(--ease-glide), background 0.25s var(--ease-glide);
+/* A group of tabs that carries its own sliding pill. Used on the phone bar,
+   where the + button splits the tabs into two groups: each side slides its own
+   pill, so the highlight never travels across the + in the middle. The pill
+   fills the group's height (the group sits inside the bar's groove already). */
+.segmented-group {
+  position: relative;
 }
-.segmented-static .segmented-tab[data-active="true"] {
-  background: #ffffff;
-  box-shadow:
-    0 2px 5px rgb(39 43 68 / 0.24),
-    0 1px 1px rgb(39 43 68 / 0.1);
-}
-.segmented-static[data-tone="warm"] .segmented-tab[data-active="true"] {
-  background: #ffffff;
+.segmented-group > .segmented-track {
+  top: 0;
+  bottom: 0;
 }
 
 .segmented-tab[data-active="false"] {
