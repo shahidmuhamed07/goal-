@@ -40,23 +40,50 @@ interface CollaboratorsPanelProps {
   unreadChatUids: Set<string>;
 }
 
-/** A compact "Message" button with an unread dot, shared by both roster lists. */
+/** A small round icon-button used across the roster lists. */
+const IconAction: React.FC<{
+  onClick: () => void;
+  title: string;
+  tone?: 'blue' | 'slate' | 'violet' | 'rose';
+  children: React.ReactNode;
+  badge?: number;
+  dot?: boolean;
+}> = ({ onClick, title, tone = 'slate', children, badge, dot }) => {
+  const tones: Record<string, string> = {
+    blue: 'text-blue-700 bg-blue-50 hover:bg-blue-100 border-blue-200',
+    slate: 'text-slate-600 bg-slate-50 hover:bg-slate-100 border-slate-200',
+    violet: 'text-violet-800 bg-violet-50 hover:bg-violet-100 border-violet-200',
+    rose: 'text-rose-600 bg-rose-50 hover:bg-rose-100 border-rose-200',
+  };
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      title={title}
+      aria-label={title}
+      className={`relative w-8 h-8 grid place-items-center rounded-lg border transition cursor-pointer ${tones[tone]}`}
+    >
+      {children}
+      {typeof badge === 'number' && badge > 0 && (
+        <span className="absolute -top-1.5 -right-1.5 min-w-[15px] h-[15px] px-1 rounded-full bg-violet-700 text-white text-[9px] font-bold flex items-center justify-center leading-none border-2 border-white">
+          {badge}
+        </span>
+      )}
+      {dot && (
+        <span className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-rose-500 border-2 border-white" />
+      )}
+    </button>
+  );
+};
+
+/** A compact message icon-button with an unread dot, shared by both lists. */
 const MessageButton: React.FC<{ onClick: () => void; hasUnread: boolean }> = ({
   onClick,
   hasUnread,
 }) => (
-  <button
-    type="button"
-    onClick={onClick}
-    title="Open conversation"
-    className="relative text-xs font-semibold text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 px-3 py-1.5 rounded-lg transition cursor-pointer flex items-center gap-1.5"
-  >
-    <MessageCircle className="w-3.5 h-3.5 text-blue-600" />
-    <span>Message</span>
-    {hasUnread && (
-      <span className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-rose-500 border-2 border-white" />
-    )}
-  </button>
+  <IconAction onClick={onClick} title="Message" tone="blue" dot={hasUnread}>
+    <MessageCircle className="w-4 h-4" />
+  </IconAction>
 );
 
 const ACCESS_LEVELS: { value: GoalAccessLevel; label: string; icon: React.ReactNode }[] = [
@@ -550,75 +577,69 @@ export const CollaboratorsPanel: React.FC<CollaboratorsPanelProps> = ({
                       <div className="text-xs text-slate-500 mt-0.5">{c.email}</div>
                     </div>
 
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <MessageButton
-                        onClick={() =>
-                          onOpenChat({
-                            uid: c.uid,
-                            name: c.name || c.email || 'Professional',
-                            role: c.role,
-                          })
-                        }
-                        hasUnread={unreadChatUids.has(c.uid)}
-                      />
-
-                      <button
-                        type="button"
-                        onClick={() => handleOpenCredentials(c)}
-                        className="text-xs font-semibold text-slate-700 bg-slate-50 hover:bg-slate-100 border border-slate-200 px-3 py-1.5 rounded-lg transition cursor-pointer flex items-center gap-1.5"
-                        title="See this professional's qualifications and references"
-                      >
-                        <BadgeCheck className="w-3.5 h-3.5 text-emerald-600" />
-                        <span>Credentials</span>
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={() => handleOpenManageModal(c)}
-                        className="text-xs font-semibold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 px-3 py-1.5 rounded-lg transition cursor-pointer flex items-center gap-1.5"
-                        title="Change which goals this professional can manage"
-                      >
-                        <Target className="w-3.5 h-3.5 text-emerald-600" />
-                        <span>Manage Access ({sharedGoals.length})</span>
-                      </button>
-
-                      {confirmRemoveUid === c.uid ? (
-                        <div className="flex items-center gap-1.5 bg-rose-50 border border-rose-200 p-1 rounded-lg animate-in fade-in duration-150">
-                          <button
-                            type="button"
-                            disabled={isRemoving}
-                            onClick={async () => {
-                              try {
-                                setIsRemoving(true);
-                                await onRemove(c.uid);
-                              } finally {
-                                setIsRemoving(false);
-                                setConfirmRemoveUid(null);
-                              }
-                            }}
-                            className="text-xs font-bold bg-rose-600 hover:bg-rose-700 text-white px-2.5 py-1 rounded-md cursor-pointer transition shadow-2xs disabled:opacity-50"
-                          >
-                            {isRemoving ? 'Removing...' : 'Confirm Remove'}
-                          </button>
-                          <button
-                            type="button"
-                            disabled={isRemoving}
-                            onClick={() => setConfirmRemoveUid(null)}
-                            className="text-xs font-semibold text-slate-600 hover:bg-slate-200 bg-slate-100 px-2 py-1 rounded-md cursor-pointer"
-                          >
-                            Cancel
-                          </button>
-                        </div>
-                      ) : (
+                    {confirmRemoveUid === c.uid ? (
+                      <div className="flex items-center gap-1.5 bg-rose-50 border border-rose-200 p-1 rounded-lg animate-in fade-in duration-150 shrink-0">
                         <button
                           type="button"
-                          onClick={() => setConfirmRemoveUid(c.uid)}
-                          className="text-xs font-semibold text-rose-600 hover:bg-rose-50 border border-rose-200 px-3 py-1.5 rounded-lg cursor-pointer transition"
+                          disabled={isRemoving}
+                          onClick={async () => {
+                            try {
+                              setIsRemoving(true);
+                              await onRemove(c.uid);
+                            } finally {
+                              setIsRemoving(false);
+                              setConfirmRemoveUid(null);
+                            }
+                          }}
+                          className="text-xs font-bold bg-rose-600 hover:bg-rose-700 text-white px-2.5 py-1 rounded-md cursor-pointer transition shadow-2xs disabled:opacity-50"
                         >
-                          Remove
+                          {isRemoving ? 'Removing…' : 'Remove'}
                         </button>
-                      )}
-                    </div>
+                        <button
+                          type="button"
+                          disabled={isRemoving}
+                          onClick={() => setConfirmRemoveUid(null)}
+                          className="text-xs font-semibold text-slate-600 hover:bg-slate-200 bg-slate-100 px-2 py-1 rounded-md cursor-pointer"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        <MessageButton
+                          onClick={() =>
+                            onOpenChat({
+                              uid: c.uid,
+                              name: c.name || c.email || 'Professional',
+                              role: c.role,
+                            })
+                          }
+                          hasUnread={unreadChatUids.has(c.uid)}
+                        />
+                        <IconAction
+                          onClick={() => handleOpenCredentials(c)}
+                          title="View credentials"
+                          tone="slate"
+                        >
+                          <BadgeCheck className="w-4 h-4" />
+                        </IconAction>
+                        <IconAction
+                          onClick={() => handleOpenManageModal(c)}
+                          title={`Manage goal access (${sharedGoals.length})`}
+                          tone="violet"
+                          badge={sharedGoals.length}
+                        >
+                          <Target className="w-4 h-4" />
+                        </IconAction>
+                        <IconAction
+                          onClick={() => setConfirmRemoveUid(c.uid)}
+                          title="Remove professional"
+                          tone="rose"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </IconAction>
+                      </div>
+                    )}
                   </div>
 
                   {/* Assigned Goals tags */}

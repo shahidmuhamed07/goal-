@@ -95,6 +95,7 @@ import { GoalAssignmentModal } from './components/GoalAssignmentModal';
 import { GiveUpInterventionModal } from './components/GiveUpInterventionModal';
 
 import { ProfessionalProfilePanel } from './components/ProfessionalProfilePanel';
+import { AccountProfilePanel } from './components/AccountProfilePanel';
 import { PersonaPrompt } from './components/PersonaPrompt';
 import { ChatPanel } from './components/ChatPanel';
 import { threadHasUnread } from './chat';
@@ -586,9 +587,9 @@ export default function App() {
       'today',
       'connect',
     ];
-    if (isOwner && profile?.persona === 'professional') tabs.push('professional');
+    if (isOwner) tabs.push('professional');
     return tabs;
-  }, [isOwner, profile?.persona]);
+  }, [isOwner]);
 
   const contentRef = useRef<HTMLElement | null>(null);
   const swipe = useRef<{
@@ -851,8 +852,14 @@ export default function App() {
       { key: 'today', label: 'Today', longLabel: "Today's Focus", Icon: CalendarCheck, badge: openTaskCount },
       { key: 'connect', label: 'Connect', longLabel: 'Collaborate', Icon: UsersRound, badge: pendingIncoming.length + unreadChatUids.size },
     ];
-    if (isOwner && profile?.persona === 'professional') {
-      tabs.push({ key: 'professional', label: 'Profile', longLabel: 'Professional', Icon: Briefcase, badge: 0 });
+    if (isOwner) {
+      tabs.push({
+        key: 'professional',
+        label: 'Profile',
+        longLabel: profile?.persona === 'professional' ? 'Professional' : 'Profile',
+        Icon: Briefcase,
+        badge: 0,
+      });
     }
     return tabs;
   }, [isOwner, profile?.persona, openTaskCount, pendingIncoming.length, unreadChatUids.size, goals.length]);
@@ -2095,11 +2102,7 @@ export default function App() {
                       type="button"
                       onClick={() => {
                         setIsAccountMenuOpen(false);
-                        if (profile?.persona === 'professional') {
-                          setActiveTab('professional');
-                        } else {
-                          setPersonaPickerOpen(true);
-                        }
+                        setActiveTab('professional');
                       }}
                       className="w-full text-left text-xs font-semibold text-slate-700 hover:bg-slate-50 px-2.5 py-2 rounded-xl transition flex items-center gap-2 cursor-pointer"
                     >
@@ -2107,7 +2110,7 @@ export default function App() {
                       <span>
                         {profile?.persona === 'professional'
                           ? 'My professional profile'
-                          : 'Add a professional profile'}
+                          : 'My profile'}
                       </span>
                     </button>
                     <button
@@ -3362,11 +3365,20 @@ export default function App() {
             )}
 
             {activeTab === 'professional' && isOwner && (
-              <ProfessionalProfilePanel
-                user={user}
-                profile={profile}
-                onError={setErrorMessage}
-              />
+              profile?.persona === 'professional' ? (
+                <ProfessionalProfilePanel
+                  user={user}
+                  profile={profile}
+                  onError={setErrorMessage}
+                />
+              ) : (
+                <AccountProfilePanel
+                  user={user}
+                  profile={profile}
+                  saving={savingPersona}
+                  onBecomeProfessional={() => handleChoosePersona('professional')}
+                />
+              )
             )}
 
             {activeTab === 'connect' && (
@@ -3478,38 +3490,41 @@ export default function App() {
         </div>
       )}
 
-      {/* PHONE TAB BAR: a floating pill that stays on screen while you scroll */}
+      {/* PHONE TAB BAR: a floating bar that stays on screen while you scroll.
+          The + sits dead-centre, flanked by two equal-width groups of tabs, so
+          it stays centred whether there are three tabs (client) or four
+          (professional). No sliding pill here — it would cross behind the + and
+          read as passing through it — the active tab gets a static chip. */}
       <nav className="sm:hidden fixed bottom-0 inset-x-0 z-50 px-3 safe-bottom pointer-events-none">
         <div
           ref={phoneNav.ref}
           data-tone={!isOwner ? 'warm' : 'cool'}
-          className="segmented mx-auto max-w-md justify-between pointer-events-auto shadow-lg relative z-50"
+          className="segmented segmented-static mx-auto max-w-md pointer-events-auto shadow-lg relative z-50"
         >
-          <span
-            className="segmented-track"
-            aria-hidden="true"
-            style={{
-              transform: `translateX(${phoneNav.track.x}px)`,
-              width: phoneNav.track.width,
-              opacity: phoneNav.track.ready ? 1 : 0,
-            }}
-          />
-          {navTabs.slice(0, 2).map(renderNavButton)}
+          {isOwner ? (
+            <>
+              <div className="flex flex-1 items-stretch gap-1">
+                {navTabs.slice(0, Math.ceil(navTabs.length / 2)).map(renderNavButton)}
+              </div>
 
-          {isOwner && (
-            <button
-              type="button"
-              onClick={() => setIsModalOpen(true)}
-              aria-label="New Goal"
-              title="New Goal"
-              data-plain
-              className="press -mt-6 w-12 h-12 shrink-0 rounded-full bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white ring-4 ring-white flex items-center justify-center cursor-pointer shadow-[0_10px_22px_-8px_rgb(69_120_119/0.95)]"
-            >
-              <Plus className="w-5 h-5 stroke-[2.5]" />
-            </button>
+              <button
+                type="button"
+                onClick={() => setIsModalOpen(true)}
+                aria-label="New Goal"
+                title="New Goal"
+                data-plain
+                className="press -mt-6 w-12 h-12 shrink-0 rounded-full bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white ring-4 ring-white flex items-center justify-center cursor-pointer shadow-[0_10px_22px_-8px_rgb(69_120_119/0.95)]"
+              >
+                <Plus className="w-5 h-5 stroke-[2.5]" />
+              </button>
+
+              <div className="flex flex-1 items-stretch gap-1">
+                {navTabs.slice(Math.ceil(navTabs.length / 2)).map(renderNavButton)}
+              </div>
+            </>
+          ) : (
+            navTabs.map(renderNavButton)
           )}
-
-          {navTabs.slice(2).map(renderNavButton)}
         </div>
       </nav>
 

@@ -401,8 +401,24 @@ input[type="radio"] {
 }
 
 .segmented-tab[data-active="true"] {
-  color: var(--color-purple-700);
+  color: var(--color-violet-800);
   font-weight: 800;
+}
+
+/* Phone bar variant: no sliding pill (it would cross behind the center + button
+   and read as passing "through" it). The active tab gets a static white chip
+   instead, so selection is crisp and nothing animates across the + button. */
+.segmented-static .segmented-tab {
+  transition: color 0.25s var(--ease-glide), background 0.25s var(--ease-glide);
+}
+.segmented-static .segmented-tab[data-active="true"] {
+  background: #ffffff;
+  box-shadow:
+    0 2px 5px rgb(39 43 68 / 0.24),
+    0 1px 1px rgb(39 43 68 / 0.1);
+}
+.segmented-static[data-tone="warm"] .segmented-tab[data-active="true"] {
+  background: #ffffff;
 }
 
 .segmented-tab[data-active="false"] {
