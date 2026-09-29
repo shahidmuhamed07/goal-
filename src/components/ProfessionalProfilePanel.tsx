@@ -23,6 +23,10 @@ interface ProfessionalProfilePanelProps {
   user: User;
   profile: UserProfile | null;
   onError: (message: string) => void;
+  /** Switches the account back to a plain client. */
+  onSwitchToClient: () => void;
+  /** True while the persona change is being saved. */
+  switching?: boolean;
 }
 
 const emptyProfile = (uid: string): ProfessionalProfile => ({
@@ -222,6 +226,8 @@ export const ProfessionalProfilePanel: React.FC<ProfessionalProfilePanelProps> =
   user,
   profile,
   onError,
+  onSwitchToClient,
+  switching = false,
 }) => {
   const [value, setValue] = useState<ProfessionalProfile>(() =>
     emptyProfile(user.uid)
@@ -230,6 +236,7 @@ export const ProfessionalProfilePanel: React.FC<ProfessionalProfilePanelProps> =
   const [saving, setSaving] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [confirmLeave, setConfirmLeave] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -689,6 +696,47 @@ export const ProfessionalProfilePanel: React.FC<ProfessionalProfilePanelProps> =
           <Copy className="w-3 h-3" />
           <span>Copy my contact email</span>
         </button>
+      )}
+
+      {!isEditing && (
+        <div className="pt-4 mt-2 border-t border-slate-100">
+          {confirmLeave ? (
+            <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4 space-y-3">
+              <p className="text-xs text-slate-600 leading-relaxed">
+                Switch back to a plain client account? Your professional profile is kept, so you can turn
+                it back on anytime. Clients you already support are not removed here — remove them from the
+                Connect tab if you want to end those.
+              </p>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  disabled={switching}
+                  onClick={onSwitchToClient}
+                  className="text-xs font-bold px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-900 text-white transition cursor-pointer disabled:opacity-60"
+                >
+                  {switching ? 'Switching…' : 'Yes, switch to client'}
+                </button>
+                <button
+                  type="button"
+                  disabled={switching}
+                  onClick={() => setConfirmLeave(false)}
+                  className="text-xs font-semibold px-3 py-2 rounded-xl border border-slate-200 text-slate-600 hover:bg-white transition cursor-pointer"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setConfirmLeave(true)}
+              className="text-[11px] font-semibold text-slate-500 hover:text-slate-700 cursor-pointer flex items-center gap-1.5"
+            >
+              <Briefcase className="w-3 h-3" />
+              <span>Leave professional mode &amp; switch to a client account</span>
+            </button>
+          )}
+        </div>
       )}
     </div>
   );

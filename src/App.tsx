@@ -3375,6 +3375,8 @@ export default function App() {
                   user={user}
                   profile={profile}
                   onError={setErrorMessage}
+                  switching={savingPersona}
+                  onSwitchToClient={() => handleChoosePersona('client')}
                 />
               ) : (
                 <AccountProfilePanel
