@@ -1,14 +1,8 @@
 import React, { useState } from 'react';
-import { Check, X, Edit3, Calendar, ChevronLeft, ChevronRight, CheckCircle2 } from 'lucide-react';
+import { Check, X, Edit3, ChevronLeft, ChevronRight, CheckCircle2 } from 'lucide-react';
 import { Goal, Milestone } from '../types';
-import { ProgressBar } from './UIElements';
-import {
-  getCurrentMonthKey,
-  formatFullMonth,
-  formatMonthKey,
-  getTodayDateString,
-  formatDisplayDate,
-} from '../utils';
+import { GlassIconButton, ProgressBar } from './UIElements';
+import { getCurrentMonthKey, formatFullMonth, formatMonthKey } from '../utils';
 
 interface MonthlyMilestoneSectionProps {
   goal: Goal;
@@ -20,10 +14,13 @@ interface MonthlyMilestoneSectionProps {
   onUpdateMilestoneTitle: (goalId: string, milestoneId: string, title: string) => void;
 }
 
+/**
+ * The goal's roadmap: one note per month, how far the chosen month has got, and
+ * the whole horizon as a row of month keys to jump between.
+ */
 export const MonthlyMilestoneSection: React.FC<MonthlyMilestoneSectionProps> = ({
   goal,
   readOnly = false,
-  isOwner = true,
   selectedMonthKey,
   onSelectMonth,
   onToggleMilestone,
@@ -33,15 +30,14 @@ export const MonthlyMilestoneSection: React.FC<MonthlyMilestoneSectionProps> = (
   const [editVal, setEditVal] = useState('');
   const currentMonthKey = getCurrentMonthKey();
   const activeMonth = selectedMonthKey || currentMonthKey;
-  const todayStr = getTodayDateString();
 
   const milestones = goal.milestones || [];
   const totalMonths = milestones.length;
   const completedMonths = milestones.filter((m) => m.completed).length;
   const overallPct = totalMonths > 0 ? Math.round((completedMonths / totalMonths) * 100) : 0;
 
-  // Active milestone for current selected month
   const activeMilestone = milestones.find((m) => m.monthKey === activeMonth) || milestones[0];
+  const activeIndex = milestones.findIndex((m) => m.monthKey === activeMonth);
 
   // A note that still holds the generated text ("Checkpoint for Sep 2026") has
   // not been written by the user yet, so it keeps the roomy tap-anywhere bar.
@@ -51,14 +47,10 @@ export const MonthlyMilestoneSection: React.FC<MonthlyMilestoneSectionProps> = (
     (!activeMilestone.title ||
       activeMilestone.title.trim() === `Checkpoint for ${formatMonthKey(activeMilestone.monthKey)}`);
 
-  // Tasks in this active month
-  const monthTasks = (goal.tasks || []).filter(
-    (t) => t.date && t.date.startsWith(activeMonth)
-  );
+  const monthTasks = (goal.tasks || []).filter((t) => t.date && t.date.startsWith(activeMonth));
   const monthTasksCompleted = monthTasks.filter((t) => t.completed).length;
   const monthTasksTotal = monthTasks.length;
 
-  // Monthly Progression Calculation
   const monthProgressPct = activeMilestone?.completed
     ? 100
     : monthTasksTotal > 0
@@ -70,113 +62,53 @@ export const MonthlyMilestoneSection: React.FC<MonthlyMilestoneSectionProps> = (
     setEditVal(m.title);
   };
 
-  const handleSaveEdit = (mId: string) => {
-    if (editVal.trim()) {
-      onUpdateMilestoneTitle(goal.id, mId, editVal.trim());
-    }
+  const handleSaveEdit = (milestoneId: string) => {
+    if (editVal.trim()) onUpdateMilestoneTitle(goal.id, milestoneId, editVal.trim());
     setEditingId(null);
   };
 
-  const handlePrevMonth = () => {
-    const currentIndex = milestones.findIndex((m) => m.monthKey === activeMonth);
-    if (currentIndex > 0 && onSelectMonth) {
-      onSelectMonth(milestones[currentIndex - 1].monthKey);
-    }
-  };
-
-  const handleNextMonth = () => {
-    const currentIndex = milestones.findIndex((m) => m.monthKey === activeMonth);
-    if (currentIndex >= 0 && currentIndex < milestones.length - 1 && onSelectMonth) {
-      onSelectMonth(milestones[currentIndex + 1].monthKey);
-    }
+  const goToMonth = (step: 1 | -1) => {
+    const target = milestones[activeIndex + step];
+    if (target && onSelectMonth) onSelectMonth(target.monthKey);
   };
 
   return (
-    <div
-      className={`bg-white border rounded-2xl p-4 sm:p-5 shadow-xs space-y-4 transition-colors duration-200 ${
-        !isOwner ? 'border-blue-200/90 shadow-blue-950/5' : 'border-violet-200/80'
-      }`}
-    >
-      {/* HEADER: SECTION LABEL AND TODAY'S DATE ONLY */}
-      <div className="flex items-center justify-between pb-3 border-b border-slate-100 gap-2 flex-wrap">
-        <div className="flex items-center gap-2 flex-wrap">
-          <span
-            className={`text-[11px] font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-md flex items-center gap-1 border ${
-              !isOwner
-                ? 'text-blue-950 bg-blue-100 border-blue-300/80'
-                : 'text-violet-900 bg-violet-100 border-violet-200/90'
-            }`}
-          >
-            <Calendar className={`w-3 h-3 ${!isOwner ? 'text-blue-700' : 'text-violet-800'}`} />
-            <span>Monthly Milestone</span>
-          </span>
-        </div>
-
-        {/* Current Date Badge */}
-        <div
-          className={`text-[11px] font-semibold px-2.5 py-0.5 rounded-lg border ${
-            !isOwner
-              ? 'text-blue-950 bg-blue-50/80 border-blue-200/80'
-              : 'text-violet-950 bg-violet-50/80 border-violet-200/80'
-          }`}
-        >
-          {formatDisplayDate(todayStr)}
-        </div>
+    <div className="neu rounded-2xl p-4 sm:p-6 space-y-5">
+      <div className="flex items-center justify-between gap-3 flex-wrap">
+        <span className="card-title">Roadmap</span>
+        <span className="badge tabular-nums">
+          {completedMonths}/{totalMonths} months achieved
+        </span>
       </div>
 
-      {/* ACTIVE MONTH PRIMARY CARD */}
       {activeMilestone ? (
-        <div
-          className={`rounded-xl p-3.5 sm:p-4 space-y-3 shadow-2xs border ${
-            !isOwner
-              ? 'bg-blue-50/40 border-blue-200/80'
-              : 'bg-violet-50/30 border-violet-200/80'
-          }`}
-        >
+        <div className="neu-inset p-4 space-y-4">
           <div className="flex items-start justify-between gap-3">
-            <div>
-              <div className="text-base sm:text-lg font-bold text-slate-900 leading-tight">
+            <div className="min-w-0">
+              <div className="text-lg font-extrabold text-slate-900 leading-tight">
                 {formatFullMonth(activeMilestone.monthKey)}
               </div>
-              <div className="text-xs text-slate-500 mt-0.5">
-                Target milestone for this month
-              </div>
+              <div className="text-xs text-slate-500 mt-0.5">Milestone for this month</div>
             </div>
 
-            {/* Checkbox for Milestone Accomplishment */}
             {!readOnly && (
-              <label
-                className={`flex items-center gap-1.5 text-xs text-slate-700 cursor-pointer select-none bg-white border px-2.5 py-1.5 rounded-lg shadow-2xs transition ${
-                  !isOwner
-                    ? 'border-blue-200/90 hover:border-blue-300 hover:text-blue-950'
-                    : 'border-violet-200/90 hover:border-violet-300 hover:text-violet-950'
-                }`}
+              <button
+                type="button"
+                className="chip inline-flex items-center gap-1.5 px-3 py-1.5 text-xs shrink-0"
+                data-active={activeMilestone.completed}
+                aria-pressed={activeMilestone.completed}
+                onClick={() => onToggleMilestone(goal.id, activeMilestone.id)}
               >
-                <input
-                  type="checkbox"
-                  checked={activeMilestone.completed}
-                  onChange={() => onToggleMilestone(goal.id, activeMilestone.id)}
-                  className={`w-4 h-4 rounded border-slate-300 cursor-pointer ${
-                    !isOwner
-                      ? 'accent-blue-700 text-blue-700 focus:ring-blue-500'
-                      : 'accent-violet-800 text-violet-800 focus:ring-violet-600'
-                  }`}
-                />
-                <span
-                  className={`font-semibold text-[11px] ${
-                    !isOwner ? 'text-blue-950' : 'text-violet-950'
-                  }`}
-                >
-                  {activeMilestone.completed ? 'Milestone Achieved' : 'Mark Achieved'}
-                </span>
-              </label>
+                <CheckCircle2 className="w-3.5 h-3.5" />
+                {activeMilestone.completed ? 'Achieved' : 'Mark achieved'}
+              </button>
             )}
           </div>
 
-          {/* Milestone note. Untouched text keeps the full-width tap target;
+          {/* The milestone note. Untouched text keeps the full-width tap target;
               a written note shows quietly with only a pencil button to edit. */}
           {editingId === activeMilestone.id ? (
-            <div className="flex items-center gap-1.5 pt-1">
+            <div className="flex items-center gap-2">
               <input
                 type="text"
                 value={editVal}
@@ -188,33 +120,16 @@ export const MonthlyMilestoneSection: React.FC<MonthlyMilestoneSectionProps> = (
                   }
                   if (e.key === 'Escape') setEditingId(null);
                 }}
-                className={`flex-1 min-w-0 text-xs sm:text-sm bg-white border rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-2 ${
-                  !isOwner
-                    ? 'border-blue-200 focus:ring-blue-500/20 focus:border-blue-600'
-                    : 'border-violet-200 focus:ring-violet-600/20 focus:border-violet-700'
-                }`}
+                aria-label="Milestone note"
+                className="flex-1 min-w-0 text-sm rounded-xl px-3.5 py-2.5"
                 autoFocus
               />
-              <button
-                type="button"
-                onClick={() => handleSaveEdit(activeMilestone.id)}
-                title="Save milestone note"
-                className={`w-8 h-8 flex items-center justify-center rounded-lg text-white transition cursor-pointer shrink-0 ${
-                  !isOwner
-                    ? 'bg-blue-700 hover:bg-blue-800'
-                    : 'bg-violet-800 hover:bg-violet-900'
-                }`}
-              >
+              <GlassIconButton variant="tone" size="md" title="Save note" onClick={() => handleSaveEdit(activeMilestone.id)}>
                 <Check className="w-4 h-4" />
-              </button>
-              <button
-                type="button"
-                onClick={() => setEditingId(null)}
-                title="Cancel"
-                className="w-8 h-8 flex items-center justify-center rounded-lg border border-slate-200 text-slate-500 hover:text-slate-800 hover:bg-slate-50 transition cursor-pointer shrink-0"
-              >
+              </GlassIconButton>
+              <GlassIconButton variant="slate" size="md" title="Cancel" onClick={() => setEditingId(null)}>
                 <X className="w-4 h-4" />
-              </button>
+              </GlassIconButton>
             </div>
           ) : isGeneratedTitle ? (
             <button
@@ -223,179 +138,91 @@ export const MonthlyMilestoneSection: React.FC<MonthlyMilestoneSectionProps> = (
                 if (!readOnly) handleStartEdit(activeMilestone);
               }}
               disabled={readOnly}
-              className={`w-full text-left text-xs sm:text-sm font-medium p-2.5 rounded-lg transition flex items-center justify-between gap-2 ${
-                readOnly
-                  ? 'bg-white/80 border border-slate-200/60'
-                  : !isOwner
-                  ? 'bg-white border border-blue-100 hover:border-blue-300 cursor-pointer group shadow-2xs'
-                  : 'bg-white border border-violet-100 hover:border-violet-300 cursor-pointer group shadow-2xs'
-              }`}
+              className="neu-sm w-full flex items-center justify-between gap-2 px-3.5 py-2.5 text-left text-sm font-medium text-slate-600 cursor-pointer disabled:cursor-default"
             >
-              <span className="text-slate-600">
-                {activeMilestone.title || "Tap here to write this month's milestone..."}
-              </span>
-              {!readOnly && (
-                <Edit3
-                  className={`w-3.5 h-3.5 text-slate-400 transition-colors flex-shrink-0 ${
-                    !isOwner ? 'group-hover:text-blue-700' : 'group-hover:text-violet-800'
-                  }`}
-                />
-              )}
+              <span>{activeMilestone.title || 'Write this month’s milestone…'}</span>
+              {!readOnly && <Edit3 className="w-3.5 h-3.5 text-slate-400 shrink-0" />}
             </button>
           ) : (
-            <div className="flex items-center justify-between gap-3 pt-1">
+            <div className="flex items-center justify-between gap-3">
               <span
-                className={`text-sm font-medium min-w-0 truncate ${
+                className={`text-sm font-semibold min-w-0 truncate ${
                   activeMilestone.completed ? 'line-through text-slate-400' : 'text-slate-800'
                 }`}
               >
                 {activeMilestone.title}
               </span>
               {!readOnly && (
-                <button
-                  type="button"
-                  onClick={() => handleStartEdit(activeMilestone)}
-                  title="Edit milestone note"
-                  className={`w-8 h-8 flex items-center justify-center rounded-lg border shadow-2xs transition cursor-pointer shrink-0 ${
-                    !isOwner
-                      ? 'border-blue-200/90 text-blue-800 bg-white hover:bg-blue-50 hover:border-blue-300'
-                      : 'border-violet-200/90 text-violet-900 bg-white hover:bg-violet-50 hover:border-violet-300'
-                  }`}
-                >
+                <GlassIconButton variant="tone" size="md" title="Edit note" onClick={() => handleStartEdit(activeMilestone)}>
                   <Edit3 className="w-3.5 h-3.5" />
-                </button>
+                </GlassIconButton>
               )}
             </div>
           )}
 
-          {/* ONE-MONTH PROGRESSION BAR */}
-          <div
-            className={`pt-1.5 border-t space-y-1.5 ${
-              !isOwner ? 'border-blue-100/80' : 'border-violet-100/80'
-            }`}
-          >
+          <div className="space-y-1.5">
             <div className="flex items-center justify-between text-xs font-semibold">
-              <span className="text-slate-600">Month Progression</span>
-              <span
-                className={`font-bold ${!isOwner ? 'text-blue-950' : 'text-violet-950'}`}
-              >
-                {monthProgressPct}%
-              </span>
+              <span className="text-slate-600">This month</span>
+              <span className="font-extrabold text-[color:var(--tone-900)]">{monthProgressPct}%</span>
             </div>
-            <ProgressBar
-              value={monthProgressPct}
-              height="h-2"
-              color={!isOwner ? 'bg-blue-600' : 'bg-violet-700'}
-            />
-            <div className="flex items-center justify-between text-[11px] text-slate-400 pt-0.5">
-              <span>
-                {monthTasksTotal > 0
-                  ? `${monthTasksCompleted} of ${monthTasksTotal} tasks done`
-                  : 'No tasks scheduled yet'}
-              </span>
-              <span
-                className={`font-medium ${!isOwner ? 'text-blue-900' : 'text-violet-900'}`}
-              >
-                {activeMilestone.completed ? 'Milestone: Achieved' : 'Milestone: In Progress'}
-              </span>
+            <ProgressBar value={monthProgressPct} height="h-2" color="bg-[color:var(--tone-700)]" />
+            <div className="text-[11px] text-slate-500">
+              {monthTasksTotal > 0
+                ? `${monthTasksCompleted} of ${monthTasksTotal} tasks done`
+                : 'No tasks scheduled yet'}
             </div>
           </div>
         </div>
       ) : (
-        <div className="text-center py-4 text-xs text-slate-400">
+        <div className="neu-inset text-center py-6 text-xs text-slate-500">
           No milestone created for this month yet.
         </div>
       )}
 
-      {/* MINIMIZED OTHER MONTHS SELECTOR WITH DARK & LIGHT PALETTE */}
       {milestones.length > 1 && (
-        <div className="space-y-1.5 pt-1">
-          <div className="flex items-center justify-between text-[11px] font-semibold text-slate-500">
-            <span className="flex items-center gap-1.5">
-              <span>Goal Horizon</span>
-            </span>
-            <div className="flex items-center gap-1">
-              <button
-                type="button"
-                onClick={handlePrevMonth}
-                disabled={milestones.findIndex((m) => m.monthKey === activeMonth) === 0}
-                className={`p-1 rounded text-slate-600 disabled:opacity-30 cursor-pointer ${
-                  !isOwner ? 'hover:bg-blue-50 hover:text-blue-950' : 'hover:bg-violet-50 hover:text-violet-950'
-                }`}
-                title="Previous Month"
-              >
+        <div className="space-y-2.5">
+          <div className="flex items-center justify-between">
+            <span className="section-label">Months</span>
+            <div className="flex items-center gap-1.5">
+              <GlassIconButton variant="tone" size="sm" title="Previous month" disabled={activeIndex <= 0} onClick={() => goToMonth(-1)}>
                 <ChevronLeft className="w-3.5 h-3.5" />
-              </button>
-              <button
-                type="button"
-                onClick={handleNextMonth}
-                disabled={milestones.findIndex((m) => m.monthKey === activeMonth) === milestones.length - 1}
-                className={`p-1 rounded text-slate-600 disabled:opacity-30 cursor-pointer ${
-                  !isOwner ? 'hover:bg-blue-50 hover:text-blue-950' : 'hover:bg-violet-50 hover:text-violet-950'
-                }`}
-                title="Next Month"
+              </GlassIconButton>
+              <GlassIconButton
+                variant="tone"
+                size="sm"
+                title="Next month"
+                disabled={activeIndex === -1 || activeIndex === milestones.length - 1}
+                onClick={() => goToMonth(1)}
               >
                 <ChevronRight className="w-3.5 h-3.5" />
-              </button>
+              </GlassIconButton>
             </div>
           </div>
 
           {/* Every month of the horizon stays visible, wrapping when space runs out */}
-          <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
-            {milestones.map((m) => {
-              const isSelected = m.monthKey === activeMonth;
-              const isCurrent = m.monthKey === currentMonthKey;
+          <div className="flex flex-wrap items-center gap-2">
+            {milestones.map((m) => (
+              <button
+                key={m.id}
+                type="button"
+                className="chip inline-flex items-center gap-1.5 px-3 py-2 text-xs"
+                data-active={m.monthKey === activeMonth}
+                data-current={m.monthKey === currentMonthKey}
+                aria-pressed={m.monthKey === activeMonth}
+                onClick={() => onSelectMonth && onSelectMonth(m.monthKey)}
+              >
+                {m.completed && <CheckCircle2 className="w-3.5 h-3.5" />}
+                <span>{formatMonthKey(m.monthKey)}</span>
+              </button>
+            ))}
+          </div>
 
-              return (
-                <button
-                  key={m.id}
-                  type="button"
-                  onClick={() => onSelectMonth && onSelectMonth(m.monthKey)}
-                  className={`px-3.5 py-2 rounded-xl text-sm sm:text-base font-semibold flex items-center gap-2 whitespace-nowrap transition cursor-pointer border ${
-                    !isOwner
-                      ? isSelected
-                        ? 'bg-blue-700 text-white border-blue-800 shadow-2xs font-bold'
-                        : m.completed
-                        ? 'bg-blue-100 text-blue-950 border-blue-300 hover:bg-blue-200'
-                        : isCurrent
-                        ? 'bg-blue-50 text-blue-900 border-blue-200 hover:bg-blue-100'
-                        : 'bg-white text-slate-700 border-slate-200 hover:border-blue-300 hover:bg-blue-50/50'
-                      : isSelected
-                      ? 'bg-violet-800 text-white border-violet-900 shadow-2xs font-bold'
-                      : m.completed
-                      ? 'bg-violet-100 text-violet-950 border-violet-300 hover:bg-violet-200'
-                      : isCurrent
-                      ? 'bg-violet-50 text-violet-900 border-violet-200 hover:bg-violet-100'
-                      : 'bg-white text-slate-700 border-slate-200 hover:border-violet-200 hover:bg-violet-50/50'
-                  }`}
-                >
-                  {m.completed && (
-                    <CheckCircle2
-                      className={`w-4 h-4 ${
-                        isSelected
-                          ? 'text-white'
-                          : !isOwner
-                          ? 'text-blue-700'
-                          : 'text-violet-800'
-                      }`}
-                    />
-                  )}
-                  <span>{formatMonthKey(m.monthKey)}</span>
-                </button>
-              );
-            })}
+          <div className="flex items-center justify-between text-[11px] font-medium text-slate-500 pt-1">
+            <span>Whole goal</span>
+            <span className="font-bold text-[color:var(--tone-900)]">{overallPct}% complete</span>
           </div>
         </div>
       )}
-
-      {/* MINIMAL OVERALL PROGRESSION FOOTER */}
-      <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-[11px] text-slate-400 font-medium">
-        <span>Full Goal Horizon: {overallPct}% complete</span>
-        <span className={!isOwner ? 'text-blue-900 font-semibold' : 'text-violet-900 font-semibold'}>
-          {completedMonths}/{totalMonths} months achieved
-        </span>
-      </div>
     </div>
   );
 };
-

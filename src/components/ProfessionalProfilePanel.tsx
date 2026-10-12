@@ -78,7 +78,7 @@ export const ProfessionalProfileCard: React.FC<{
             {(value.roles || []).map((role) => (
               <span
                 key={role}
-                className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md bg-slate-100 text-slate-700 border border-slate-200"
+                className="badge uppercase tracking-wider"
               >
                 {role}
               </span>
@@ -88,7 +88,7 @@ export const ProfessionalProfileCard: React.FC<{
                 Accepting clients
               </span>
             ) : (
-              <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md bg-slate-100 text-slate-500 border border-slate-200">
+              <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md bg-slate-300/30 text-slate-600">
                 Not taking new clients
               </span>
             )}
@@ -102,7 +102,7 @@ export const ProfessionalProfileCard: React.FC<{
       {(value.yearsExperience || value.languages) && (
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
           {value.yearsExperience && (
-            <div className="bg-slate-50 border border-slate-200 rounded-xl p-3">
+            <div className="neu-inset-sm p-3">
               <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
                 Experience
               </div>
@@ -112,7 +112,7 @@ export const ProfessionalProfileCard: React.FC<{
             </div>
           )}
           {value.languages && (
-            <div className="bg-slate-50 border border-slate-200 rounded-xl p-3">
+            <div className="neu-inset-sm p-3">
               <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
                 Languages
               </div>
@@ -140,7 +140,7 @@ export const ProfessionalProfileCard: React.FC<{
             {credentials.map((c) => (
               <li
                 key={c.id}
-                className="border border-slate-200 rounded-xl p-3 bg-white flex items-start justify-between gap-3"
+                className="neu-inset-sm p-3 flex items-start justify-between gap-3"
               >
                 <div className="min-w-0">
                   <div className="text-xs font-bold text-slate-900 flex items-center gap-1.5">
@@ -156,7 +156,7 @@ export const ProfessionalProfileCard: React.FC<{
                     href={c.referenceUrl}
                     target="_blank"
                     rel="noreferrer"
-                    className="text-[11px] font-semibold text-emerald-700 hover:text-emerald-900 bg-emerald-50 border border-emerald-200 px-2 py-1 rounded-lg shrink-0 flex items-center gap-1"
+                    className="chip shrink-0 flex items-center gap-1 px-2.5 py-1 text-[11px]"
                   >
                     <ExternalLink className="w-3 h-3" />
                     <span>View</span>
@@ -175,7 +175,7 @@ export const ProfessionalProfileCard: React.FC<{
           </div>
           <ul className="space-y-2">
             {showcase.map((s) => (
-              <li key={s.id} className="border border-slate-200 rounded-xl p-3 bg-white">
+              <li key={s.id} className="neu-inset-sm p-3">
                 <div className="text-xs font-bold text-slate-900">{s.title || 'Showcase'}</div>
                 {s.description && (
                   <p className="text-[11px] text-slate-600 mt-0.5 leading-relaxed">{s.description}</p>
@@ -198,7 +198,7 @@ export const ProfessionalProfileCard: React.FC<{
       )}
 
       {!compact && (value.contactEmail || value.referenceUrl) && (
-        <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 space-y-1.5">
+        <div className="neu-inset-sm p-3 space-y-1.5">
           <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
             Reach out
           </div>
@@ -349,9 +349,9 @@ export const ProfessionalProfilePanel: React.FC<ProfessionalProfilePanelProps> =
     }
   };
 
-  const inputClass =
-    'w-full text-sm bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-slate-800 placeholder-slate-400 focus:outline-none focus:bg-white focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600';
-  const labelClass = 'block text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-1';
+  // Fields are grooves in the page (see index.css), so only size and spacing are set here.
+  const inputClass = 'w-full text-sm rounded-xl px-3.5 py-2.5';
+  const labelClass = 'section-label block mb-1.5';
 
   if (loading) {
     return (
@@ -365,8 +365,8 @@ export const ProfessionalProfilePanel: React.FC<ProfessionalProfilePanelProps> =
     <div className="space-y-5 max-w-3xl">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">Professional Profile</h1>
-          <p className="text-sm text-slate-500 mt-1">
+          <h1 className="page-title">Professional Profile</h1>
+          <p className="page-lede">
             What your connected clients see. Only people whose requests you approved can read this.
           </p>
         </div>
@@ -412,7 +412,7 @@ export const ProfessionalProfilePanel: React.FC<ProfessionalProfilePanelProps> =
           <div className="neu rounded-2xl p-5 space-y-3">
             <div className="flex items-center gap-2">
               <Briefcase className="w-4 h-4 text-emerald-600" />
-              <h2 className="text-sm font-bold text-slate-900 uppercase tracking-wider">Who you are</h2>
+              <h2 className="card-title">Who you are</h2>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -446,11 +446,9 @@ export const ProfessionalProfilePanel: React.FC<ProfessionalProfilePanelProps> =
                       key={role}
                       type="button"
                       onClick={() => toggleRole(role)}
-                      className={`px-3 py-1.5 rounded-xl text-xs font-bold border transition cursor-pointer ${
-                        active
-                          ? 'bg-emerald-600 text-white border-emerald-700'
-                          : 'bg-slate-50 text-slate-700 border-slate-200 hover:border-emerald-300'
-                      }`}
+                      className="chip px-3 py-1.5 text-xs"
+                      data-active={active}
+                      aria-pressed={active}
                     >
                       {role}
                     </button>
@@ -491,7 +489,7 @@ export const ProfessionalProfilePanel: React.FC<ProfessionalProfilePanelProps> =
               />
             </label>
 
-            <label className="flex items-center justify-between gap-3 bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-3 cursor-pointer">
+            <label className="neu-inset-sm flex items-center justify-between gap-3 px-3.5 py-3 cursor-pointer">
               <span className="text-xs font-semibold text-slate-700">Currently accepting new clients</span>
               <input
                 type="checkbox"
@@ -507,7 +505,7 @@ export const ProfessionalProfilePanel: React.FC<ProfessionalProfilePanelProps> =
             <div className="flex items-center justify-between gap-3">
               <div className="flex items-center gap-2">
                 <BadgeCheck className="w-4 h-4 text-emerald-600" />
-                <h2 className="text-sm font-bold text-slate-900 uppercase tracking-wider">
+                <h2 className="card-title">
                   Qualifications
                 </h2>
               </div>
@@ -519,7 +517,7 @@ export const ProfessionalProfilePanel: React.FC<ProfessionalProfilePanelProps> =
                 <button
                   type="button"
                   onClick={addCredential}
-                  className="text-[11px] font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 px-2.5 py-1 rounded-lg cursor-pointer flex items-center gap-1 shrink-0"
+                  className="chip flex items-center gap-1 px-2.5 py-1 text-[11px] shrink-0"
                 >
                   <Plus className="w-3 h-3" />
                   {value.credentials.length === 0 ? 'Add a qualification' : 'Add another'}
@@ -536,7 +534,7 @@ export const ProfessionalProfilePanel: React.FC<ProfessionalProfilePanelProps> =
             ) : (
               <div className="space-y-2.5">
                 {value.credentials.map((c) => (
-                  <div key={c.id} className="border border-slate-200 rounded-xl p-3 space-y-2">
+                  <div key={c.id} className="neu-inset-sm p-3 space-y-2">
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                       <input
                         className={inputClass}
@@ -584,7 +582,7 @@ export const ProfessionalProfilePanel: React.FC<ProfessionalProfilePanelProps> =
             <div className="flex items-center justify-between gap-3">
               <div className="flex items-center gap-2">
                 <Eye className="w-4 h-4 text-emerald-600" />
-                <h2 className="text-sm font-bold text-slate-900 uppercase tracking-wider">
+                <h2 className="card-title">
                   Work &amp; results
                 </h2>
               </div>
@@ -596,7 +594,7 @@ export const ProfessionalProfilePanel: React.FC<ProfessionalProfilePanelProps> =
                 <button
                   type="button"
                   onClick={addShowcase}
-                  className="text-[11px] font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 px-2.5 py-1 rounded-lg cursor-pointer flex items-center gap-1 shrink-0"
+                  className="chip flex items-center gap-1 px-2.5 py-1 text-[11px] shrink-0"
                 >
                   <Plus className="w-3 h-3" />
                   {value.showcase.length === 0 ? 'Add a result' : 'Add another'}
@@ -612,7 +610,7 @@ export const ProfessionalProfilePanel: React.FC<ProfessionalProfilePanelProps> =
             ) : (
               <div className="space-y-2.5">
                 {value.showcase.map((s) => (
-                  <div key={s.id} className="border border-slate-200 rounded-xl p-3 space-y-2">
+                  <div key={s.id} className="neu-inset-sm p-3 space-y-2">
                     <div className="flex items-center gap-2">
                       <input
                         className={inputClass}
@@ -652,7 +650,7 @@ export const ProfessionalProfilePanel: React.FC<ProfessionalProfilePanelProps> =
           <div className="neu rounded-2xl p-5 space-y-3">
             <div className="flex items-center gap-2">
               <Mail className="w-4 h-4 text-emerald-600" />
-              <h2 className="text-sm font-bold text-slate-900 uppercase tracking-wider">Contact</h2>
+              <h2 className="card-title">Contact</h2>
             </div>
             <p className="text-[11px] text-slate-500 leading-relaxed flex items-start gap-1.5">
               <ShieldCheck className="w-3.5 h-3.5 text-emerald-600 shrink-0 mt-0.5" />
@@ -688,7 +686,7 @@ export const ProfessionalProfilePanel: React.FC<ProfessionalProfilePanelProps> =
             <button
               type="button"
               onClick={() => setIsEditing(false)}
-              className="text-xs font-semibold px-4 py-2.5 rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50 transition cursor-pointer flex items-center gap-1.5"
+              className="chip flex items-center gap-1.5 px-4 py-2.5 text-xs"
             >
               <X className="w-3.5 h-3.5" />
               <span>Cancel</span>
@@ -719,8 +717,8 @@ export const ProfessionalProfilePanel: React.FC<ProfessionalProfilePanelProps> =
 
       {/* Leave-professional confirm: only appears when the red icon is tapped. */}
       {confirmLeave && (
-        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-md flex items-center justify-center p-4 z-50 fade">
-          <div className="bg-white rounded-3xl max-w-sm w-full p-6 shadow-2xl border border-slate-200 space-y-4 pop">
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-md flex items-center justify-center p-4 z-[60] fade">
+          <div className="neu rounded-3xl max-w-sm w-full p-6 space-y-4 pop">
             <div className="flex items-start gap-3">
               <span className="w-10 h-10 rounded-xl grid place-items-center bg-rose-100 text-rose-600 shrink-0">
                 <TriangleAlert className="w-5 h-5" />
@@ -740,7 +738,7 @@ export const ProfessionalProfilePanel: React.FC<ProfessionalProfilePanelProps> =
                 type="button"
                 disabled={switching}
                 onClick={() => setConfirmLeave(false)}
-                className="text-xs font-semibold px-4 py-2.5 rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50 transition cursor-pointer"
+                className="chip px-4 py-2.5 text-xs"
               >
                 Cancel
               </button>
@@ -748,7 +746,7 @@ export const ProfessionalProfilePanel: React.FC<ProfessionalProfilePanelProps> =
                 type="button"
                 disabled={switching}
                 onClick={onSwitchToClient}
-                className="text-xs font-bold px-4 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white shadow-xs transition cursor-pointer disabled:opacity-60 flex items-center gap-1.5"
+                className="btn-danger flex items-center gap-1.5 px-4 py-2.5 text-xs"
               >
                 <LogOut className="w-3.5 h-3.5" />
                 <span>{switching ? 'Leaving…' : 'Yes, leave & remove clients'}</span>

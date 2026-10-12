@@ -70,18 +70,18 @@ export const GiveUpInterventionModal: React.FC<GiveUpInterventionModalProps> = (
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-slate-900/45 backdrop-blur-md flex items-center justify-center p-3 sm:p-5 overflow-y-auto fade">
+    <div className="fixed inset-0 z-[60] bg-slate-900/45 backdrop-blur-md flex items-center justify-center p-3 sm:p-5 overflow-y-auto fade">
       <div className="neu rounded-3xl pop max-w-lg w-full shadow-2xl overflow-hidden transition-all text-slate-800 my-auto">
         
         {/* Top Header */}
-        <div className="bg-gradient-to-r from-emerald-50/80 via-white to-emerald-50/80 border-b border-emerald-100 px-5 sm:px-6 py-4 flex items-center justify-between gap-3">
+        <div className="border-b border-slate-300/40 px-5 sm:px-6 py-4 flex items-center justify-between gap-3">
           <div className="flex items-center gap-2.5">
-            <div className="w-9 h-9 rounded-2xl bg-emerald-100 border border-emerald-200/90 flex items-center justify-center text-emerald-700 shadow-2xs">
+            <div className="neu-sm w-9 h-9 grid place-items-center text-emerald-700">
               <HeartHandshake className="w-5 h-5" />
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-800 bg-emerald-100/80 px-2 py-0.5 rounded border border-emerald-200/80">
+                <span className="badge uppercase tracking-wider">
                   Mindset Check-In
                 </span>
                 <span className="text-xs text-slate-400 font-medium truncate max-w-[170px]">
@@ -97,7 +97,7 @@ export const GiveUpInterventionModal: React.FC<GiveUpInterventionModalProps> = (
           <button
             type="button"
             onClick={onClose}
-            className="w-8 h-8 rounded-xl text-slate-400 hover:text-slate-700 hover:bg-slate-100 flex items-center justify-center transition cursor-pointer"
+            className="chip w-8 h-8 grid place-items-center"
             title="Close"
           >
             <X className="w-4 h-4" />
@@ -105,15 +105,16 @@ export const GiveUpInterventionModal: React.FC<GiveUpInterventionModalProps> = (
         </div>
 
         {/* Tab Navigation Steps */}
-        <div className="px-5 sm:px-6 pt-3 pb-1 border-b border-slate-100 bg-slate-50/50">
-          <div className="flex items-center justify-between gap-1 p-1 bg-white/80 border border-slate-200/80 rounded-2xl shadow-2xs text-xs font-semibold">
+        <div className="px-5 sm:px-6 py-3 border-b border-slate-300/40">
+          <div className="neu-inset-sm flex items-center justify-between gap-1 p-1 text-xs font-semibold">
             <button
               type="button"
               onClick={() => setActiveTab('reflect')}
+              data-plain
               className={`flex-1 py-1.5 px-2 rounded-xl transition flex items-center justify-center gap-1.5 cursor-pointer ${
                 activeTab === 'reflect'
                   ? 'bg-emerald-600 text-white shadow-2xs font-bold'
-                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/70'
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-white/50'
               }`}
             >
               <Compass className="w-3.5 h-3.5" />
@@ -123,10 +124,11 @@ export const GiveUpInterventionModal: React.FC<GiveUpInterventionModalProps> = (
             <button
               type="button"
               onClick={() => setActiveTab('solutions')}
+              data-plain
               className={`flex-1 py-1.5 px-2 rounded-xl transition flex items-center justify-center gap-1.5 cursor-pointer ${
                 activeTab === 'solutions'
                   ? 'bg-emerald-600 text-white shadow-2xs font-bold'
-                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/70'
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-white/50'
               }`}
             >
               <Sparkles className="w-3.5 h-3.5" />
@@ -136,10 +138,11 @@ export const GiveUpInterventionModal: React.FC<GiveUpInterventionModalProps> = (
             <button
               type="button"
               onClick={() => setActiveTab('confirm')}
+              data-plain
               className={`flex-1 py-1.5 px-2 rounded-xl transition flex items-center justify-center gap-1.5 cursor-pointer ${
                 activeTab === 'confirm'
                   ? 'bg-rose-600 text-white shadow-2xs font-bold'
-                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/70'
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-white/50'
               }`}
             >
               <Flag className="w-3.5 h-3.5" />
@@ -155,7 +158,7 @@ export const GiveUpInterventionModal: React.FC<GiveUpInterventionModalProps> = (
           {activeTab === 'reflect' && (
             <div className="space-y-4 animate-in fade-in duration-200">
               {/* Category-tuned Motivational Card */}
-              <div className="bg-emerald-50/70 border border-emerald-200/80 rounded-2xl p-4 shadow-2xs space-y-2">
+              <div className="neu-inset p-4 space-y-2">
                 <div className="flex items-center gap-2 text-emerald-900 font-bold text-xs">
                   <Flame className="w-4 h-4 text-emerald-600 flex-shrink-0" />
                   <span>Are you easily giving up, or is this just an off week?</span>
@@ -193,20 +196,17 @@ export const GiveUpInterventionModal: React.FC<GiveUpInterventionModalProps> = (
                       key={struggle}
                       type="button"
                       onClick={() => setSelectedStruggle(struggle)}
-                      className={`text-xs text-left p-2.5 rounded-xl border transition cursor-pointer flex items-center gap-2 ${
-                        selectedStruggle === struggle
-                          ? 'bg-emerald-100 text-emerald-950 border-emerald-300 font-bold shadow-2xs ring-1 ring-emerald-300/60'
-                          : 'bg-white hover:bg-slate-50 text-slate-700 border-slate-200 hover:border-slate-300'
-                      }`}
+                      className="chip text-xs text-left px-3 py-2.5 flex items-center gap-2"
+                      data-active={selectedStruggle === struggle}
                     >
-                      <span className={`w-2 h-2 rounded-full ${selectedStruggle === struggle ? 'bg-emerald-600' : 'bg-slate-300'}`} />
+                      <span className={`w-2 h-2 rounded-full ${selectedStruggle === struggle ? 'bg-white' : 'bg-slate-400'}`} />
                       <span className="truncate">{struggle}</span>
                     </button>
                   ))}
                 </div>
 
                 {selectedStruggle && (
-                  <div className="bg-emerald-50 border border-emerald-200/80 rounded-xl p-3 text-xs text-emerald-900 flex items-start gap-2 shadow-2xs animate-in fade-in duration-150">
+                  <div className="neu-inset-sm p-3 text-xs text-slate-800 flex items-start gap-2 pop">
                     <CheckCircle2 className="w-4 h-4 text-emerald-600 flex-shrink-0 mt-0.5" />
                     <span>
                       That's completely normal and 100% fixable! You don't need to quit—you can simply add another month or trim down tasks.
@@ -220,7 +220,7 @@ export const GiveUpInterventionModal: React.FC<GiveUpInterventionModalProps> = (
                 <button
                   type="button"
                   onClick={onClose}
-                  className="text-xs font-bold text-emerald-800 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 px-4 py-2.5 rounded-xl transition cursor-pointer flex items-center gap-1.5 shadow-2xs"
+                  className="chip flex items-center gap-1.5 px-4 py-2.5 text-xs"
                 >
                   <Smile className="w-4 h-4 text-emerald-600" />
                   <span>I'm Keeping My Goal!</span>
@@ -241,7 +241,7 @@ export const GiveUpInterventionModal: React.FC<GiveUpInterventionModalProps> = (
           {/* TAB 2: SOLUTIONS & MOTIVATION */}
           {activeTab === 'solutions' && (
             <div className="space-y-4 animate-in fade-in duration-200">
-              <div className="bg-emerald-50/70 border border-emerald-200/80 rounded-2xl p-4 shadow-2xs">
+              <div className="neu-inset p-4">
                 <div className="text-xs font-bold text-emerald-950 uppercase tracking-wider mb-1 flex items-center gap-1.5">
                   <Sparkles className="w-3.5 h-3.5 text-emerald-600" />
                   <span>Choose Timeline Extension</span>
@@ -272,13 +272,11 @@ export const GiveUpInterventionModal: React.FC<GiveUpInterventionModalProps> = (
                           key={opt.months}
                           type="button"
                           onClick={() => setMonthsToExtend(opt.months)}
-                          className={`py-2 px-1 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1 cursor-pointer border ${
-                            isSelected
-                              ? 'bg-emerald-700 text-white border-emerald-800 shadow-2xs'
-                              : 'bg-emerald-100/90 text-emerald-950 border-emerald-200/90 hover:bg-emerald-200'
-                          }`}
+                          className="chip py-2 px-1 text-xs flex items-center justify-center gap-1"
+                          data-active={isSelected}
+                          aria-pressed={isSelected}
                         >
-                          {isSelected && <CheckCircle2 className="w-3 h-3 text-emerald-200" />}
+                          {isSelected && <CheckCircle2 className="w-3 h-3" />}
                           <span>{opt.label}</span>
                         </button>
                       );
@@ -318,10 +316,10 @@ export const GiveUpInterventionModal: React.FC<GiveUpInterventionModalProps> = (
                 <button
                   type="button"
                   onClick={onClose}
-                  className="w-full text-left bg-white hover:bg-emerald-50/40 text-slate-800 rounded-2xl p-3.5 border border-emerald-200/90 shadow-2xs transition cursor-pointer flex items-center justify-between gap-3"
+                  className="neu-sm w-full text-left text-slate-800 p-3.5 transition cursor-pointer flex items-center justify-between gap-3"
                 >
                   <div className="flex items-center gap-3">
-                    <div className="w-9 h-9 rounded-xl bg-emerald-50 border border-emerald-200 flex items-center justify-center text-emerald-700 shrink-0">
+                    <div className="neu-inset-sm w-9 h-9 grid place-items-center text-emerald-700 shrink-0">
                       <Smile className="w-4 h-4" />
                     </div>
                     <div>
@@ -333,7 +331,7 @@ export const GiveUpInterventionModal: React.FC<GiveUpInterventionModalProps> = (
                       </div>
                     </div>
                   </div>
-                  <span className="text-xs font-bold text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-lg border border-emerald-200">
+                  <span className="badge">
                     Stay In
                   </span>
                 </button>
@@ -375,7 +373,7 @@ export const GiveUpInterventionModal: React.FC<GiveUpInterventionModalProps> = (
                 </p>
               </div>
 
-              <div className="bg-slate-50 border border-slate-200 rounded-2xl p-3.5 text-xs text-slate-800 space-y-1">
+              <div className="neu-inset p-3.5 text-xs text-slate-800 space-y-1">
                 <div className="font-bold">Goal to remove:</div>
                 <div className="text-sm font-black text-slate-900 truncate">
                   "{goal.title}"
@@ -400,9 +398,10 @@ export const GiveUpInterventionModal: React.FC<GiveUpInterventionModalProps> = (
                   type="button"
                   disabled={isProcessing}
                   onClick={handleFinalGiveUp}
-                  className="w-full bg-white hover:bg-rose-50 text-rose-600 hover:text-rose-700 font-semibold text-xs py-2.5 px-4 rounded-xl border border-rose-200/90 transition cursor-pointer flex items-center justify-center gap-1.5 shadow-2xs disabled:opacity-50"
+                  className="chip w-full py-2.5 px-4 text-xs flex items-center justify-center gap-1.5"
+                  data-danger="true"
                 >
-                  <Flag className="w-3.5 h-3.5 text-rose-500" />
+                  <Flag className="w-3.5 h-3.5" />
                   <span>{isProcessing ? 'Removing...' : 'Yes, Confirm Give Up & Archive'}</span>
                 </button>
               </div>

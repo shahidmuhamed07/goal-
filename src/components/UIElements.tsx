@@ -29,7 +29,7 @@ export const GoalPathLogo: React.FC<{ size?: 'sm' | 'md' | 'lg' | 'xl'; showText
   return (
     <div className={`flex items-center gap-2.5 select-none ${className}`}>
       <div
-        className={`${iconSizes[size]} rounded-xl bg-gradient-to-br from-emerald-500 to-teal-700 text-white shadow-sm flex items-center justify-center flex-shrink-0 overflow-hidden`}
+        className={`${iconSizes[size]} rounded-xl bg-gradient-to-br from-emerald-400 to-purple-500 text-white shadow-sm flex items-center justify-center flex-shrink-0 overflow-hidden`}
       >
         <GoalPathMark className="w-[62%] h-[62%]" />
       </div>
@@ -74,7 +74,7 @@ export const GoalPathLoader: React.FC<{ message?: string }> = ({ message }) => (
     className="flex items-center justify-center min-h-screen w-full"
   >
     <div className="gp-loader-mark">
-      <div className="w-24 h-24 sm:w-28 sm:h-28 rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-700 shadow-[0_16px_40px_-14px_rgba(13,148,136,0.8)] flex items-center justify-center">
+      <div className="w-24 h-24 sm:w-28 sm:h-28 rounded-2xl bg-gradient-to-br from-emerald-400 to-purple-500 shadow-[0_16px_40px_-14px_rgba(79,91,245,0.6)] flex items-center justify-center">
         <svg
           viewBox="0 0 24 24"
           fill="none"
@@ -94,7 +94,7 @@ export const GoalPathLoader: React.FC<{ message?: string }> = ({ message }) => (
           <path
             d={LOADER_ROUTE_D}
             pathLength={100}
-            stroke="#6ee7b7"
+            stroke="#aab2ff"
             strokeWidth="7"
             opacity="0.22"
             className="gp-loader-glow"
@@ -102,21 +102,21 @@ export const GoalPathLoader: React.FC<{ message?: string }> = ({ message }) => (
           <path
             d={LOADER_ROUTE_D}
             pathLength={100}
-            stroke="#a7f3d0"
+            stroke="#d5d9ff"
             strokeWidth="2.6"
             className="gp-loader-body"
           />
           <path
             d={LOADER_ROUTE_D}
             pathLength={100}
-            stroke="#f0fdf9"
+            stroke="#ffffff"
             strokeWidth="3.4"
             className="gp-loader-head"
           />
 
           {/* Nodes, held softly lit so the mark still reads between passes. */}
-          <circle cx="18" cy="5" r="3" fill="#a7f3d0" className="gp-loader-node" />
-          <circle cx="6" cy="19" r="3" fill="#a7f3d0" className="gp-loader-node" />
+          <circle cx="18" cy="5" r="3" fill="#d5d9ff" className="gp-loader-node" />
+          <circle cx="6" cy="19" r="3" fill="#d5d9ff" className="gp-loader-node" />
         </svg>
       </div>
     </div>
@@ -151,27 +151,27 @@ export const ProgressBar: React.FC<{ value?: number; height?: string; color?: st
 
 /**
  * Clean tactile neu clickable icon button with clear affordance.
+ *
+ * `variant="tone"` follows the app's accent (violet for the owner, blue for a
+ * professional) instead of fixing a colour, so use it by default for neutral
+ * actions. Any other button attribute (aria-*, data-*) is passed through.
  */
-export const GlassIconButton: React.FC<{
-  children: React.ReactNode;
-  onClick?: (e: React.MouseEvent<HTMLButtonElement>) => void;
-  title?: string;
-  variant?: 'purple' | 'emerald' | 'rose' | 'slate' | 'amber' | 'blue';
-  size?: 'xs' | 'sm' | 'md' | 'lg';
-  disabled?: boolean;
-  active?: boolean;
-  className?: string;
-  type?: 'button' | 'submit' | 'reset';
-}> = ({
+export const GlassIconButton: React.FC<
+  Omit<React.ButtonHTMLAttributes<HTMLButtonElement>, 'className'> & {
+    variant?: 'tone' | 'purple' | 'emerald' | 'rose' | 'slate' | 'amber' | 'blue';
+    size?: 'xs' | 'sm' | 'md' | 'lg';
+    active?: boolean;
+    className?: string;
+  }
+> = ({
   children,
-  onClick,
-  title,
   variant = 'emerald',
   size = 'md',
   disabled = false,
   active = false,
   className = '',
   type = 'button',
+  ...rest
 }) => {
   const sizeClasses = {
     xs: 'w-6 h-6 p-1 text-[11px] rounded-lg',
@@ -181,6 +181,9 @@ export const GlassIconButton: React.FC<{
   };
 
   const variantClasses = {
+    tone: active
+      ? 'bg-[color:var(--tone-700)] text-white border border-[color:var(--tone-700)] shadow-xs ring-2 ring-[color:var(--tone-300)]'
+      : 'bg-[color:var(--tone-100)] hover:bg-[color:var(--tone-200)] text-[color:var(--tone-800)] hover:text-[color:var(--tone-900)] border border-[color:var(--tone-200)] shadow-2xs',
     purple: active
       ? 'bg-violet-700 text-white border-violet-600 shadow-xs ring-2 ring-violet-500/30'
       : 'bg-violet-600/10 hover:bg-violet-600/20 active:bg-violet-600/30 text-violet-800 hover:text-violet-900 border border-violet-300/30 hover:border-violet-500/50 backdrop-blur-xs shadow-2xs hover:shadow-xs',
@@ -204,11 +207,10 @@ export const GlassIconButton: React.FC<{
 
   return (
     <button
+      {...rest}
       type={type}
-      onClick={onClick}
       disabled={disabled}
-      title={title}
-      className={`inline-flex items-center justify-center transition-all duration-150 cursor-pointer select-none active:scale-95 disabled:opacity-35 disabled:pointer-events-none disabled:active:scale-100 focus:outline-none focus:ring-2 focus:ring-emerald-400/40 ${sizeClasses[size]} ${variantClasses[variant]} ${className}`}
+      className={`inline-flex items-center justify-center transition-all duration-150 cursor-pointer select-none active:scale-95 disabled:opacity-35 disabled:pointer-events-none disabled:active:scale-100 focus:outline-none focus:ring-2 focus:ring-[color:var(--tone-300)] ${sizeClasses[size]} ${variantClasses[variant]} ${className}`}
     >
       {children}
     </button>

@@ -1,47 +1,123 @@
-import React, { useState, useMemo, useRef, useEffect } from 'react';
-import { Calendar, ChevronDown, ChevronLeft, ChevronRight, Sparkles, Plus } from 'lucide-react';
-import { Goal, Subcategory } from '../types';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { Calendar, ChevronDown, ChevronLeft, ChevronRight, Plus, Repeat } from 'lucide-react';
+import { Goal, Subcategory, TaskItem } from '../types';
 import { SubcategoryBlock } from './SubcategoryBlock';
-import { GlassIconButton, GlassBadge } from './UIElements';
+import { WeekdayPicker } from './WeekdayPicker';
+import { GlassIconButton } from './UIElements';
+import { DayMark } from './DayMark';
 import { getCategoryPresets } from '../categoryPresets';
 import {
   getTodayDateString,
   getCurrentMonthKey,
-  getMonthDays,
-  formatDisplayDate,
+  shiftDateString,
   formatFullMonth,
+  formatMonthKey,
 } from '../utils';
+import {
+  WEEKDAY_SHORT,
+  buildDayStats,
+  datesOnWeekdays,
+  describeDays,
+  getWeekDates,
+  goalEndDate,
+  goalStartDate,
+  startOfWeek,
+  weekdayOf,
+} from '../recurrence';
+
+type Priority = 'high' | 'medium' | 'low';
 
 interface DailyTaskSectionProps {
   goal: Goal;
   isOwner?: boolean;
   canManageCategories?: boolean;
-  professionalRole?: string | null;
   selectedMonthKey?: string;
+  /** The day to open on (from a goal card's week strip); otherwise today. */
+  initialDate?: string | null;
   onSelectMonth?: (monthKey: string) => void;
   canEditSubcategoryTasks: (sub?: Subcategory) => boolean;
   onAddSubcategory: (goalId: string, name: string, date?: string) => Promise<string | null>;
+  onAddRepeatingSubcategory: (
+    goalId: string,
+    name: string,
+    fromDate: string,
+    days: number[]
+  ) => Promise<string | null>;
   onRenameSubcategory: (goalId: string, subcategoryId: string, name: string) => void;
-  onDeleteSubcategory: (goalId: string, subcategoryId: string) => void;
+  onDeleteSubcategory: (goalId: string, subcategoryId: string, scope: 'one' | 'future') => void;
   onSetSubcategoryRole?: (goalId: string, subcategoryId: string, editorRole: string) => void;
-  onAddTask: (goalId: string, text: string, priority: 'high' | 'medium' | 'low', subcategoryId?: string, date?: string) => void;
-  onUpdateTask?: (goalId: string, taskId: string, updates: Partial<any>) => void;
+  onChangeSubcategoryRepeat: (goalId: string, subcategoryId: string, days: number[]) => void;
+  onAddTask: (
+    goalId: string,
+    text: string,
+    priority: Priority,
+    subcategoryId?: string,
+    date?: string,
+    forward?: boolean
+  ) => void;
+  onUpdateTask?: (goalId: string, taskId: string, updates: Partial<TaskItem>) => void;
   onToggleTask: (goalId: string, taskId: string) => void;
   onDeleteTask: (goalId: string, taskId: string) => void;
 }
+
+/** "Tuesday, Oct 13": the day being planned, spelled out. */
+const longDate = (date: string): string => {
+  const [y, m, d] = date.split('-').map(Number);
+  return new Date(Date.UTC(y, m - 1, d)).toLocaleDateString('en-US', {
+    weekday: 'long',
+    month: 'short',
+    day: 'numeric',
+    timeZone: 'UTC',
+  });
+};
+
+/** "Oct 5 – 11, 2026", or "Sep 28 – Oct 4, 2026" when the week crosses a month. */
+const weekRange = (dates: string[]): string => {
+  const part = (date: string, withMonth: boolean) => {
+    const [y, m, d] = date.split('-').map(Number);
+    return new Date(Date.UTC(y, m - 1, d)).toLocaleDateString('en-US', {
+      ...(withMonth ? { month: 'short' } : {}),
+      day: 'numeric',
+      timeZone: 'UTC',
+    });
+  };
+  const first = dates[0];
+  const last = dates[dates.length - 1];
+  const sameMonth = first.slice(0, 7) === last.slice(0, 7);
+  return `${part(first, true)} – ${part(last, !sameMonth)}, ${last.slice(0, 4)}`;
+};
+
+/** A numbered heading, so the page reads as a short sequence: pick a day, plan it. */
+const StepHeading: React.FC<{ step: number; title: string; children?: React.ReactNode }> = ({
+  step,
+  title,
+  children,
+}) => (
+  <div className="flex items-center justify-between gap-3 flex-wrap">
+    <div className="flex items-center gap-2.5 min-w-0">
+      <span className="w-6 h-6 rounded-full grid place-items-center shrink-0 text-[11px] font-extrabold text-white bg-[color:var(--tone-700)]">
+        {step}
+      </span>
+      <h3 className="text-sm font-bold text-slate-800 truncate">{title}</h3>
+    </div>
+    {children}
+  </div>
+);
 
 export const DailyTaskSection: React.FC<DailyTaskSectionProps> = ({
   goal,
   isOwner = true,
   canManageCategories = true,
-  professionalRole,
   selectedMonthKey,
+  initialDate,
   onSelectMonth,
   canEditSubcategoryTasks,
   onAddSubcategory,
+  onAddRepeatingSubcategory,
   onRenameSubcategory,
   onDeleteSubcategory,
   onSetSubcategoryRole,
+  onChangeSubcategoryRepeat,
   onAddTask,
   onUpdateTask,
   onToggleTask,
@@ -50,49 +126,84 @@ export const DailyTaskSection: React.FC<DailyTaskSectionProps> = ({
   const todayStr = getTodayDateString();
   const currentCalendarMonth = getCurrentMonthKey();
   const activeMonthKey = selectedMonthKey || currentCalendarMonth;
+  const horizonStart = goalStartDate(goal);
+  const horizonEnd = goalEndDate(goal);
 
-  // Initialize selected date based on active month
-  const [selectedDate, setSelectedDate] = useState<string>(() => {
-    if (activeMonthKey === currentCalendarMonth) return todayStr;
-    return `${activeMonthKey}-01`;
-  });
-
-  const [newSubName, setNewSubName] = useState('');
-  // On phones the preset panel is collapsed by default so the actual task list
-  // is what you land on. Desktop keeps it open.
-  const [showPresets, setShowPresets] = useState(false);
+  const [selectedDate, setSelectedDate] = useState<string>(() =>
+    initialDate && initialDate.startsWith(activeMonthKey)
+      ? initialDate
+      : activeMonthKey === currentCalendarMonth
+      ? todayStr
+      : `${activeMonthKey}-01`
+  );
   const [expandedIds, setExpandedIds] = useState<Record<string, boolean>>({});
   const [allExpanded, setAllExpanded] = useState<boolean>(true);
   const [showMonthDropdown, setShowMonthDropdown] = useState(false);
-  const dateScrollRef = useRef<HTMLDivElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
-  // Sync selectedDate when activeMonthKey changes
+  // The add-subcategory form
+  const [addOpen, setAddOpen] = useState(false);
+  const [newName, setNewName] = useState('');
+  const [weekly, setWeekly] = useState(false);
+  const [repeatDays, setRepeatDays] = useState<number[]>([]);
+  const [adding, setAdding] = useState(false);
+
+  /**
+   * Picks a day. The roadmap beside this section follows the month, so moving
+   * into another month through the week strip has to tell it as well.
+   */
+  const selectDate = (date: string) => {
+    setSelectedDate(date);
+    const monthKey = date.slice(0, 7);
+    if (monthKey !== activeMonthKey) onSelectMonth?.(monthKey);
+  };
+
+  // The month changed from outside (the roadmap or the month menu): land on a
+  // sensible day in it.
   useEffect(() => {
     if (!selectedDate.startsWith(activeMonthKey)) {
-      if (activeMonthKey === currentCalendarMonth) {
-        setSelectedDate(todayStr);
-      } else {
-        setSelectedDate(`${activeMonthKey}-01`);
-      }
+      setSelectedDate(activeMonthKey === currentCalendarMonth ? todayStr : `${activeMonthKey}-01`);
     }
   }, [activeMonthKey, currentCalendarMonth, todayStr, selectedDate]);
 
-  const monthDays = useMemo(() => getMonthDays(activeMonthKey), [activeMonthKey]);
+  // Planning only happens inside the goal's own months.
+  useEffect(() => {
+    if (selectedDate < horizonStart) selectDate(horizonStart);
+    else if (selectedDate > horizonEnd) selectDate(horizonEnd);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedDate, horizonStart, horizonEnd]);
 
-  // Tasks for the selected date
-  const selectedDateTasks = useMemo(() => {
-    return (goal.tasks || []).filter((t) => t.date === selectedDate);
-  }, [goal.tasks, selectedDate]);
+  useEffect(() => {
+    if (!showMonthDropdown) return undefined;
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setShowMonthDropdown(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [showMonthDropdown]);
 
-  // Subcategories SPECIFIC to the selected date
+  const weekDates = useMemo(() => getWeekDates(selectedDate), [selectedDate]);
+  const canPrevWeek = startOfWeek(selectedDate) > horizonStart;
+  const canNextWeek = shiftDateString(startOfWeek(selectedDate), 7) <= horizonEnd;
+
+  const moveWeek = (step: 1 | -1) => {
+    const target = shiftDateString(selectedDate, step * 7);
+    selectDate(target < horizonStart ? horizonStart : target > horizonEnd ? horizonEnd : target);
+  };
+
+  const selectedDateTasks = useMemo(
+    () => (goal.tasks || []).filter((t) => t.date === selectedDate),
+    [goal.tasks, selectedDate]
+  );
+
+  // Subcategories belong to a day. Older ones saved without a date are shown on
+  // the day their tasks are on, or else on the goal's first day.
   const subcategories = useMemo(() => {
     return (goal.subcategories || [])
       .filter((s) => {
-        if (s.date) {
-          return s.date === selectedDate;
-        }
-        // Legacy fallback for subcategories created without explicit date:
+        if (s.date) return s.date === selectedDate;
         const hasTasksOnThisDate = (goal.tasks || []).some(
           (t) => t.subcategoryId === s.id && t.date === selectedDate
         );
@@ -107,517 +218,357 @@ export const DailyTaskSection: React.FC<DailyTaskSectionProps> = ({
       .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
   }, [goal.subcategories, goal.tasks, goal.createdAt, selectedDate, todayStr]);
 
-  // Task counts per date across the whole month for calendar indicators
-  const tasksByDate = useMemo(() => {
-    const map: Record<string, { total: number; done: number; subCount: number }> = {};
-    (goal.tasks || []).forEach((t) => {
-      if (t.date && t.date.startsWith(activeMonthKey)) {
-        if (!map[t.date]) {
-          map[t.date] = { total: 0, done: 0, subCount: 0 };
-        }
-        map[t.date].total += 1;
-        if (t.completed) map[t.date].done += 1;
-      }
-    });
-    (goal.subcategories || []).forEach((s) => {
-      if (s.date && s.date.startsWith(activeMonthKey)) {
-        if (!map[s.date]) {
-          map[s.date] = { total: 0, done: 0, subCount: 0 };
-        }
-        map[s.date].subCount += 1;
-      }
-    });
-    return map;
-  }, [goal.tasks, goal.subcategories, activeMonthKey]);
+  // What each day of the strip should hint at: tasks (and how many are done), or
+  // a planned subcategory with no tasks yet.
+  const dayStats = useMemo(() => buildDayStats(goal), [goal.tasks, goal.subcategories]);
 
   const uncategorizedTasks = useMemo(
     () => selectedDateTasks.filter((t) => !t.subcategoryId),
     [selectedDateTasks]
   );
 
-  // Auto-scroll selected date into view
-  useEffect(() => {
-    if (dateScrollRef.current) {
-      const activeEl = dateScrollRef.current.querySelector<HTMLElement>('[data-active="true"]');
-      if (activeEl) {
-        activeEl.scrollIntoView({
-          behavior: 'smooth',
-          inline: 'center',
-          block: 'nearest',
-        });
-      }
-    }
-  }, [selectedDate, activeMonthKey]);
+  const categoryConfig = useMemo(
+    () => getCategoryPresets(goal.category, goal.title),
+    [goal.category, goal.title]
+  );
 
-  // Close dropdown when clicking outside
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
-        setShowMonthDropdown(false);
-      }
+  /**
+   * A short row of starting points for the name field: the last couple of names
+   * this goal has used, then this category's own routines, four in all. Anything
+   * else is a matter of typing it.
+   */
+  const quickPicks = useMemo(() => {
+    const onThisDay = new Set<string>(subcategories.map((s) => s.name.trim().toLowerCase()));
+    const seen = new Set<string>(onThisDay);
+    const picks: string[] = [];
+    const add = (name: string) => {
+      const key = name.trim().toLowerCase();
+      if (!name.trim() || seen.has(key) || picks.length >= 4) return;
+      seen.add(key);
+      picks.push(name);
     };
-    if (showMonthDropdown) {
-      document.addEventListener('mousedown', handleClickOutside);
-      return () => document.removeEventListener('mousedown', handleClickOutside);
-    }
-  }, [showMonthDropdown]);
+    const recent: string[] = [];
+    [...(goal.subcategories || [])].reverse().forEach((s) => {
+      if (s.name && !recent.some((n) => n.toLowerCase() === s.name.toLowerCase())) recent.push(s.name);
+    });
+    recent.filter((n) => !onThisDay.has(n.trim().toLowerCase())).slice(0, 2).forEach(add);
+    categoryConfig.subcategories.forEach(add);
+    return picks;
+  }, [goal.subcategories, subcategories, categoryConfig]);
 
-  const toggleExpanded = (id: string) => {
-    setExpandedIds((prev) => ({
-      ...prev,
-      [id]: prev[id] !== undefined ? !prev[id] : !allExpanded,
-    }));
-  };
+  const toggleExpanded = (id: string) =>
+    setExpandedIds((prev) => ({ ...prev, [id]: prev[id] !== undefined ? !prev[id] : !allExpanded }));
 
   const handleToggleAll = () => {
     const next = !allExpanded;
     setAllExpanded(next);
-    const newMap: Record<string, boolean> = {};
+    const map: Record<string, boolean> = { __uncategorized__: next };
     subcategories.forEach((s) => {
-      newMap[s.id] = next;
+      map[s.id] = next;
     });
-    newMap['__uncategorized__'] = next;
-    setExpandedIds(newMap);
+    setExpandedIds(map);
   };
 
-  const handleAddSub = async (nameToAdd?: string) => {
-    const name = (nameToAdd || newSubName).trim();
-    if (!name) return;
-    const id = await onAddSubcategory(goal.id, name, selectedDate);
-    if (!nameToAdd) setNewSubName('');
-    if (id) {
-      setExpandedIds((prev) => ({ ...prev, [id]: true }));
-    }
+  const openAdd = () => {
+    setAddOpen(true);
+    setWeekly(false);
+    setRepeatDays([weekdayOf(selectedDate)]);
   };
 
-  const handlePrevDay = () => {
-    const idx = monthDays.findIndex((d) => d.dateStr === selectedDate);
-    if (idx > 0) {
-      setSelectedDate(monthDays[idx - 1].dateStr);
-    }
+  const closeAdd = () => {
+    setAddOpen(false);
+    setNewName('');
   };
 
-  const handleNextDay = () => {
-    const idx = monthDays.findIndex((d) => d.dateStr === selectedDate);
-    if (idx >= 0 && idx < monthDays.length - 1) {
-      setSelectedDate(monthDays[idx + 1].dateStr);
-    }
-  };
+  const repeatDates = useMemo(
+    () => (weekly ? datesOnWeekdays(selectedDate, horizonEnd, repeatDays) : []),
+    [weekly, selectedDate, horizonEnd, repeatDays]
+  );
 
-  // Domain-specific category presets based strictly on this goal's category & title
-  const categoryConfig = useMemo(() => {
-    return getCategoryPresets(goal.category, goal.title);
-  }, [goal.category, goal.title]);
-
-  // Previous custom subcategories from other days the user created
-  const recentCustomSubNames = useMemo(() => {
-    const currentNames = new Set(subcategories.map((s) => s.name.toLowerCase()));
-    const list: string[] = [];
-    (goal.subcategories || []).forEach((s) => {
-      if (s.name && !currentNames.has(s.name.toLowerCase()) && !list.includes(s.name)) {
-        list.push(s.name);
+  const handleAdd = async (event: React.FormEvent) => {
+    event.preventDefault();
+    const name = newName.trim();
+    if (!name || adding) return;
+    if (weekly && repeatDays.length === 0) return;
+    setAdding(true);
+    try {
+      const id = weekly
+        ? await onAddRepeatingSubcategory(goal.id, name, selectedDate, repeatDays)
+        : await onAddSubcategory(goal.id, name, selectedDate);
+      if (id) {
+        setExpandedIds((prev) => ({ ...prev, [id]: true }));
+        closeAdd();
       }
-    });
-    return list;
-  }, [goal.subcategories, subcategories]);
+    } finally {
+      setAdding(false);
+    }
+  };
 
-  const isTodaySelected = selectedDate === todayStr;
+  const isToday = selectedDate === todayStr;
   const completedCount = selectedDateTasks.filter((t) => t.completed).length;
   const milestoneMonths = goal.milestones || [];
+  const isEmptyDay = subcategories.length === 0 && uncategorizedTasks.length === 0;
+  const canAdd = canManageCategories;
 
   return (
-    <div
-      className={`bg-white border rounded-2xl p-4 sm:p-6 shadow-xs space-y-4 sm:space-y-5 transition-colors duration-200 ${
-        !isOwner
-          ? 'border-blue-200/90 shadow-blue-950/5'
-          : 'border-violet-200/80'
-      }`}
-    >
-      {/* HEADER & MONTH SELECTOR */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 pb-3 border-b border-slate-100">
-        <div>
-          <div className="flex items-center gap-2 flex-wrap">
-            <span
-              className={`text-[11px] font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-md border ${
-                !isOwner
-                  ? 'text-blue-950 bg-blue-100 border-blue-300/80'
-                  : 'text-violet-900 bg-violet-100 border-violet-200/90'
-              }`}
-            >
-              {!isOwner ? 'Trainer Routine Planning' : 'Daily Action Plan'}
-            </span>
+    <div className="neu rounded-2xl p-4 sm:p-6 space-y-6">
+      {/* HEADER: what this is, which month, and how today is going */}
+      <div className="flex items-center justify-between gap-3 flex-wrap">
+        <div className="flex items-center gap-2.5 flex-wrap">
+          <span className="card-title">{isOwner ? 'Daily plan' : 'Client’s daily plan'}</span>
 
-            {!isOwner && (
-              <span className="text-[10px] font-bold text-blue-800 bg-blue-50 border border-blue-200 px-2 py-0.5 rounded-md">
-                Client Workspace
-              </span>
-            )}
-
-            {/* MONTH SELECTOR DROPDOWN / PILL */}
-            {milestoneMonths.length > 0 && onSelectMonth ? (
-              <div
-                ref={dropdownRef}
-                className="relative"
+          {milestoneMonths.length > 0 && onSelectMonth && (
+            <div ref={dropdownRef} className="relative">
+              <button
+                type="button"
+                className="chip inline-flex items-center gap-1.5 px-3 py-1.5 text-xs"
+                onClick={() => setShowMonthDropdown((open) => !open)}
+                aria-haspopup="menu"
+                aria-expanded={showMonthDropdown}
+                title="Choose a month"
               >
-                <button
-                  type="button"
-                  onClick={() => setShowMonthDropdown(!showMonthDropdown)}
-                  className={`flex items-center gap-1.5 text-xs font-bold font-semibold cursor-pointer px-3 py-1.5 rounded-xl border transition ${
-                    !isOwner
-                      ? 'bg-blue-50 text-blue-900 border-blue-200 hover:bg-blue-100 hover:border-blue-300'
-                      : 'bg-violet-50 text-violet-900 border-violet-200 hover:bg-violet-100 hover:border-violet-300'
-                  }`}
-                  title="Select month"
-                >
-                  <Calendar className={`w-3.5 h-3.5 flex-shrink-0 ${!isOwner ? 'text-blue-700' : 'text-violet-800'}`} />
-                  <span>{formatFullMonth(activeMonthKey)} {activeMonthKey === currentCalendarMonth ? '(Current)' : ''}</span>
-                  <ChevronDown className="w-3.5 h-3.5 flex-shrink-0" />
-                </button>
+                <Calendar className="w-3.5 h-3.5" />
+                <span>
+                  {formatFullMonth(activeMonthKey)}
+                  {activeMonthKey === currentCalendarMonth ? ' (current)' : ''}
+                </span>
+                <ChevronDown className="w-3.5 h-3.5" />
+              </button>
 
-                {showMonthDropdown && (
-                  <div
-                    className={`absolute top-full left-0 mt-2 w-48 rounded-xl border shadow-lg z-10 py-1 overflow-hidden ${
-                      !isOwner
-                        ? 'bg-blue-50 border-blue-200'
-                        : 'bg-violet-50 border-violet-200'
-                    }`}
-                  >
-                    {milestoneMonths.map((m) => (
-                      <button
-                        key={m.monthKey}
-                        type="button"
-                        onClick={() => {
-                          onSelectMonth(m.monthKey);
-                          setShowMonthDropdown(false);
-                        }}
-                        className={`w-full text-left px-3 py-2 text-xs font-semibold transition ${
-                          m.monthKey === activeMonthKey
-                            ? !isOwner
-                              ? 'bg-blue-200 text-blue-950'
-                              : 'bg-violet-200 text-violet-950'
-                            : !isOwner
-                            ? 'text-blue-900 hover:bg-blue-100'
-                            : 'text-violet-900 hover:bg-violet-100'
-                        }`}
-                      >
-                        {formatFullMonth(m.monthKey)} {m.monthKey === currentCalendarMonth ? '(Current)' : ''}
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
-            ) : (
-              <div
-                className={`flex items-center gap-1.5 text-xs font-semibold ${
-                  !isOwner ? 'text-blue-800' : 'text-violet-900'
-                }`}
-              >
-                <Calendar
-                  className={`w-3.5 h-3.5 ${!isOwner ? 'text-blue-600' : 'text-violet-700'}`}
-                />
-                <span>{formatFullMonth(activeMonthKey)}</span>
-              </div>
-            )}
-          </div>
-
-          <h2 className="text-base sm:text-lg font-bold text-slate-900 mt-1">
-            {formatDisplayDate(selectedDate)}
-          </h2>
+              {showMonthDropdown && (
+                <div role="menu" className="menu menu-left pop max-h-72 overflow-y-auto">
+                  {milestoneMonths.map((m) => (
+                    <button
+                      key={m.monthKey}
+                      type="button"
+                      role="menuitem"
+                      className="menu-item"
+                      data-active={m.monthKey === activeMonthKey ? 'true' : undefined}
+                      onClick={() => {
+                        onSelectMonth(m.monthKey);
+                        setShowMonthDropdown(false);
+                      }}
+                    >
+                      <span className="flex-1">
+                        {formatFullMonth(m.monthKey)}
+                        {m.monthKey === currentCalendarMonth ? ' (current)' : ''}
+                      </span>
+                      {m.monthKey === activeMonthKey && <span aria-hidden="true">✓</span>}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
-        <div className="flex items-center gap-2 flex-wrap justify-between sm:justify-end">
-          {!isTodaySelected && activeMonthKey === currentCalendarMonth && (
+        <div className="flex items-center gap-2">
+          {!isToday && todayStr >= horizonStart && todayStr <= horizonEnd && (
             <button
               type="button"
-              onClick={() => setSelectedDate(todayStr)}
-              className={`text-xs font-semibold px-2.5 py-1 rounded-lg transition cursor-pointer border ${
-                !isOwner
-                  ? 'text-blue-950 bg-blue-50 hover:bg-blue-100 border-blue-200'
-                  : 'text-violet-900 bg-violet-50 hover:bg-violet-100 border-violet-200'
-              }`}
+              className="chip px-3 py-1.5 text-xs"
+              onClick={() => selectDate(todayStr)}
             >
               Today
             </button>
           )}
-          <span
-            className={`text-xs font-bold px-2.5 py-1 rounded-full tabular-nums border ${
-              !isOwner
-                ? 'bg-blue-50 text-blue-950 border-blue-200'
-                : 'bg-violet-50 text-violet-900 border-violet-200'
-            }`}
-          >
-            {completedCount}/{selectedDateTasks.length} Done
+          <span className="badge tabular-nums">
+            {completedCount}/{selectedDateTasks.length} done
           </span>
         </div>
       </div>
 
-      {/* DATES CALENDAR STRIP */}
-      <div className="space-y-1.5 sm:space-y-2">
-        <div className="flex items-center justify-between text-xs text-slate-500">
-          <span className="font-medium text-slate-700 text-[11px] sm:text-xs">
-            Days in <strong className="text-slate-900">{formatFullMonth(activeMonthKey)}</strong>:
-          </span>
-          <div className="flex items-center gap-1.5">
-            <GlassIconButton
-              onClick={handlePrevDay}
-              disabled={selectedDate === monthDays[0]?.dateStr}
-              size="sm"
-              variant={!isOwner ? 'blue' : 'purple'}
-              title="Previous Day"
-            >
-              <ChevronLeft className="w-3.5 h-3.5 stroke-[2.5]" />
+      {/* STEP 1: PICK A DAY */}
+      <div className="space-y-3">
+        <StepHeading step={1} title="Pick a day">
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-semibold text-slate-600 tabular-nums">{weekRange(weekDates)}</span>
+            <GlassIconButton variant="tone" size="sm" title="Previous week" disabled={!canPrevWeek} onClick={() => moveWeek(-1)}>
+              <ChevronLeft className="w-3.5 h-3.5" />
             </GlassIconButton>
-            <GlassIconButton
-              onClick={handleNextDay}
-              disabled={selectedDate === monthDays[monthDays.length - 1]?.dateStr}
-              size="sm"
-              variant={!isOwner ? 'blue' : 'purple'}
-              title="Next Day"
-            >
-              <ChevronRight className="w-3.5 h-3.5 stroke-[2.5]" />
+            <GlassIconButton variant="tone" size="sm" title="Next week" disabled={!canNextWeek} onClick={() => moveWeek(1)}>
+              <ChevronRight className="w-3.5 h-3.5" />
             </GlassIconButton>
           </div>
-        </div>
+        </StepHeading>
 
-        <div
-          ref={dateScrollRef}
-          className="flex items-center gap-1.5 overflow-x-auto py-1 px-0.5 no-scrollbar scroll-smooth"
-          style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
-        >
-          {monthDays.map((d) => {
-            const isSelected = d.dateStr === selectedDate;
-            const stats = tasksByDate[d.dateStr];
-            const hasTasks = stats && stats.total > 0;
-            const hasSubs = stats && stats.subCount > 0;
-            const allDone = hasTasks && stats.done === stats.total;
+        <div className="grid grid-cols-7 gap-1.5 sm:gap-2.5 pb-1">
+          {weekDates.map((date) => {
+            const inGoal = date >= horizonStart && date <= horizonEnd;
+            const selected = date === selectedDate;
+            const stats = dayStats[date];
+            const hasTasks = !!stats && stats.total > 0;
 
             return (
               <button
-                key={d.dateStr}
+                key={date}
                 type="button"
-                data-active={isSelected}
-                onClick={() => setSelectedDate(d.dateStr)}
-                className={`flex-shrink-0 flex flex-col items-center justify-center min-w-[3rem] sm:min-w-[3.25rem] py-1.5 sm:py-2 px-1 rounded-xl border transition-all cursor-pointer select-none relative ${
-                  isSelected
-                    ? !isOwner
-                      ? 'bg-gradient-to-b from-blue-700 via-sky-800 to-blue-900 text-white border-blue-700 shadow-sm ring-2 ring-blue-400/40'
-                      : 'bg-gradient-to-b from-violet-800 via-violet-900 to-indigo-900 text-white border-violet-800 shadow-sm ring-2 ring-violet-500/40'
-                    : d.isToday
-                    ? !isOwner
-                      ? 'bg-blue-50 text-blue-950 border-blue-300 font-semibold'
-                      : 'bg-violet-50 text-violet-950 border-violet-300 font-semibold'
+                className="chip flex flex-col items-center gap-0.5 py-2 sm:py-2.5 text-xs"
+                data-active={selected}
+                disabled={!inGoal}
+                aria-pressed={selected}
+                aria-label={longDate(date)}
+                title={
+                  !inGoal
+                    ? 'Outside this goal’s months'
                     : hasTasks
-                    ? !isOwner
-                      ? 'bg-white text-slate-800 border-slate-200 hover:border-blue-300'
-                      : 'bg-white text-slate-800 border-slate-200 hover:border-violet-300'
-                    : 'bg-slate-50/60 text-slate-600 border-transparent hover:bg-slate-100'
-                }`}
+                    ? `${stats.done}/${stats.total} tasks done`
+                    : stats?.subs
+                    ? 'Planned, no tasks yet'
+                    : 'Nothing planned'
+                }
+                onClick={() => selectDate(date)}
               >
-                <span className="text-[10px] uppercase font-medium opacity-80">
-                  {d.dayName}
+                <span className="text-[10px] uppercase tracking-wide opacity-80">
+                  {WEEKDAY_SHORT[weekdayOf(date)]}
                 </span>
-                <span className="text-xs sm:text-sm font-bold tabular-nums">
-                  {d.dayNum}
+                <span className="text-base font-extrabold tabular-nums leading-tight">
+                  {Number(date.slice(8, 10))}
                 </span>
-
-                {/* Micro indicators for tasks / subs */}
-                <div className="h-2 flex items-center justify-center gap-0.5 mt-0.5">
-                  {hasTasks ? (
-                    <span
-                      className={`w-1.5 h-1.5 rounded-full ${
-                        allDone
-                          ? !isOwner ? 'bg-blue-600' : 'bg-violet-700'
-                          : isSelected
-                          ? !isOwner ? 'bg-blue-200' : 'bg-violet-200'
-                          : !isOwner ? 'bg-blue-400' : 'bg-violet-500'
-                      }`}
-                      title={`${stats.done}/${stats.total} tasks completed`}
-                    />
-                  ) : hasSubs ? (
-                    <span
-                      className={`w-1 h-1 rounded-full ${
-                        isSelected ? (!isOwner ? 'bg-blue-200' : 'bg-violet-200') : 'bg-slate-400'
-                      }`}
-                      title={`${stats.subCount} subcategory scheduled`}
-                    />
-                  ) : d.isToday ? (
-                    <span
-                      className={`text-[8px] font-bold leading-none ${
-                        isSelected
-                          ? !isOwner ? 'text-blue-200' : 'text-violet-200'
-                          : !isOwner ? 'text-blue-600' : 'text-violet-700'
-                      }`}
-                    >
-                      ★
-                    </span>
-                  ) : null}
-                </div>
+                {/* One mark per day: filled = all done, ring = tasks waiting, dot = planned, ★ = today */}
+                <DayMark stats={stats} isToday={date === todayStr} />
               </button>
             );
           })}
         </div>
       </div>
 
-      {/* SUBCATEGORIES AND TASKS FOR SELECTED DAY */}
-      <div className="space-y-2.5 sm:space-y-3 pt-1">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-1.5">
-            <span className="text-xs font-semibold text-slate-700">
-              Subcategories
-            </span>
-            <span className="text-[11px] text-slate-400">({subcategories.length})</span>
-          </div>
-          {subcategories.length > 0 && (
-            <button
-              type="button"
-              onClick={handleToggleAll}
-              className="text-[11px] font-semibold text-slate-500 hover:text-slate-800 bg-slate-100 hover:bg-slate-200 px-2 py-0.5 rounded-md transition cursor-pointer"
-            >
-              {allExpanded ? 'Collapse' : 'Expand'}
-            </button>
-          )}
-        </div>
-
-        {/* EMPTY STATE FOR THIS DAY - CATEGORY SPECIFIC */}
-        {subcategories.length === 0 && uncategorizedTasks.length === 0 && (
-          <div
-            className={`text-center py-4 sm:py-6 px-3 sm:px-5 border border-dashed rounded-2xl space-y-3 ${
-              !isOwner
-                ? 'border-blue-200/80 bg-gradient-to-b from-blue-50/40 via-white to-slate-50/40'
-                : 'border-violet-200/80 bg-gradient-to-b from-violet-50/40 via-white to-slate-50/40'
-            }`}
-          >
-            <div className="flex items-center justify-center gap-2 flex-wrap">
-              <div
-                className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-bold ${
-                  !isOwner
-                    ? 'bg-blue-100/80 text-blue-900'
-                    : 'bg-violet-100/80 text-violet-900'
-                }`}
-              >
-                <Sparkles
-                  className={`w-3 h-3 ${!isOwner ? 'text-blue-600' : 'text-violet-700'}`}
-                />
-                <span>{categoryConfig.presetGroupLabel}</span>
-              </div>
-
+      {/* STEP 2: PLAN THE DAY */}
+      <div className="space-y-3.5">
+        <StepHeading step={2} title={`Plan ${isToday ? 'today' : longDate(selectedDate)}`}>
+          <div className="flex items-center gap-2">
+            {subcategories.length > 1 && (
               <button
                 type="button"
-                onClick={() => setShowPresets((v) => !v)}
-                className={`sm:hidden inline-flex items-center gap-1 text-[11px] font-bold px-2.5 py-0.5 rounded-full border transition cursor-pointer active:scale-95 ${
-                  !isOwner
-                    ? 'text-blue-800 bg-white border-blue-200'
-                    : 'text-violet-900 bg-white border-violet-200'
-                }`}
+                data-plain
+                className="text-[11px] font-semibold text-slate-500 hover:text-slate-800 cursor-pointer"
+                onClick={handleToggleAll}
               >
-                <span>{showPresets ? 'Hide' : 'Show presets'}</span>
-                <ChevronDown
-                  className={`w-3 h-3 transition-transform ${showPresets ? 'rotate-180' : ''}`}
-                />
+                {allExpanded ? 'Collapse all' : 'Expand all'}
               </button>
-            </div>
+            )}
+            {canAdd && (!isEmptyDay || addOpen) && (
+              <button
+                type="button"
+                className="btn-tone inline-flex items-center gap-1.5 px-3.5 py-2 text-xs"
+                onClick={() => (addOpen ? closeAdd() : openAdd())}
+                aria-expanded={addOpen}
+              >
+                <Plus className="w-3.5 h-3.5 stroke-[2.5]" />
+                <span>Add subcategory</span>
+              </button>
+            )}
+          </div>
+        </StepHeading>
 
-            <div className={showPresets ? 'space-y-3' : 'hidden sm:block space-y-3'}>
-            <p className="text-xs text-slate-600 max-w-md mx-auto">
-              {categoryConfig.contextDescription} Choose a tailored preset below to start planning:
-            </p>
-
-            <div className="space-y-2.5 pt-1 max-w-xl mx-auto">
-              {recentCustomSubNames.length > 0 && (
-                <div>
-                  <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1">
-                    Recently Used:
-                  </div>
-                  <div className="flex flex-wrap items-center justify-center gap-1.5">
-                    {recentCustomSubNames.slice(0, 4).map((name) => (
-                      <button
-                        key={name}
-                        type="button"
-                        onClick={() => handleAddSub(name)}
-                        className="text-xs font-semibold text-slate-800 bg-white hover:bg-slate-100 border border-slate-300 px-2.5 py-1 rounded-lg transition cursor-pointer shadow-2xs active:scale-95"
-                      >
-                        + {name}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              <div>
-                <div
-                  className={`text-[10px] font-bold uppercase tracking-wider mb-1.5 ${
-                    !isOwner ? 'text-blue-800' : 'text-violet-800/80'
-                  }`}
-                >
-                  {categoryConfig.categoryName} Presets:
-                </div>
-                <div className="flex flex-wrap items-center justify-center gap-1.5">
-                  {categoryConfig.subcategories.map((preset) => (
+        {/* The one place a subcategory is created: a name, and optionally a weekly repeat. */}
+        {canAdd && addOpen && (
+          <form onSubmit={handleAdd} className="neu-inset p-4 space-y-4 pop">
+            <div className="space-y-2">
+              <label className="section-label block" htmlFor="new-subcategory-name">
+                Name
+              </label>
+              <input
+                id="new-subcategory-name"
+                type="text"
+                autoFocus
+                value={newName}
+                onChange={(e) => setNewName(e.target.value)}
+                placeholder="e.g. Chest day"
+                className="w-full text-sm rounded-xl px-3.5 py-2.5"
+              />
+              {quickPicks.length > 0 && (
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-[11px] font-semibold text-slate-500">Quick pick</span>
+                  {quickPicks.map((pick) => (
                     <button
-                      key={preset}
+                      key={pick}
                       type="button"
-                      onClick={() => handleAddSub(preset)}
-                      className={`text-xs font-semibold px-2.5 py-1 rounded-lg transition cursor-pointer active:scale-95 shadow-2xs ${
-                        !isOwner
-                          ? 'text-blue-950 bg-blue-50 hover:bg-blue-100/80 border border-blue-200/80 hover:border-blue-300'
-                          : 'text-violet-900 bg-violet-50 hover:bg-violet-100/80 border border-violet-200/80 hover:border-violet-300'
-                      }`}
+                      className="chip px-2.5 py-1.5 text-xs"
+                      data-active={newName.trim().toLowerCase() === pick.toLowerCase()}
+                      onClick={() => setNewName(pick)}
                     >
-                      + {preset}
+                      {pick}
                     </button>
                   ))}
                 </div>
+              )}
+            </div>
+
+            <div className="space-y-2.5">
+              <span className="section-label block">When</span>
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  className="chip px-3 py-1.5 text-xs"
+                  data-active={!weekly}
+                  onClick={() => setWeekly(false)}
+                >
+                  Just this day
+                </button>
+                <button
+                  type="button"
+                  className="chip inline-flex items-center gap-1.5 px-3 py-1.5 text-xs"
+                  data-active={weekly}
+                  onClick={() => {
+                    setWeekly(true);
+                    if (repeatDays.length === 0) setRepeatDays([weekdayOf(selectedDate)]);
+                  }}
+                >
+                  <Repeat className="w-3.5 h-3.5" />
+                  Every week
+                </button>
               </div>
 
-              {/* Category-Specific Quick Tasks */}
-              {categoryConfig.suggestedTasks && categoryConfig.suggestedTasks.length > 0 && (
-                <div
-                  className={`pt-2 border-t ${
-                    !isOwner ? 'border-blue-100/80' : 'border-violet-100/80'
-                  }`}
-                >
-                  <div className="text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1.5">
-                    Quick Sample Tasks for {categoryConfig.categoryName}:
-                  </div>
-                  <div className="flex flex-col gap-1.5 text-left max-w-md mx-auto">
-                    {categoryConfig.suggestedTasks.slice(0, 3).map((taskItem, idx) => (
-                      <button
-                        key={idx}
-                        type="button"
-                        onClick={async () => {
-                          let subId: string | undefined = undefined;
-                          if (taskItem.defaultSub) {
-                            const existing = subcategories.find((s) => s.name === taskItem.defaultSub);
-                            if (existing) {
-                              subId = existing.id;
-                            } else {
-                              const createdId = await onAddSubcategory(goal.id, taskItem.defaultSub, selectedDate);
-                              if (createdId) subId = createdId;
-                            }
-                          }
-                          onAddTask(goal.id, taskItem.text, taskItem.priority, subId, selectedDate);
-                        }}
-                        className={`text-xs p-2 rounded-xl transition flex items-center justify-between gap-2 group cursor-pointer border ${
-                          !isOwner
-                            ? 'text-slate-700 hover:text-blue-950 bg-white/80 hover:bg-blue-50/60 border-slate-200 hover:border-blue-200'
-                            : 'text-slate-700 hover:text-violet-900 bg-white/80 hover:bg-violet-50/60 border-slate-200 hover:border-violet-200'
-                        }`}
-                      >
-                        <span className="truncate">{taskItem.text}</span>
-                        <span
-                          className={`text-[10px] font-semibold flex items-center gap-0.5 flex-shrink-0 group-hover:underline ${
-                            !isOwner ? 'text-blue-700' : 'text-violet-700'
-                          }`}
-                        >
-                          <Plus className="w-3 h-3" /> Add
-                        </span>
-                      </button>
-                    ))}
-                  </div>
+              {weekly && (
+                <div className="space-y-2">
+                  <WeekdayPicker value={repeatDays} onChange={setRepeatDays} />
+                  <p className="text-[11px] font-medium text-slate-600">
+                    {repeatDays.length === 0
+                      ? 'Pick at least one day.'
+                      : repeatDates.length === 0
+                      ? 'No matching days left in this goal.'
+                      : `Every ${describeDays(repeatDays)} from ${longDate(repeatDates[0])} until ${formatMonthKey(
+                          horizonEnd.slice(0, 7)
+                        )} · ${repeatDates.length} ${repeatDates.length === 1 ? 'day' : 'days'}.`}
+                  </p>
                 </div>
               )}
             </div>
+
+            <div className="flex justify-end gap-2">
+              <button type="button" className="chip px-3.5 py-2 text-xs" onClick={closeAdd}>
+                Cancel
+              </button>
+              <button
+                type="submit"
+                className="btn-tone px-4 py-2 text-xs"
+                disabled={!newName.trim() || adding || (weekly && repeatDates.length === 0)}
+              >
+                {weekly ? 'Add to every week' : 'Add subcategory'}
+              </button>
             </div>
+          </form>
+        )}
+
+        {isEmptyDay && !addOpen && (
+          <div className="neu-inset text-center px-4 py-9">
+            <p className="text-sm font-bold text-slate-700">Nothing planned for {longDate(selectedDate)}</p>
+            <p className="text-xs text-slate-500 mt-1 max-w-xs mx-auto">
+              {canAdd
+                ? 'Add a subcategory such as “Chest day”, then fill it with tasks. Repeat it weekly if it comes back.'
+                : 'Nothing has been planned for this day yet.'}
+            </p>
+            {canAdd && (
+              <button
+                type="button"
+                className="btn-tone inline-flex items-center gap-1.5 mt-4 px-4 py-2.5 text-xs"
+                onClick={openAdd}
+              >
+                <Plus className="w-3.5 h-3.5 stroke-[2.5]" />
+                <span>Add subcategory</span>
+              </button>
+            )}
           </div>
         )}
 
@@ -628,88 +579,56 @@ export const DailyTaskSection: React.FC<DailyTaskSectionProps> = ({
             onToggle={() => toggleExpanded('__uncategorized__')}
             tasks={uncategorizedTasks}
             goal={goal}
-            selectedDate={selectedDate}
-            canDelete={false}
-            canAdd={false}
-            canRename={false}
-            canEditTasks={true}
-            isOwner={isOwner}
-            onToggleTask={onToggleTask}
-            onDeleteTask={onDeleteTask}
+            canEditTasks={canManageCategories}
+            canManage={false}
+            onToggleTask={(taskId) => onToggleTask(goal.id, taskId)}
+            onDeleteTask={(taskId) => onDeleteTask(goal.id, taskId)}
           />
         )}
 
         {subcategories.map((sub) => {
-          const isExpanded = expandedIds[sub.id] !== undefined ? expandedIds[sub.id] : allExpanded;
-          
-          // Role checking
-          const subcategoryRole = sub.editorRole || null;
-          const currentUserRole = professionalRole || null;
           const canEditThisSub = isOwner || canEditSubcategoryTasks(sub);
+          const canRemoveThisSub = canEditThisSub && (isOwner || canManageCategories);
 
           return (
             <SubcategoryBlock
               key={sub.id}
               name={sub.name}
-              expanded={isExpanded}
+              expanded={expandedIds[sub.id] !== undefined ? expandedIds[sub.id] : allExpanded}
               onToggle={() => toggleExpanded(sub.id)}
-              onRename={canEditThisSub ? (nextName) => onRenameSubcategory(goal.id, sub.id, nextName) : undefined}
-              onDelete={canEditThisSub && (isOwner || canManageCategories) ? () => onDeleteSubcategory(goal.id, sub.id) : undefined}
               tasks={selectedDateTasks.filter((t) => t.subcategoryId === sub.id)}
               goal={goal}
-              subcategoryId={sub.id}
-              selectedDate={selectedDate}
-              editorRole={sub.editorRole || ''}
-              canDelete={canEditThisSub && (isOwner || canManageCategories)}
-              canAdd={canEditThisSub}
-              canRename={canEditThisSub}
+              sub={sub}
               canEditTasks={canEditThisSub}
-              isOwner={isOwner}
+              canManage={canEditThisSub}
+              canSetRole={isOwner}
+              onRename={canEditThisSub ? (name) => onRenameSubcategory(goal.id, sub.id, name) : undefined}
               onSetRole={
                 isOwner && onSetSubcategoryRole
-                  ? (nextRole) => onSetSubcategoryRole(goal.id, sub.id, nextRole)
+                  ? (role) => onSetSubcategoryRole(goal.id, sub.id, role)
                   : undefined
               }
-              onAddTask={canEditThisSub ? onAddTask : undefined}
-              onUpdateTask={canEditThisSub ? onUpdateTask : undefined}
-              onToggleTask={canEditThisSub ? onToggleTask : undefined}
-              onDeleteTask={canEditThisSub ? onDeleteTask : undefined}
+              onChangeRepeat={
+                canEditThisSub ? (days) => onChangeSubcategoryRepeat(goal.id, sub.id, days) : undefined
+              }
+              onDelete={canRemoveThisSub ? (scope) => onDeleteSubcategory(goal.id, sub.id, scope) : undefined}
+              onAddTask={
+                canEditThisSub
+                  ? (text, priority, forward) =>
+                      onAddTask(goal.id, text, priority, sub.id, selectedDate, forward)
+                  : undefined
+              }
+              onUpdateTask={
+                canEditThisSub && onUpdateTask
+                  ? (taskId, updates) => onUpdateTask(goal.id, taskId, updates)
+                  : undefined
+              }
+              onToggleTask={canEditThisSub ? (taskId) => onToggleTask(goal.id, taskId) : undefined}
+              onDeleteTask={canEditThisSub ? (taskId) => onDeleteTask(goal.id, taskId) : undefined}
             />
           );
         })}
       </div>
-
-      {/* ADD SUBCATEGORY FORM FOR THIS DAY */}
-      <form
-        onSubmit={(e) => {
-          e.preventDefault();
-          handleAddSub();
-        }}
-        className="pt-1 flex flex-col sm:flex-row gap-2"
-      >
-        <input
-          type="text"
-          placeholder={categoryConfig.placeholder}
-          value={newSubName}
-          onChange={(e) => setNewSubName(e.target.value)}
-          className={`flex-1 text-xs sm:text-sm bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-slate-800 placeholder-slate-400 focus:outline-none focus:bg-white focus:ring-2 ${
-            !isOwner
-              ? 'focus:ring-blue-500/20 focus:border-blue-600'
-              : 'focus:ring-violet-600/20 focus:border-violet-700'
-          }`}
-        />
-        <button
-          type="submit"
-          disabled={!newSubName.trim()}
-          className={`w-full sm:w-auto px-4 py-2.5 disabled:opacity-40 text-white text-xs sm:text-sm font-semibold rounded-xl transition cursor-pointer shrink-0 shadow-2xs active:scale-98 ${
-            !isOwner
-              ? 'bg-gradient-to-r from-blue-700 to-sky-800 hover:from-blue-800 hover:to-sky-900'
-              : 'bg-gradient-to-r from-violet-800 to-indigo-800 hover:from-violet-900 hover:to-indigo-900'
-          }`}
-        >
-          + Add Category
-        </button>
-      </form>
     </div>
   );
 };

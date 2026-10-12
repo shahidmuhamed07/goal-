@@ -183,10 +183,10 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ me, other, onClose }) => {
         onClick={onClose}
         aria-hidden="true"
       />
-      <div className="relative z-10 flex flex-col w-full sm:max-w-lg h-full sm:h-[80vh] sm:max-h-[680px] bg-slate-50 sm:rounded-3xl overflow-hidden shadow-2xl border border-slate-200 pop">
+      <div className="relative z-10 flex flex-col w-full sm:max-w-lg h-full sm:h-[80vh] sm:max-h-[680px] bg-[color:var(--neu-base)] sm:rounded-3xl overflow-hidden shadow-2xl pop">
         {/* Header */}
-        <div className="flex items-center gap-3 px-4 py-3 bg-white border-b border-slate-200 shrink-0 safe-top">
-          <span className="w-9 h-9 rounded-full grid place-items-center text-sm font-black text-white bg-gradient-to-br from-emerald-500 to-teal-700 shrink-0">
+        <div className="flex items-center gap-3 px-4 py-3 border-b border-slate-300/40 shrink-0 safe-top">
+          <span className="w-9 h-9 rounded-full grid place-items-center text-sm font-black text-white bg-gradient-to-br from-emerald-400 to-purple-500 shrink-0">
             {initial}
           </span>
           <div className="min-w-0 flex-1">
@@ -198,7 +198,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ me, other, onClose }) => {
           <button
             type="button"
             onClick={onClose}
-            className="w-8 h-8 grid place-items-center rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition cursor-pointer shrink-0"
+            className="chip w-8 h-8 grid place-items-center shrink-0"
             title="Close conversation"
           >
             <X className="w-4.5 h-4.5" />
@@ -216,7 +216,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ me, other, onClose }) => {
             </p>
           ) : messages.length === 0 ? (
             <div className="h-full flex flex-col items-center justify-center text-center px-6 gap-3">
-              <span className="w-14 h-14 rounded-2xl grid place-items-center bg-emerald-50 text-emerald-600 border border-emerald-200">
+              <span className="neu-inset-sm w-14 h-14 grid place-items-center text-emerald-600">
                 <MessageCircle className="w-7 h-7" />
               </span>
               <p className="text-sm font-bold text-slate-700">No messages yet</p>
@@ -244,7 +244,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ me, other, onClose }) => {
                       className={`max-w-[80%] px-3.5 py-2 rounded-2xl shadow-2xs ${
                         mine
                           ? 'bg-emerald-600 text-white rounded-br-md'
-                          : 'bg-white text-slate-800 border border-slate-200 rounded-bl-md'
+                          : 'neu-sm text-slate-800 rounded-bl-md!'
                       }`}
                     >
                       <p className="text-sm whitespace-pre-wrap break-words leading-relaxed">
@@ -266,7 +266,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ me, other, onClose }) => {
         </div>
 
         {/* Composer */}
-        <div className="shrink-0 bg-white border-t border-slate-200 px-3 py-2.5 safe-bottom">
+        <div className="shrink-0 border-t border-slate-300/40 px-3 py-2.5 safe-bottom">
           {error && <p className="text-[11px] text-rose-600 mb-1.5 px-1">{error}</p>}
           <div className="flex items-end gap-2">
             <textarea
@@ -276,7 +276,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ me, other, onClose }) => {
               onChange={autoGrow}
               onKeyDown={handleKeyDown}
               placeholder={`Message ${other.name}…`}
-              className="flex-1 resize-none text-sm bg-slate-50 border border-slate-200 rounded-2xl px-3.5 py-2.5 text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 max-h-[120px]"
+              className="flex-1 resize-none text-sm rounded-2xl px-3.5 py-2.5 max-h-[120px]"
             />
             <button
               type="button"

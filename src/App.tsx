@@ -9,6 +9,7 @@ import {
   User,
   signInWithPopup,
   signInWithRedirect,
+  getRedirectResult,
   signOut,
   onAuthStateChanged,
 } from 'firebase/auth';
@@ -34,11 +35,9 @@ import {
   Trash2,
   Check,
   CheckCircle2,
-  Lock,
   ShieldCheck,
   LogOut,
   Search,
-  Users,
   Settings,
   Flag,
   X,
@@ -84,10 +83,27 @@ import {
   computeStreak,
 } from './utils';
 
+import {
+  MAX_GOAL_CONTENT_BYTES,
+  addTaskForward,
+  applySeriesDays,
+  createSeries,
+  describeDays,
+  estimateBytes,
+  goalEndDate,
+  occurrencesFrom,
+  removeSubcategories,
+  updateFrom,
+} from './recurrence';
+
 import { LoginScreen } from './components/LoginScreen';
 import { AppSelect } from './components/AppSelect';
-import { PriorityBadge, ProgressBar, GoalPathLogo, GoalPathLoader, GlassIconButton, GlassBadge, StreakBadge } from './components/UIElements';
+import { Orb } from './components/Orb';
+import { ProgressBar, GoalPathLogo, GoalPathLoader, GlassIconButton, GlassBadge, StreakBadge } from './components/UIElements';
 import { DailyTaskSection } from './components/DailyTaskSection';
+import { SubcategoryBlock } from './components/SubcategoryBlock';
+import { GoalCard } from './components/GoalCard';
+import { OnboardingAnswers, StarterPlan, materializePlan } from './starterPlan';
 import { MonthlyMilestoneSection } from './components/MonthlyMilestoneSection';
 import { CollaboratorsPanel } from './components/CollaboratorsPanel';
 import { CreateGoalModal } from './components/CreateGoalModal';
@@ -96,7 +112,7 @@ import { GiveUpInterventionModal } from './components/GiveUpInterventionModal';
 
 import { ProfessionalProfilePanel } from './components/ProfessionalProfilePanel';
 import { AccountProfilePanel } from './components/AccountProfilePanel';
-import { PersonaPrompt } from './components/PersonaPrompt';
+import { Onboarding } from './components/Onboarding';
 import { ChatPanel } from './components/ChatPanel';
 import { threadHasUnread } from './chat';
 
@@ -157,23 +173,6 @@ const mapGoalDoc = (id: string, data: Record<string, unknown>): Goal => ({
   editorUids: Array.isArray(data.editorUids) ? (data.editorUids as string[]) : undefined,
 });
 
-/**
- * One palette colour per category. A goal grid of identical white cards tells
- * you nothing at a glance; the accent strip is what makes each row scannable.
- */
-const CATEGORY_ACCENTS: Record<string, string> = {
-  Career: 'from-blue-400 to-blue-600',
-  Business: 'from-violet-500 to-violet-700',
-  Health: 'from-emerald-300 to-emerald-500',
-  Fitness: 'from-violet-400 to-violet-600',
-  'Finance & Wealth': 'from-teal-300 to-teal-500',
-  'Learning & Skills': 'from-indigo-400 to-indigo-600',
-  'Creative Writing': 'from-pink-300 to-pink-500',
-};
-
-const categoryAccent = (category?: string): string =>
-  CATEGORY_ACCENTS[(category || '').trim()] || 'from-violet-500 to-violet-700';
-
 async function ensureUserProfile(firebaseUser: User) {
   const userRef = doc(db, 'users', firebaseUser.uid);
   const existing = await getDoc(userRef);
@@ -225,6 +224,10 @@ export default function App() {
   const [user, setUser] = useState<User | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [authError, setAuthError] = useState<string | null>(null);
+  // Something the login screen should say that is not a failure, such as "taking
+  // you to Google's page instead".
+  const [authNotice, setAuthNotice] = useState<string | null>(null);
+  const googleSignInBusy = useRef(false);
 
   // Data State
   const [goals, setGoals] = useState<Goal[]>([]);
@@ -239,6 +242,7 @@ export default function App() {
   const [tabDirection, setTabDirection] = useState<1 | -1>(1);
   const [savingPersona, setSavingPersona] = useState(false);
   const [personaPromptDismissed, setPersonaPromptDismissed] = useState(false);
+  // True while the first-run questions are on screen (they are also opened by hand).
   const [personaPickerOpen, setPersonaPickerOpen] = useState(false);
   const [selectedGoalId, setSelectedGoalId] = useState<string | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -246,15 +250,14 @@ export default function App() {
   const [selectedCategory, setSelectedCategory] = useState('all');
   const [dailyMasterDate, setDailyMasterDate] = useState<string>(getTodayDateString());
   const [selectedGoalMonth, setSelectedGoalMonth] = useState<string>(getCurrentMonthKey());
+  // A day picked on a goal card: the goal opens on it instead of on today.
+  const [selectedGoalDate, setSelectedGoalDate] = useState<string | null>(null);
   const [managingAssignedGoal, setManagingAssignedGoal] = useState<Goal | null>(null);
 
-  // Today's Focus inline editing and creation state
-  const [todayEditingTaskId, setTodayEditingTaskId] = useState<string | null>(null);
-  const [todayEditTaskText, setTodayEditTaskText] = useState('');
-  const [todayEditTaskPriority, setTodayEditTaskPriority] = useState<'high' | 'medium' | 'low'>('medium');
-  const [todayAddingTaskSubId, setTodayAddingTaskSubId] = useState<string | null>(null);
-  const [todayNewTaskText, setTodayNewTaskText] = useState('');
-  const [todayNewTaskPriority, setTodayNewTaskPriority] = useState<'high' | 'medium' | 'low'>('medium');
+  // Today's Focus: which blocks the person has collapsed, and the quick-add form
+  const [todayCollapsed, setTodayCollapsed] = useState<Record<string, boolean>>({});
+  const toggleTodayBlock = (id: string) =>
+    setTodayCollapsed((prev) => ({ ...prev, [id]: !prev[id] }));
   const [todayAddingSubGoalId, setTodayAddingSubGoalId] = useState<string | null>(null);
   const [todayNewSubName, setTodayNewSubName] = useState('');
 
@@ -309,6 +312,19 @@ export default function App() {
       }
     );
     return () => unsubscribe();
+  }, []);
+
+  // Coming back from a redirect sign-in is a fresh page load. Firebase finishes
+  // the sign-in itself, but it swallows a failure, so ask for the outcome and
+  // show it rather than landing on a login page that looks like nothing happened.
+  useEffect(() => {
+    getRedirectResult(auth).catch((err: unknown) => {
+      const redirectErr = err as { message?: string };
+      console.error('Google redirect result error:', err);
+      setAuthError(
+        redirectErr.message || 'Google sign-in could not be completed. Please try again.'
+      );
+    });
   }, []);
 
   useEffect(() => {
@@ -569,6 +585,20 @@ export default function App() {
   }, [user, isProfessional]);
 
   const isOwner = !!user && workspaceUid === user.uid;
+
+  // A brand-new account (no persona, no goals) starts with the guided questions.
+  const needsOnboarding =
+    !!user &&
+    !!profile &&
+    !dataLoading &&
+    isOwner &&
+    !profile.persona &&
+    !profile.onboardedAt &&
+    goals.length === 0 &&
+    !personaPromptDismissed;
+  useEffect(() => {
+    if (needsOnboarding) setPersonaPickerOpen(true);
+  }, [needsOnboarding]);
   const workspaceProfile = isOwner
     ? profile
     : activeClientProfile || clientList.find((c) => c.id === workspaceUid) || null;
@@ -800,6 +830,19 @@ export default function App() {
     const sub = (goal.subcategories || []).find((s) => s.id === task.subcategoryId);
     return canEditSubcategoryTasks(goalId, sub);
   };
+
+  /** Opens a goal, on today or on a day chosen from its card's week strip. */
+  const openGoal = (goalId: string, date?: string) => {
+    setSelectedGoalId(goalId);
+    setSelectedGoalMonth(date ? date.slice(0, 7) : getCurrentMonthKey());
+    setSelectedGoalDate(date || null);
+    setActiveTab('detail');
+  };
+
+  // The chosen day only matters while a goal is being opened.
+  useEffect(() => {
+    if (activeTab !== 'detail') setSelectedGoalDate(null);
+  }, [activeTab]);
 
   // Computed Current Goal
   const currentGoal = useMemo(() => {
@@ -1111,28 +1154,51 @@ export default function App() {
 
   // AUTH ACTIONS
   const handleGoogleSignIn = async () => {
+    // A second click while a popup is open cancels it and opens another one.
+    if (googleSignInBusy.current) return;
+    googleSignInBusy.current = true;
     setAuthError(null);
+    setAuthNotice(null);
     try {
       await signInWithPopup(auth, googleProvider);
     } catch (err: unknown) {
       const authErr = err as { code?: string; message?: string };
       console.error('Google Sign In Error:', err);
+
+      // Only a popup that could not open at all is a reason to leave the page.
+      // Embedded browsers such as a preview pane hand back no window, which
+      // Firebase reports as "popup-blocked"; a full-page redirect still works there.
       if (
         authErr.code === 'auth/popup-blocked' ||
-        authErr.code === 'auth/cancelled-popup-request' ||
-        authErr.code === 'auth/popup-closed-by-user'
+        authErr.code === 'auth/operation-not-supported-in-this-environment'
       ) {
-        setAuthError('Popup was blocked. Redirecting to Google sign-in...');
+        setAuthNotice(
+          'This browser would not open the Google sign-in popup, so you are being taken to Google’s sign-in page instead…'
+        );
         try {
           await signInWithRedirect(auth, googleProvider);
         } catch (redirectErr: unknown) {
           const rErr = redirectErr as { message?: string };
           console.error('Google redirect sign-in error:', redirectErr);
-          setAuthError(rErr.message || 'Google sign-in failed. Please allow popups or try again.');
+          setAuthNotice(null);
+          setAuthError(rErr.message || 'Google sign-in failed. Please try again.');
         }
         return;
       }
+
+      // Closing the window, or starting another attempt, is the person's own
+      // choice. It is not a failure, and never a reason to navigate away.
+      if (authErr.code === 'auth/popup-closed-by-user') {
+        setAuthNotice(
+          'The sign-in window was closed before it finished. Choose “Continue with Google” to try again.'
+        );
+        return;
+      }
+      if (authErr.code === 'auth/cancelled-popup-request') return;
+
       setAuthError(authErr.message || 'Failed to sign in with Google. Please try again.');
+    } finally {
+      googleSignInBusy.current = false;
     }
   };
 
@@ -1173,6 +1239,90 @@ export default function App() {
     } finally {
       setSavingPersona(false);
     }
+  };
+
+  /**
+   * Finishes the first-run questions: records the answers on the profile and,
+   * for someone planning their own goals, creates a goal for each thing they
+   * chose to work on, with the starter routines already written onto the
+   * calendar. Returns the ids of the goals it created.
+   */
+  const handleFinishOnboarding = async (
+    answers: OnboardingAnswers,
+    plans: StarterPlan[]
+  ): Promise<string[]> => {
+    if (!user) return [];
+    const chosenAt = new Date().toISOString();
+    const startKey = getCurrentMonthKey();
+    const createdIds: string[] = [];
+
+    for (const plan of plans) {
+      const targetDate = addMonthsToKey(startKey, plan.months);
+      const monthKeys = generateMonthRange(startKey, targetDate);
+      const milestones: Milestone[] = monthKeys.map((mKey, idx) => ({
+        id: `m-${Date.now()}-${createdIds.length}-${idx}`,
+        monthKey: mKey,
+        title:
+          idx === monthKeys.length - 1
+            ? `Final: Complete ${plan.title}`
+            : `Checkpoint for ${formatMonthKey(mKey)}`,
+        completed: false,
+      }));
+
+      const planned = answers.starter
+        ? materializePlan(plan, {
+            fromDate: todayDate,
+            endDate: goalEndDate({ targetDate, milestones }),
+            seed: Date.now() + createdIds.length * 1000,
+          })
+        : { subcategories: [] as Subcategory[], tasks: [] as TaskItem[] };
+
+      const docRef = await addDoc(collection(db, 'goals'), {
+        userId: user.uid,
+        title: plan.title,
+        category: plan.category,
+        description: plan.description,
+        createdAt: todayDate,
+        targetDate,
+        milestones,
+        subcategories: planned.subcategories,
+        tasks: planned.tasks,
+        viewerUids: [],
+        editorUids: [],
+      });
+      createdIds.push(docRef.id);
+    }
+
+    // Firestore rejects undefined, so only answered questions are stored.
+    const stored: Record<string, unknown> = {
+      focus: answers.focus,
+      days: answers.days,
+      minutes: answers.minutes,
+      months: answers.months,
+      starter: answers.starter,
+    };
+    if (answers.age) stored.age = answers.age;
+    if (answers.eating) stored.eating = answers.eating;
+    if (answers.activity) stored.activity = answers.activity;
+
+    await updateDoc(doc(db, 'users', user.uid), {
+      persona: answers.persona,
+      personaChosenAt: chosenAt,
+      onboardedAt: chosenAt,
+      onboarding: stored,
+    });
+    setProfile((prev) =>
+      prev ? { ...prev, persona: answers.persona, personaChosenAt: chosenAt, onboardedAt: chosenAt } : prev
+    );
+    return createdIds;
+  };
+
+  /** Leaves the questions, straight into the first new goal when there is one. */
+  const handleCloseOnboarding = (openGoalId?: string) => {
+    setPersonaPromptDismissed(true);
+    setPersonaPickerOpen(false);
+    if (openGoalId) openGoal(openGoalId);
+    else if (profile?.persona === 'professional') setActiveTab('professional');
   };
 
   const handleCreateGoal = async (newGoalData: {
@@ -1390,14 +1540,110 @@ export default function App() {
     }
   };
 
+  /**
+   * One goal is one Firestore document, and a weekly routine multiplies the days
+   * and tasks in it. A change that would push the plan past the size budget is
+   * refused here, with a plain message, instead of failing at the database.
+   */
+  const fitsInGoalDocument = (subcategories: Subcategory[], tasks: TaskItem[]): boolean => {
+    if (estimateBytes({ subcategories, tasks }) <= MAX_GOAL_CONTENT_BYTES) return true;
+    setErrorMessage(
+      'That would make this goal too large to save. Repeat it on fewer days, or add fewer tasks to it.'
+    );
+    return false;
+  };
+
+  /** A routine: the same subcategory on every chosen weekday until the goal ends. */
+  const handleAddRepeatingSubcategory = async (
+    goalId: string,
+    name: string,
+    fromDate: string,
+    days: number[]
+  ): Promise<string | null> => {
+    if (!canEditGoal(goalId)) return null;
+    const targetGoal = goals.find((g) => g.id === goalId);
+    if (!targetGoal) return null;
+
+    const created = createSeries({
+      subcategories: targetGoal.subcategories || [],
+      tasks: targetGoal.tasks || [],
+      name,
+      days,
+      fromDate,
+      endDate: goalEndDate(targetGoal),
+      editorRole: isOwner ? null : professionalRole || null,
+    });
+    if (!created) {
+      setErrorMessage('There is no matching day left in this goal to repeat on.');
+      return null;
+    }
+    if (!fitsInGoalDocument(created.subcategories, created.tasks)) return null;
+
+    try {
+      await updateDoc(doc(db, 'goals', goalId), { subcategories: created.subcategories });
+      setSuccessMessage(
+        `“${name}” added to ${created.count} ${created.count === 1 ? 'day' : 'days'}: every ${describeDays(days)}.`
+      );
+      return created.firstId;
+    } catch (err) {
+      console.error('Add repeating subcategory error:', err);
+      setErrorMessage('Failed to add the weekly routine.');
+      return null;
+    }
+  };
+
+  /**
+   * Changes the weekdays a routine runs on from this day forward. An empty list
+   * stops it. Earlier days are history and are left alone.
+   */
+  const handleChangeSubcategoryRepeat = async (
+    goalId: string,
+    subcategoryId: string,
+    days: number[]
+  ) => {
+    if (!canEditGoal(goalId)) return;
+    const targetGoal = goals.find((g) => g.id === goalId);
+    const sub = targetGoal?.subcategories?.find((s) => s.id === subcategoryId);
+    if (!targetGoal || !sub || !sub.date) return;
+    if (!canEditSubcategoryTasks(goalId, sub)) {
+      setErrorMessage('You do not have permission to change this subcategory.');
+      return;
+    }
+
+    const result = applySeriesDays({
+      subcategories: targetGoal.subcategories || [],
+      tasks: targetGoal.tasks || [],
+      anchor: sub,
+      days,
+      endDate: goalEndDate(targetGoal),
+    });
+    if (!fitsInGoalDocument(result.subcategories, result.tasks)) return;
+
+    try {
+      await updateDoc(doc(db, 'goals', goalId), {
+        subcategories: result.subcategories,
+        tasks: result.tasks,
+      });
+      setSuccessMessage(
+        days.length === 0
+          ? `“${sub.name}” no longer repeats.`
+          : `“${sub.name}” now repeats every ${describeDays(days)}.`
+      );
+    } catch (err) {
+      console.error('Change repeat error:', err);
+      setErrorMessage('Failed to change how this repeats.');
+    }
+  };
+
+  /** Renames this subcategory and, if it is part of a routine, the later days too. */
   const handleRenameSubcategory = async (goalId: string, subcategoryId: string, name: string) => {
     if (!canEditGoal(goalId)) return;
     const targetGoal = goals.find((g) => g.id === goalId);
     if (!targetGoal) return;
 
-    const updatedSubcategories = (targetGoal.subcategories || []).map((s) =>
-      s.id === subcategoryId ? { ...s, name } : s
-    );
+    const sub = (targetGoal.subcategories || []).find((s) => s.id === subcategoryId);
+    if (!sub) return;
+    const updatedSubcategories = updateFrom(targetGoal.subcategories || [], sub, { name });
 
     try {
       await updateDoc(doc(db, 'goals', goalId), {
@@ -1409,16 +1655,33 @@ export default function App() {
     }
   };
 
-  const handleDeleteSubcategory = async (goalId: string, subcategoryId: string) => {
+  /**
+   * Deletes a subcategory and its tasks. For a routine, `future` deletes this day
+   * and every later day of it; `one` deletes just this day.
+   */
+  const handleDeleteSubcategory = async (
+    goalId: string,
+    subcategoryId: string,
+    scope: 'one' | 'future' = 'one'
+  ) => {
     if (!canEditGoal(goalId)) return;
 
     const targetGoal = goals.find((g) => g.id === goalId);
     if (!targetGoal) return;
 
-    const updatedSubcategories = (targetGoal.subcategories || []).filter(
-      (s) => s.id !== subcategoryId
+    const sub = (targetGoal.subcategories || []).find((s) => s.id === subcategoryId);
+    if (!sub) return;
+    const ids = new Set(
+      scope === 'future'
+        ? occurrencesFrom(targetGoal.subcategories || [], sub).map((s) => s.id)
+        : []
     );
-    const updatedTasks = (targetGoal.tasks || []).filter((t) => t.subcategoryId !== subcategoryId);
+    ids.add(subcategoryId);
+
+    const { subcategories: updatedSubcategories, tasks: updatedTasks } = removeSubcategories(
+      { subcategories: targetGoal.subcategories || [], tasks: targetGoal.tasks || [] },
+      ids
+    );
 
     try {
       await updateDoc(doc(db, 'goals', goalId), {
@@ -1436,9 +1699,11 @@ export default function App() {
     const targetGoal = goals.find((g) => g.id === goalId);
     if (!targetGoal) return;
 
-    const updatedSubcategories = (targetGoal.subcategories || []).map((s) =>
-      s.id === subcategoryId ? { ...s, editorRole: editorRole || null } : s
-    );
+    const sub = (targetGoal.subcategories || []).find((s) => s.id === subcategoryId);
+    if (!sub) return;
+    const updatedSubcategories = updateFrom(targetGoal.subcategories || [], sub, {
+      editorRole: editorRole || null,
+    });
 
     try {
       await updateDoc(doc(db, 'goals', goalId), {
@@ -1455,12 +1720,36 @@ export default function App() {
     text: string,
     priority: 'high' | 'medium' | 'low',
     subcategoryId?: string,
-    date?: string
+    date?: string,
+    forward?: boolean
   ) => {
     const targetGoal = goals.find((g) => g.id === goalId);
     if (!targetGoal) return;
 
     if (!canEditGoal(goalId)) return;
+
+    // Part of a weekly routine: put the task on this day and every later day of it.
+    const anchor = forward
+      ? (targetGoal.subcategories || []).find((s) => s.id === subcategoryId)
+      : undefined;
+    if (anchor) {
+      const nextTasks = addTaskForward({
+        subcategories: targetGoal.subcategories || [],
+        tasks: targetGoal.tasks || [],
+        anchor,
+        text,
+        priority: priority || 'medium',
+        forward: true,
+      });
+      if (!fitsInGoalDocument(targetGoal.subcategories || [], nextTasks)) return;
+      try {
+        await updateDoc(doc(db, 'goals', goalId), { tasks: nextTasks });
+      } catch (err) {
+        console.error('Add task error:', err);
+        setErrorMessage('Failed to add task.');
+      }
+      return;
+    }
 
     const newTask: TaskItem = {
       id: `t-${Date.now()}`,
@@ -1959,12 +2248,14 @@ export default function App() {
         onLogin={handleGoogleSignIn}
         loading={authLoading}
         error={authError}
+        info={authNotice}
       />
     );
   }
 
   return (
     <div
+      data-role={isOwner ? 'owner' : 'pro'}
       className={`min-h-screen flex flex-col transition-colors duration-300 ${
         !isOwner
           ? 'selection:bg-blue-200 selection:text-blue-950'
@@ -2072,7 +2363,7 @@ export default function App() {
                 </span>
               </div>
             ) : visibleClients.length > 0 ? (
-              <div className="flex items-center gap-1 bg-slate-100 p-0.5 sm:p-1 rounded-xl text-xs font-semibold min-w-0 shrink">
+              <div className="neu-inset-sm flex items-center gap-1 p-0.5 sm:p-1 text-xs font-semibold min-w-0 shrink">
                 <span className="text-[10px] text-slate-500 font-bold pl-1 hidden md:inline">
                   Workspace
                 </span>
@@ -2104,7 +2395,7 @@ export default function App() {
                 onClick={() => setIsModalOpen(true)}
                 aria-label="New Goal"
                 data-plain
-                className="hidden sm:flex bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white font-bold text-xs sm:text-sm px-2.5 sm:px-4 py-1.5 sm:py-2 rounded-xl shadow-[0_6px_16px_-6px_rgb(69_120_119/0.9)] transition items-center gap-1.5 cursor-pointer shrink-0"
+                className="btn-tone hidden sm:flex text-xs sm:text-sm px-2.5 sm:px-4 py-1.5 sm:py-2 items-center gap-1.5 shrink-0"
               >
                 <Plus className="w-3.5 h-3.5 sm:w-4 sm:h-4 stroke-[2.5]" />
                 <span className="hidden sm:inline">New Goal</span>
@@ -2135,25 +2426,27 @@ export default function App() {
                     className="fixed inset-0 z-40"
                     onClick={() => setIsAccountMenuOpen(false)}
                   />
-                  <div className="absolute right-0 mt-2 w-56 bg-white border border-slate-200 rounded-2xl shadow-lg p-3 z-50 space-y-2">
-                    <div className="pb-2 border-b border-slate-100">
+                  <div role="menu" className="menu pop w-60">
+                    <div className="px-2.5 pt-1.5 pb-1">
                       <div className="text-xs font-bold text-slate-900 truncate">
                         {user.displayName || 'Goal Path User'}
                       </div>
                       <div className="text-[11px] text-slate-500 truncate">{user.email}</div>
                       {!isOwner && (
-                        <div className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded mt-1.5 inline-block">
+                        <div className="badge mt-1.5">
                           Active Role: {professionalRole || 'Trainer'}
                         </div>
                       )}
                     </div>
+                    <div className="menu-sep" />
                     <button
                       type="button"
+                      role="menuitem"
                       onClick={() => {
                         setIsAccountMenuOpen(false);
                         setActiveTab('professional');
                       }}
-                      className="w-full text-left text-xs font-semibold text-slate-700 hover:bg-slate-50 px-2.5 py-2 rounded-xl transition flex items-center gap-2 cursor-pointer"
+                      className="menu-item"
                     >
                       <Briefcase className="w-3.5 h-3.5 text-slate-500" />
                       <span>
@@ -2164,11 +2457,25 @@ export default function App() {
                     </button>
                     <button
                       type="button"
+                      role="menuitem"
+                      onClick={() => {
+                        setIsAccountMenuOpen(false);
+                        setPersonaPickerOpen(true);
+                      }}
+                      className="menu-item"
+                    >
+                      <Sparkles className="w-3.5 h-3.5 text-slate-500" />
+                      <span>Start a guided plan</span>
+                    </button>
+                    <button
+                      type="button"
+                      role="menuitem"
+                      data-danger="true"
                       onClick={() => {
                         setIsAccountMenuOpen(false);
                         handleSignOut();
                       }}
-                      className="w-full text-left text-xs font-semibold text-rose-600 hover:bg-rose-50 px-2.5 py-2 rounded-xl transition flex items-center gap-2 cursor-pointer"
+                      className="menu-item"
                     >
                       <LogOut className="w-3.5 h-3.5" />
                       <span>Sign Out</span>
@@ -2258,7 +2565,7 @@ export default function App() {
                         </span>
                         &apos;s workspace
                       </span>
-                      <span className="text-[10px] font-bold uppercase tracking-wider text-blue-800 bg-white border border-blue-200 px-1.5 py-0.5 rounded shrink-0">
+                      <span className="badge uppercase tracking-wider shrink-0">
                         {professionalRole || 'Trainer'}
                       </span>
                     </div>
@@ -2281,18 +2588,16 @@ export default function App() {
                 {/* Dashboard hero: a raised panel, not a picture. In this style the
                     depth is the decoration, so the numbers carry the colour. */}
                 <div className="rise neu-lg relative overflow-hidden p-4 sm:p-5">
-
-                  {/* Content Container: one short heading and the numbers. The green
-                      + in the tab bar is where new goals come from. */}
-                  <div className="relative z-10 flex items-center justify-between gap-3 flex-wrap">
-                    <div className="flex items-center gap-3 flex-wrap">
-                      <h1 className="text-xl sm:text-2xl font-extrabold text-slate-800 tracking-tight">
-                        Overview
-                      </h1>
-                      <StreakBadge stats={streakStats} onClick={() => setActiveTab('today')} />
+                  <div className="relative z-10 flex items-center justify-between gap-4 flex-wrap">
+                    <div className="flex items-center gap-3 min-w-0">
+                      <Orb size={52} float className="shrink-0" />
+                      <div className="min-w-0 space-y-1">
+                        <h1 className="page-title">Your goals</h1>
+                        <StreakBadge stats={streakStats} onClick={() => setActiveTab('today')} />
+                      </div>
                     </div>
 
-                    {/* Clickable neumorphic keys */}
+                    {/* Three tappable stats */}
                     <div className="grid grid-cols-3 gap-2.5 sm:gap-3 flex-shrink-0">
                       {/* Stat 1: Goals */}
                       <button
@@ -2462,16 +2767,11 @@ export default function App() {
                     {categories.map((cat) => (
                       <button
                         key={cat}
+                        type="button"
                         onClick={() => setSelectedCategory(cat)}
-                        className={`text-xs px-3 py-1 rounded-full font-medium capitalize whitespace-nowrap transition cursor-pointer ${
-                          selectedCategory === cat
-                            ? !isOwner
-                              ? 'bg-blue-600 text-white shadow-2xs'
-                              : 'bg-violet-700 text-white shadow-2xs'
-                            : !isOwner
-                            ? 'bg-white/70 text-blue-900/80 border border-white/60 hover:bg-white'
-                            : 'bg-white/70 text-slate-600 border border-white/60 hover:bg-white'
-                        }`}
+                        data-active={selectedCategory === cat}
+                        aria-pressed={selectedCategory === cat}
+                        className="chip px-3 py-1.5 text-xs capitalize rounded-full!"
                       >
                         {cat}
                       </button>
@@ -2503,7 +2803,7 @@ export default function App() {
                       <button
                         onClick={() => setIsModalOpen(true)}
                         data-plain
-                        className="bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white font-bold text-sm px-5 py-2.5 rounded-xl shadow-[0_8px_20px_-8px_rgb(69_120_119/0.9)] transition flex items-center gap-2 mx-auto cursor-pointer"
+                        className="btn-tone text-sm px-5 py-2.5 flex items-center gap-2 mx-auto"
                       >
                         <Plus className="w-4 h-4 stroke-[2.5]" />
                         <span>Create Your First Goal</span>
@@ -2511,199 +2811,20 @@ export default function App() {
                     )}
                   </div>
                 ) : (
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-                    {filteredGoals.map((goal) => {
-                      const totalM = goal.milestones ? goal.milestones.length : 0;
-                      const doneM = goal.milestones ? goal.milestones.filter((m) => m.completed).length : 0;
-                      const pct = totalM > 0 ? Math.round((doneM / totalM) * 100) : 0;
-                      const curKey = getCurrentMonthKey();
-                      const curMilestone =
-                        (goal.milestones && goal.milestones.find((m) => m.monthKey === curKey)) ||
-                        (goal.milestones && goal.milestones.find((m) => !m.completed)) ||
-                        (goal.milestones && goal.milestones[goal.milestones.length - 1]);
-
-                      const goalTodayTasks = (goal.tasks || []).filter((t) => t.date === todayDate);
-                      const doneTodayTasks = goalTodayTasks.filter((t) => t.completed).length;
-                      const goalLevel = goalAccessLevel(goal.id);
-                      const canEditThisGoal = goalLevel === 'edit';
-
-                      return (
-                        <div
-                          key={goal.id}
-                          onClick={() => {
-                            setSelectedGoalId(goal.id);
-                            setSelectedGoalMonth(getCurrentMonthKey());
-                            setActiveTab('detail');
-                          }}
-                          className={`rise rise-3 lift group neu relative overflow-hidden rounded-2xl p-4 sm:p-5 cursor-pointer flex flex-col justify-between ${
-                            !isOwner && canEditThisGoal ? 'ring-2 ring-blue-400/30' : ''
-                          }`}
-                        >
-                          {/* One palette colour per category, so the grid reads as a set */}
-                          <span
-                            aria-hidden="true"
-                            className={`absolute inset-x-0 top-0 h-1 bg-gradient-to-r ${categoryAccent(goal.category)}`}
-                          />
-                          <div>
-                            <div className="flex items-center justify-between gap-2 mb-2">
-                              <span
-                                className={`text-[11px] font-semibold px-2 py-0.5 rounded-md border ${
-                                  !isOwner
-                                    ? 'text-blue-950 bg-blue-100/90 border-blue-300'
-                                    : 'text-emerald-700 bg-emerald-50 border-emerald-100'
-                                }`}
-                              >
-                                {goal.category || 'General'}
-                              </span>
-                              <span className="text-xs font-bold text-slate-600">
-                                Target: {formatMonthKey(goal.targetDate)}
-                              </span>
-                            </div>
-
-                            <h3
-                              className={`font-bold text-slate-900 text-base transition-colors line-clamp-1 mb-1 ${
-                                !isOwner ? 'group-hover:text-blue-800' : 'group-hover:text-emerald-700'
-                              }`}
-                            >
-                              {goal.title}
-                            </h3>
-
-                            {isOwner && profile?.collaborators && profile.collaborators.length > 0 && (
-                              <div className="flex items-center justify-between gap-1 mb-2.5 pt-0.5">
-                                {(() => {
-                                  const assigned = profile.collaborators.filter((c) =>
-                                    isGoalSharedWith(c, goal.id)
-                                  );
-                                  const isAssigned = assigned.length > 0;
-                                  return (
-                                    <>
-                                      <span
-                                        className={`text-[10px] font-semibold px-2 py-0.5 rounded-md border flex items-center gap-1 ${
-                                          isAssigned
-                                            ? 'text-emerald-800 bg-emerald-50 border-emerald-200'
-                                            : 'text-slate-500 bg-slate-100 border-slate-200'
-                                        }`}
-                                      >
-                                        <Users className="w-3 h-3" />
-                                        <span>{assigned.length}/{profile.collaborators.length} Pros</span>
-                                      </span>
-
-                                      <button
-                                        type="button"
-                                        onClick={(e) => {
-                                          e.stopPropagation();
-                                          setManagingAssignedGoal(goal);
-                                        }}
-                                        className={`text-[11px] font-semibold px-2.5 py-1 rounded-md border transition cursor-pointer flex items-center gap-1 shadow-2xs ${
-                                          isAssigned
-                                            ? 'bg-emerald-50 text-emerald-700 border-emerald-300 hover:bg-emerald-100 hover:text-emerald-800'
-                                            : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50 hover:text-slate-900'
-                                        }`}
-                                      >
-                                        {isAssigned ? (
-                                          <>
-                                            <Check className="w-3 h-3 text-emerald-600" />
-                                            <span>Assigned</span>
-                                          </>
-                                        ) : (
-                                          <>
-                                            <Plus className="w-3 h-3" />
-                                            <span>Assign Pro</span>
-                                          </>
-                                        )}
-                                      </button>
-                                    </>
-                                  );
-                                })()}
-                              </div>
-                            )}
-
-                            {!isOwner && (
-                              <div className="mb-2.5">
-                                {canEditThisGoal ? (
-                                  <div className="flex items-center gap-1.5 text-[11px] font-bold text-blue-950 bg-blue-50 border border-blue-300 px-2.5 py-1 rounded-lg">
-                                    <span className="w-2 h-2 rounded-full bg-blue-600 animate-pulse" />
-                                    <span>Assigned Session ({professionalRole || 'Trainer'})</span>
-                                  </div>
-                                ) : (
-                                  <div className="flex items-center gap-1.5 text-[11px] font-semibold text-sky-800 bg-sky-50 border border-sky-200 px-2.5 py-1 rounded-lg">
-                                    <Lock className="w-3 h-3 text-sky-500" />
-                                    <span>View only ({professionalRole || 'Professional'})</span>
-                                  </div>
-                                )}
-                              </div>
-                            )}
-
-                            {goal.description && (
-                              <p className="text-slate-700 font-medium text-xs line-clamp-2 leading-relaxed mb-4">
-                                {goal.description}
-                              </p>
-                            )}
-
-                            {/* Current milestone spotlight */}
-                            <div className="bg-slate-50 border border-slate-100 rounded-xl p-3 mb-4">
-                              <div className="text-[10px] font-bold text-slate-600 uppercase tracking-wider mb-1 flex items-center justify-between">
-                                <span>Current Horizon</span>
-                                <span>{curMilestone ? formatMonthKey(curMilestone.monthKey) : ''}</span>
-                              </div>
-                              <div className="text-xs font-medium text-slate-800 flex items-start gap-2">
-                                <span
-                                  className={`w-2 h-2 rounded-full mt-1 flex-shrink-0 ${
-                                    curMilestone?.completed
-                                      ? !isOwner ? 'bg-blue-600' : 'bg-emerald-500'
-                                      : 'bg-blue-500'
-                                  }`}
-                                />
-                                <span
-                                  className={`truncate ${
-                                    curMilestone?.completed ? 'line-through text-slate-400' : ''
-                                  }`}
-                                >
-                                  {curMilestone ? curMilestone.title : 'No milestone'}
-                                </span>
-                              </div>
-                            </div>
-                          </div>
-
-                          <div className="space-y-2 pt-2 border-t border-slate-100">
-                            <div className="flex justify-between items-center text-xs font-medium">
-                              <span className="text-slate-600 font-semibold">
-                                Milestones ({doneM}/{totalM})
-                              </span>
-                              <span className="text-slate-800 font-semibold">{pct}%</span>
-                            </div>
-                            <ProgressBar value={pct} height="h-1.5" />
-
-                            <div className="flex items-center justify-between text-[11px] font-medium text-slate-600 pt-1">
-                              <span>Today's Actions</span>
-                              <span className="font-semibold text-slate-700">
-                                {doneTodayTasks}/{goalTodayTasks.length} completed
-                              </span>
-                            </div>
-
-                            {!isOwner && (
-                              <div className="pt-1.5">
-                                {canEditThisGoal ? (
-                                  <div className="w-full bg-blue-50 text-blue-950 border border-blue-300 font-semibold text-xs py-2 px-3 rounded-xl flex items-center justify-center gap-1.5 group-hover:bg-blue-600 group-hover:text-white transition shadow-2xs">
-                                    <Edit2 className="w-3.5 h-3.5" />
-                                    <span>Edit Subcategories & Routines</span>
-                                    <ArrowRight className="w-3.5 h-3.5" />
-                                  </div>
-                                ) : (
-                                  <div
-                                    className="w-full bg-sky-50 text-sky-900 border border-sky-200 font-semibold text-xs py-2 px-3 rounded-xl flex items-center justify-center gap-1.5"
-                                    title="Your client gave you read-only access to this goal"
-                                  >
-                                    <Lock className="w-3.5 h-3.5" />
-                                    <span>Read-only access</span>
-                                  </div>
-                                )}
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      );
-                    })}
+                  <div className="grid grid-cols-[repeat(auto-fill,minmax(20rem,1fr))] gap-5">
+                    {filteredGoals.map((goal) => (
+                      <GoalCard
+                        key={goal.id}
+                        goal={goal}
+                        today={todayDate}
+                        isOwner={isOwner}
+                        canEdit={goalAccessLevel(goal.id) === 'edit'}
+                        professionalRole={professionalRole}
+                        collaborators={isOwner ? profile?.collaborators || [] : []}
+                        onOpen={(date) => openGoal(goal.id, date)}
+                        onManageAccess={() => setManagingAssignedGoal(goal)}
+                      />
+                    ))}
                   </div>
                 )}
               </div>
@@ -2712,46 +2833,29 @@ export default function App() {
             {/* VIEW 2: TODAY'S MASTER FOCUS */}
             {activeTab === 'today' && (
               <div className="space-y-6">
-                {/* Header Banner */}
-                <div className="rise neu rounded-3xl p-6 sm:p-7 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-600 bg-emerald-50 px-2.5 py-0.5 rounded-md">
-                        Today's Action Focus
-                      </span>
-                      <span className="text-xs font-bold text-slate-600">
-                        {formatFullMonth(curMonthKey)}
-                      </span>
-                    </div>
-                    <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 mt-1">
-                      {formatDisplayDate(todayDate)}
-                    </h1>
-                    <p className="text-slate-700 font-medium text-xs sm:text-sm mt-0.5">
-                      Your complete task breakdown and subcategories for today across all goals.
+                {/* Header: the mascot, the date and one calm progress line */}
+                <div className="rise flex items-center gap-4">
+                  <Orb size={64} float className="shrink-0" />
+                  <div className="min-w-0 flex-1">
+                    <span className="section-label">{formatFullMonth(curMonthKey)}</span>
+                    <h1 className="page-title">{formatDisplayDate(todayDate)}</h1>
+                    <p className="page-lede">
+                      {allTodayTasks.length === 0
+                        ? 'Nothing planned yet. A calm day.'
+                        : allTodayTasks.every((t) => t.completed)
+                        ? 'All done for today. Nicely done!'
+                        : `${allTodayTasks.filter((t) => t.completed).length} of ${allTodayTasks.length} done. Keep going.`}
                     </p>
                   </div>
-
-                  <div className="flex items-center gap-4 bg-slate-50 border border-slate-200/80 px-5 py-3 rounded-2xl self-start sm:self-auto">
-                    <div>
-                      <div className="text-xs text-slate-600 font-bold">Today's Progress</div>
-                      <div className="text-2xl font-black text-emerald-600">
-                        {allTodayTasks.filter((t) => t.completed).length} / {allTodayTasks.length}
-                      </div>
-                    </div>
-                    <div className="w-12">
-                      <ProgressBar
-                        value={
-                          allTodayTasks.length > 0
-                            ? Math.round(
-                                (allTodayTasks.filter((t) => t.completed).length / allTodayTasks.length) * 100
-                              )
-                            : 0
-                        }
-                        height="h-2"
-                      />
-                    </div>
-                  </div>
                 </div>
+                {allTodayTasks.length > 0 && (
+                  <ProgressBar
+                    value={Math.round(
+                      (allTodayTasks.filter((t) => t.completed).length / allTodayTasks.length) * 100
+                    )}
+                    height="h-2.5"
+                  />
+                )}
 
                 {/* Goals Work Breakdown for Today */}
                 {goals.length === 0 ? (
@@ -2777,7 +2881,7 @@ export default function App() {
                             setSelectedGoalId(g.id);
                             setActiveTab('detail');
                           }}
-                          className="px-3.5 py-1.5 bg-slate-50 hover:bg-emerald-50 hover:border-emerald-300 border border-slate-200 text-slate-700 hover:text-emerald-800 text-xs font-semibold rounded-xl transition cursor-pointer flex items-center gap-1.5"
+                          className="chip flex items-center gap-1.5 px-3.5 py-2 text-xs"
                         >
                           <ArrowRight className="w-3 h-3 text-emerald-600" />
                           <span>{g.title}</span>
@@ -2811,7 +2915,7 @@ export default function App() {
                           {/* Goal Header */}
                           <div className="flex items-center justify-between gap-3 pb-3 border-b border-slate-100 flex-wrap">
                             <div className="flex items-center gap-2.5 min-w-0 flex-1">
-                              <span className="text-xs font-bold text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-lg border border-emerald-100 flex-shrink-0">
+                              <span className="badge shrink-0">
                                 {g.category || 'General'}
                               </span>
                               <h2 className="text-base sm:text-lg font-bold text-slate-900 leading-tight break-words">
@@ -2836,335 +2940,103 @@ export default function App() {
                             </div>
                           </div>
 
-                          {/* Subcategories & Tasks for this goal today */}
+                          {/* The same block the goal page uses, so a task looks and behaves the
+                              same everywhere. Today is for doing: tick tasks and add more, while
+                              renaming and deleting stay on the goal page. */}
                           <div className="space-y-3">
+                            {uncategorized.length > 0 && (
+                              <SubcategoryBlock
+                                name="General tasks"
+                                expanded={!todayCollapsed['__general__']}
+                                onToggle={() => toggleTodayBlock('__general__')}
+                                tasks={uncategorized}
+                                goal={g}
+                                canEditTasks={canManageGoal}
+                                canManage={false}
+                                onToggleTask={(taskId) => handleToggleTask(g.id, taskId)}
+                              />
+                            )}
+
                             {goalSubcategories.map((sub) => {
-                              const subTasks = goalTodayTasks.filter((t) => t.subcategoryId === sub.id);
                               const canEditSub = canEditSubcategoryTasks(g.id, sub);
-                              const isAddingTask = todayAddingTaskSubId === sub.id;
-
                               return (
-                                <div
+                                <SubcategoryBlock
                                   key={sub.id}
-                                  className="bg-slate-50/60 border border-slate-200/80 rounded-xl p-3.5 space-y-2.5"
-                                >
-                                  <div className="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center justify-between">
-                                    <div className="flex items-center gap-2">
-                                      <span>{sub.name}</span>
-                                      {sub.editorRole && (
-                                        <span className="text-[10px] text-emerald-700 bg-emerald-50 border border-emerald-200 px-1.5 py-0.2 rounded font-semibold capitalize">
-                                          {sub.editorRole}
-                                        </span>
-                                      )}
-                                    </div>
-                                    <div className="flex items-center gap-2">
-                                      <span className="text-[11px] font-semibold text-slate-400 lowercase">
-                                        {subTasks.filter((t) => t.completed).length}/{subTasks.length} done
-                                      </span>
-                                      {canEditSub && (
-                                        <button
-                                          type="button"
-                                          onClick={() => {
-                                            if (isAddingTask) {
-                                              setTodayAddingTaskSubId(null);
-                                              setTodayNewTaskText('');
-                                            } else {
-                                              setTodayAddingTaskSubId(sub.id);
-                                              setTodayNewTaskText('');
-                                            }
-                                          }}
-                                          className="text-emerald-700 hover:text-emerald-800 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 text-[11px] font-bold px-2 py-0.5 rounded-md transition cursor-pointer"
-                                        >
-                                          {isAddingTask ? (
-                                            <span className="flex items-center gap-1">
-                                              <X className="w-3 h-3" />
-                                              <span>Cancel</span>
-                                            </span>
-                                          ) : (
-                                            <span className="flex items-center gap-1">
-                                              <Plus className="w-3 h-3" />
-                                              <span>Add Task</span>
-                                            </span>
-                                          )}
-                                        </button>
-                                      )}
-                                    </div>
-                                  </div>
-
-                                  {/* Inline Add Task Form for Subcategory on Today's Tab */}
-                                  {isAddingTask && canEditSub && (
-                                    <form
-                                      onSubmit={(e) => {
-                                        e.preventDefault();
-                                        if (todayNewTaskText.trim()) {
-                                          handleAddTask(
-                                            g.id,
-                                            todayNewTaskText.trim(),
-                                            todayNewTaskPriority,
-                                            sub.id,
-                                            todayDate
-                                          );
-                                          setTodayNewTaskText('');
-                                          setTodayAddingTaskSubId(null);
-                                        }
-                                      }}
-                                      className="bg-white border border-emerald-200 rounded-xl p-2.5 space-y-2 shadow-2xs"
-                                    >
-                                      <div className="flex gap-2">
-                                        <input
-                                          type="text"
-                                          placeholder={`Add a task to ${sub.name}…`}
-                                          value={todayNewTaskText}
-                                          onChange={(e) => setTodayNewTaskText(e.target.value)}
-                                          className="flex-1 text-xs bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 text-slate-800 placeholder-slate-400 focus:outline-none focus:bg-white focus:ring-1 focus:ring-emerald-500"
-                                          autoFocus
-                                        />
-                                        <button
-                                          type="submit"
-                                          disabled={!todayNewTaskText.trim()}
-                                          className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-40 text-white text-xs font-bold rounded-lg transition cursor-pointer"
-                                        >
-                                          Add
-                                        </button>
-                                      </div>
-                                      <div className="flex items-center gap-2 text-[11px] text-slate-500">
-                                        <span>Priority:</span>
-                                        <select
-                                          value={todayNewTaskPriority}
-                                          onChange={(e) =>
-                                            setTodayNewTaskPriority(
-                                              e.target.value as 'high' | 'medium' | 'low'
-                                            )
-                                          }
-                                          className="bg-slate-50 border border-slate-200 rounded px-1.5 py-0.5 text-slate-700 text-[11px]"
-                                        >
-                                          <option value="high">High</option>
-                                          <option value="medium">Medium</option>
-                                          <option value="low">Low</option>
-                                        </select>
-                                      </div>
-                                    </form>
-                                  )}
-
-                                  <div className="space-y-1.5 pt-1">
-                                    {subTasks.length === 0 ? (
-                                      <p className="text-[11px] text-slate-400 py-1 italic">
-                                        No tasks in this group for today yet.
-                                      </p>
-                                    ) : (
-                                      subTasks.map((task) => {
-                                        const isEditingThisTask = todayEditingTaskId === task.id;
-                                        const canEditThis = canEditTaskRecord(g.id, task);
-
-                                        if (isEditingThisTask) {
-                                          return (
-                                            <div
-                                              key={task.id}
-                                              className="p-2.5 rounded-lg border border-emerald-300 bg-emerald-50/30 space-y-2"
-                                            >
-                                              <input
-                                                type="text"
-                                                value={todayEditTaskText}
-                                                onChange={(e) => setTodayEditTaskText(e.target.value)}
-                                                className="w-full text-xs bg-white border border-slate-300 rounded-md px-2.5 py-1 text-slate-800 focus:outline-none focus:ring-1 focus:ring-emerald-500"
-                                                autoFocus
-                                              />
-                                              <div className="flex items-center justify-between gap-2">
-                                                <select
-                                                  value={todayEditTaskPriority}
-                                                  onChange={(e) =>
-                                                    setTodayEditTaskPriority(
-                                                      e.target.value as 'high' | 'medium' | 'low'
-                                                    )
-                                                  }
-                                                  className="text-[11px] bg-white border border-slate-200 rounded px-1.5 py-0.5 text-slate-700"
-                                                >
-                                                  <option value="high">High Priority</option>
-                                                  <option value="medium">Medium Priority</option>
-                                                  <option value="low">Low Priority</option>
-                                                </select>
-                                                <div className="flex items-center gap-1.5">
-                                                  <button
-                                                    type="button"
-                                                    onClick={() => {
-                                                      if (todayEditTaskText.trim()) {
-                                                        handleUpdateTask(g.id, task.id, {
-                                                          text: todayEditTaskText.trim(),
-                                                          priority: todayEditTaskPriority,
-                                                        });
-                                                      }
-                                                      setTodayEditingTaskId(null);
-                                                    }}
-                                                    className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded text-[11px] font-bold cursor-pointer"
-                                                  >
-                                                    Save
-                                                  </button>
-                                                  <button
-                                                    type="button"
-                                                    onClick={() => setTodayEditingTaskId(null)}
-                                                    className="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded text-[11px] font-semibold cursor-pointer"
-                                                  >
-                                                    Cancel
-                                                  </button>
-                                                </div>
-                                              </div>
-                                            </div>
-                                          );
-                                        }
-
-                                        return (
-                                          <div
-                                            key={task.id}
-                                            className={`flex items-center justify-between p-2.5 rounded-lg border transition ${
-                                              task.completed
-                                                ? 'bg-white/60 border-slate-100 text-slate-400'
-                                                : 'bg-white border-slate-200 shadow-2xs text-slate-800'
-                                            }`}
-                                          >
-                                            <label
-                                              className={`flex items-center gap-2.5 flex-1 min-w-0 pr-2 ${
-                                                canEditThis ? 'cursor-pointer' : 'cursor-default'
-                                              }`}
-                                            >
-                                              <input
-                                                type="checkbox"
-                                                checked={task.completed}
-                                                disabled={!canEditThis}
-                                                onChange={() => handleToggleTask(g.id, task.id)}
-                                                className="w-4 h-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 disabled:opacity-40 cursor-pointer"
-                                              />
-                                              <span
-                                                className={`text-sm ${
-                                                  task.completed
-                                                    ? 'line-through text-slate-400'
-                                                    : 'font-medium'
-                                                }`}
-                                              >
-                                                {task.text}
-                                              </span>
-                                            </label>
-                                            <div className="flex items-center gap-2 flex-shrink-0">
-                                              <PriorityBadge priority={task.priority} />
-                                            </div>
-                                          </div>
-                                        );
-                                      })
-                                    )}
-                                  </div>
-                                </div>
+                                  name={sub.name}
+                                  expanded={!todayCollapsed[sub.id]}
+                                  onToggle={() => toggleTodayBlock(sub.id)}
+                                  tasks={goalTodayTasks.filter((t) => t.subcategoryId === sub.id)}
+                                  goal={g}
+                                  sub={sub}
+                                  canEditTasks={canEditSub}
+                                  canManage={false}
+                                  onAddTask={
+                                    canEditSub
+                                      ? (text, priority, forward) =>
+                                          handleAddTask(g.id, text, priority, sub.id, todayDate, forward)
+                                      : undefined
+                                  }
+                                  onToggleTask={canEditSub ? (taskId) => handleToggleTask(g.id, taskId) : undefined}
+                                />
                               );
                             })}
 
-                            {uncategorized.length > 0 && (
-                              <div className="bg-slate-50/60 border border-slate-200/80 rounded-xl p-3.5 space-y-2">
-                                <div className="text-xs font-bold text-slate-500 uppercase tracking-wider">
-                                  General Tasks
-                                </div>
-                                <div className="space-y-1.5 pt-1">
-                                  {uncategorized.map((task) => (
-                                    <div
-                                      key={task.id}
-                                      className={`flex items-center justify-between p-2.5 rounded-lg border transition ${
-                                        task.completed
-                                          ? 'bg-white/60 border-slate-100 text-slate-400'
-                                          : 'bg-white border-slate-200 shadow-2xs text-slate-800'
-                                      }`}
-                                    >
-                                      <label
-                                        className={`flex items-center gap-2.5 flex-1 min-w-0 pr-2 ${
-                                          canEditTaskRecord(g.id, task)
-                                            ? 'cursor-pointer'
-                                            : 'cursor-default'
-                                        }`}
-                                      >
-                                        <input
-                                          type="checkbox"
-                                          checked={task.completed}
-                                          disabled={!canEditTaskRecord(g.id, task)}
-                                          onChange={() => handleToggleTask(g.id, task.id)}
-                                          className="w-4 h-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 disabled:opacity-40 cursor-pointer"
-                                        />
-                                        <span
-                                          className={`text-sm ${
-                                            task.completed
-                                              ? 'line-through text-slate-400'
-                                              : 'font-medium'
-                                          }`}
-                                        >
-                                          {task.text}
-                                        </span>
-                                      </label>
-                                      <div className="flex items-center gap-2 flex-shrink-0">
-                                        <PriorityBadge priority={task.priority} />
-                                      </div>
-                                    </div>
-                                  ))}
-                                </div>
-                              </div>
-                            )}
-
-                            {/* Quick Add Subcategory for Today Button */}
-                            {canManageGoal && (
-                              <div className="pt-1">
-                                {todayAddingSubGoalId === g.id ? (
-                                  <form
-                                    onSubmit={async (e) => {
-                                      e.preventDefault();
-                                      if (todayNewSubName.trim()) {
-                                        await handleAddSubcategory(
-                                          g.id,
-                                          todayNewSubName.trim(),
-                                          todayDate
-                                        );
-                                        setTodayNewSubName('');
-                                        setTodayAddingSubGoalId(null);
-                                      }
-                                    }}
-                                    className="bg-slate-50 border border-emerald-300 rounded-xl p-3 flex flex-col sm:flex-row gap-2 items-stretch sm:items-center"
-                                  >
-                                    <input
-                                      type="text"
-                                      placeholder="New Subcategory (e.g. Upper Body Workout, Lunch Plan)…"
-                                      value={todayNewSubName}
-                                      onChange={(e) => setTodayNewSubName(e.target.value)}
-                                      className="flex-1 text-xs bg-white border border-slate-300 rounded-lg px-3 py-2 text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600"
-                                      autoFocus
-                                    />
-                                    <div className="flex items-center gap-2">
-                                      <button
-                                        type="submit"
-                                        disabled={!todayNewSubName.trim()}
-                                        className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-40 text-white text-xs font-bold rounded-lg cursor-pointer transition shadow-2xs"
-                                      >
-                                        Create Subcategory
-                                      </button>
-                                      <button
-                                        type="button"
-                                        onClick={() => {
-                                          setTodayAddingSubGoalId(null);
-                                          setTodayNewSubName('');
-                                        }}
-                                        className="px-3 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 text-xs font-semibold rounded-lg cursor-pointer"
-                                      >
-                                        Cancel
-                                      </button>
-                                    </div>
-                                  </form>
-                                ) : (
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      setTodayAddingSubGoalId(g.id);
+                            {/* Quick add: a subcategory for today, without leaving this page */}
+                            {canManageGoal &&
+                              (todayAddingSubGoalId === g.id ? (
+                                <form
+                                  onSubmit={async (e) => {
+                                    e.preventDefault();
+                                    if (todayNewSubName.trim()) {
+                                      await handleAddSubcategory(g.id, todayNewSubName.trim(), todayDate);
                                       setTodayNewSubName('');
-                                    }}
-                                    className="text-xs font-bold text-emerald-700 hover:text-emerald-800 bg-emerald-50 hover:bg-emerald-100 border border-dashed border-emerald-300 rounded-xl px-3.5 py-2 transition cursor-pointer flex items-center gap-1.5"
-                                  >
-                                    <span>+</span>
-                                    <span>Add Subcategory for Today</span>
-                                  </button>
-                                )}
-                              </div>
-                            )}
+                                      setTodayAddingSubGoalId(null);
+                                    }
+                                  }}
+                                  className="neu-inset-sm p-3 flex flex-col sm:flex-row gap-2 items-stretch sm:items-center"
+                                >
+                                  <input
+                                    type="text"
+                                    placeholder="New subcategory, e.g. Upper body, Lunch plan"
+                                    value={todayNewSubName}
+                                    onChange={(e) => setTodayNewSubName(e.target.value)}
+                                    aria-label="New subcategory"
+                                    className="flex-1 text-sm rounded-xl px-3.5 py-2.5"
+                                    autoFocus
+                                  />
+                                  <div className="flex items-center gap-2">
+                                    <button
+                                      type="submit"
+                                      disabled={!todayNewSubName.trim()}
+                                      className="btn-tone px-4 py-2.5 text-xs"
+                                    >
+                                      Create
+                                    </button>
+                                    <button
+                                      type="button"
+                                      className="chip px-3.5 py-2.5 text-xs"
+                                      onClick={() => {
+                                        setTodayAddingSubGoalId(null);
+                                        setTodayNewSubName('');
+                                      }}
+                                    >
+                                      Cancel
+                                    </button>
+                                  </div>
+                                </form>
+                              ) : (
+                                <button
+                                  type="button"
+                                  className="chip inline-flex items-center gap-1.5 px-3.5 py-2 text-xs"
+                                  onClick={() => {
+                                    setTodayAddingSubGoalId(g.id);
+                                    setTodayNewSubName('');
+                                  }}
+                                >
+                                  <Plus className="w-3.5 h-3.5" />
+                                  <span>Add subcategory for today</span>
+                                </button>
+                              ))}
                           </div>
                         </div>
                       );
@@ -3186,44 +3058,45 @@ export default function App() {
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0 flex-1">
                       {isEditingGoalHeader ? (
-                        <div className="bg-violet-50/40 border border-violet-200 rounded-xl p-4 space-y-3">
+                        <div className="neu-inset p-4 space-y-3.5">
                           <div className="flex items-center justify-between">
                             <h3 className="text-sm font-bold text-slate-800">Edit Goal Details</h3>
                             <button
                               type="button"
                               onClick={() => setIsEditingGoalHeader(false)}
-                              className="text-xs text-slate-500 hover:text-slate-700 flex items-center gap-1 cursor-pointer"
+                              data-plain
+                              className="text-xs font-semibold text-slate-500 hover:text-slate-800 flex items-center gap-1 cursor-pointer"
                             >
                               <X className="w-3.5 h-3.5" />
                               <span>Cancel</span>
                             </button>
                           </div>
                           <div>
-                            <label className="block text-[11px] font-bold text-slate-600 uppercase mb-1">Goal Title</label>
+                            <label className="section-label block mb-1.5">Goal title</label>
                             <input
                               type="text"
                               value={editGoalTitle}
                               onChange={(e) => setEditGoalTitle(e.target.value)}
-                              className="w-full text-sm bg-white border border-slate-300 rounded-lg px-3 py-2 text-slate-800 font-semibold focus:outline-none focus:ring-2 focus:ring-violet-600/20 focus:border-violet-700"
+                              className="w-full text-sm font-semibold rounded-xl px-3.5 py-2.5"
                             />
                           </div>
                           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                             <div>
-                              <label className="block text-[11px] font-bold text-slate-600 uppercase mb-1">Category</label>
+                              <label className="section-label block mb-1.5">Category</label>
                               <input
                                 type="text"
                                 value={editGoalCategory}
                                 onChange={(e) => setEditGoalCategory(e.target.value)}
-                                className="w-full text-xs bg-white border border-slate-300 rounded-lg px-3 py-1.5 text-slate-800 focus:outline-none focus:ring-2 focus:ring-violet-600/20 focus:border-violet-700"
+                                className="w-full text-sm rounded-xl px-3.5 py-2.5"
                               />
                             </div>
                             <div>
-                              <label className="block text-[11px] font-bold text-slate-600 uppercase mb-1">Description</label>
+                              <label className="section-label block mb-1.5">Description</label>
                               <input
                                 type="text"
                                 value={editGoalDesc}
                                 onChange={(e) => setEditGoalDesc(e.target.value)}
-                                className="w-full text-xs bg-white border border-slate-300 rounded-lg px-3 py-1.5 text-slate-800 focus:outline-none focus:ring-2 focus:ring-violet-600/20 focus:border-violet-700"
+                                className="w-full text-sm rounded-xl px-3.5 py-2.5"
                                 placeholder="Goal description..."
                               />
                             </div>
@@ -3240,14 +3113,14 @@ export default function App() {
                                 });
                                 setIsEditingGoalHeader(false);
                               }}
-                              className="px-4 py-1.5 bg-violet-800 hover:bg-violet-900 text-white rounded-lg text-xs font-bold transition shadow-xs cursor-pointer active:scale-95"
+                              className="btn-tone px-4 py-2 text-xs"
                             >
                               Save Changes
                             </button>
                             <button
                               type="button"
                               onClick={() => setIsEditingGoalHeader(false)}
-                              className="px-3 py-1.5 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-lg text-xs font-medium cursor-pointer active:scale-95"
+                              className="chip px-3.5 py-2 text-xs"
                             >
                               Cancel
                             </button>
@@ -3261,28 +3134,12 @@ export default function App() {
                                 setSelectedGoalId(null);
                                 setActiveTab('dashboard');
                               }}
-                              className="text-[11px] font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-md cursor-pointer"
+                              className="chip px-2.5 py-1 text-[11px]"
                             >
                               ← Back
                             </button>
-                            <span
-                              className={`text-[11px] font-semibold px-2 py-0.5 rounded-md border ${
-                                isOwner
-                                  ? 'text-violet-900 bg-violet-50 border-violet-200'
-                                  : 'text-blue-950 bg-blue-50 border-blue-300'
-                              }`}
-                            >
-                              {currentGoal.category || 'General'}
-                            </span>
-                            <span
-                              className={`text-[11px] font-semibold px-2 py-0.5 rounded-md border ${
-                                isOwner
-                                  ? 'text-violet-900 bg-violet-50 border-violet-100'
-                                  : 'text-blue-900 bg-blue-50 border-blue-200'
-                              }`}
-                            >
-                              {formatFullMonth(currentGoal.targetDate)}
-                            </span>
+                            <span className="badge">{currentGoal.category || 'General'}</span>
+                            <span className="badge">{formatFullMonth(currentGoal.targetDate)}</span>
                           </div>
                           <h1 className="mt-1.5 text-xl sm:text-3xl font-bold text-slate-900">
                             {currentGoal.title}
@@ -3300,7 +3157,7 @@ export default function App() {
                           className={`mt-2 inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-md border ${
                             canEditGoal(currentGoal.id)
                               ? 'bg-blue-50 border-blue-200 text-blue-900'
-                              : 'bg-slate-50 border-slate-200 text-slate-600'
+                              : 'bg-slate-300/30 border-slate-300/40 text-slate-600'
                           }`}
                           title={
                             canEditGoal(currentGoal.id)
@@ -3324,21 +3181,18 @@ export default function App() {
                               return <span className="text-slate-400 italic">None assigned</span>;
                             }
                             return assigned.map((c) => (
-                              <span
-                                key={c.uid}
-                                className="inline-flex items-center gap-1 bg-violet-50 border border-violet-200 text-violet-900 font-semibold px-2 py-0.5 rounded-md text-[11px]"
-                              >
+                              <span key={c.uid} className="badge">
                                 <span>{c.name || c.email || 'Pro'}</span>
-                                <span className="text-violet-800 font-normal">({c.role})</span>
+                                <span className="font-normal opacity-80">({c.role})</span>
                               </span>
                             ));
                           })()}
                           <button
                             type="button"
                             onClick={() => setManagingAssignedGoal(currentGoal)}
-                            className="text-xs font-semibold text-violet-900 hover:text-violet-950 hover:bg-violet-100/70 bg-violet-50 px-2.5 py-1 rounded-lg border border-violet-200 transition cursor-pointer flex items-center gap-1"
+                            className="chip flex items-center gap-1 px-2.5 py-1 text-[11px]"
                           >
-                            <Settings className="w-3 h-3 text-violet-800" />
+                            <Settings className="w-3 h-3" />
                             <span>Manage Access</span>
                           </button>
                         </div>
@@ -3376,20 +3230,22 @@ export default function App() {
 
                 {/* 2-Column Responsive Layout */}
                 <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-                  {/* LEFT: Daily Task Execution */}
-                  <div className="lg:col-span-6 space-y-6">
+                  {/* LEFT: the editing flow (pick a day, plan it), the wider column */}
+                  <div className="lg:col-span-7 space-y-6">
                     <DailyTaskSection
                       goal={currentGoal}
                       isOwner={isOwner}
                       canManageCategories={canEditGoal(currentGoal.id)}
-                      professionalRole={professionalRole}
                       selectedMonthKey={selectedGoalMonth}
+                      initialDate={selectedGoalDate}
                       onSelectMonth={setSelectedGoalMonth}
                       canEditSubcategoryTasks={(sub) => canEditSubcategoryTasks(currentGoal.id, sub)}
                       onAddSubcategory={handleAddSubcategory}
+                      onAddRepeatingSubcategory={handleAddRepeatingSubcategory}
                       onRenameSubcategory={handleRenameSubcategory}
                       onDeleteSubcategory={handleDeleteSubcategory}
                       onSetSubcategoryRole={handleSetSubcategoryRole}
+                      onChangeSubcategoryRepeat={handleChangeSubcategoryRepeat}
                       onAddTask={handleAddTask}
                       onUpdateTask={handleUpdateTask}
                       onToggleTask={handleToggleTask}
@@ -3397,8 +3253,8 @@ export default function App() {
                     />
                   </div>
 
-                  {/* RIGHT: Monthly Milestones Timeline */}
-                  <div className="lg:col-span-6 space-y-6">
+                  {/* RIGHT: the roadmap */}
+                  <div className="lg:col-span-5 space-y-6">
                     <MonthlyMilestoneSection
                       goal={currentGoal}
                       isOwner={isOwner}
@@ -3577,7 +3433,7 @@ export default function App() {
                 aria-label="New Goal"
                 title="New Goal"
                 data-plain
-                className="press relative z-20 -mt-6 w-12 h-12 shrink-0 rounded-full bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white ring-4 ring-white flex items-center justify-center cursor-pointer shadow-[0_10px_22px_-8px_rgb(69_120_119/0.95)]"
+                className="btn-tone press relative z-20 -mt-6 w-12 h-12 shrink-0 ring-4 ring-white flex items-center justify-center"
               >
                 <Plus className="w-5 h-5 stroke-[2.5]" />
               </button>
@@ -3592,21 +3448,12 @@ export default function App() {
         </div>
       </nav>
 
-      {/* FIRST-RUN QUESTION: asked once, changeable later from the account menu */}
-      <PersonaPrompt
-        isOpen={
-          !!user &&
-          !!profile &&
-          !dataLoading &&
-          !savingPersona &&
-          (!profile.persona && !personaPromptDismissed ? true : personaPickerOpen)
-        }
-        saving={savingPersona}
-        onChoose={handleChoosePersona}
-        onSkip={() => {
-          setPersonaPromptDismissed(true);
-          setPersonaPickerOpen(false);
-        }}
+      {/* FIRST-RUN QUESTIONS: asked once for a new account, and again from the account menu */}
+      <Onboarding
+        isOpen={!!user && !!profile && !dataLoading && isOwner && personaPickerOpen}
+        name={((profile?.displayName || user.displayName || '').split(' ')[0] || '').trim()}
+        onFinish={handleFinishOnboarding}
+        onClose={handleCloseOnboarding}
       />
     </div>
   );

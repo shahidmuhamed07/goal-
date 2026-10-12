@@ -18,6 +18,15 @@ export interface Subcategory {
   order: number;
   date?: string;
   editorRole?: string | null;
+  /**
+   * Set when this subcategory is one day of a weekly routine ("Chest day every
+   * Tuesday and Thursday"). Every day of the routine shares the same id, so the
+   * days can be edited or stopped together. Each day is still an ordinary
+   * dated subcategory with its own tasks.
+   */
+  repeatId?: string;
+  /** Weekdays the routine runs on, 0 = Sunday … 6 = Saturday. */
+  repeatDays?: number[];
 }
 
 export interface TaskItem {
@@ -74,6 +83,10 @@ export interface UserProfile {
   /** Self-declared on first sign-in; it never grants access to anyone's data. */
   persona?: AccountPersona;
   personaChosenAt?: string;
+  /** When the guided first-run questions were finished. */
+  onboardedAt?: string;
+  /** The answers given in those questions, kept for reference. */
+  onboarding?: Record<string, unknown>;
 }
 
 export type AccountPersona = 'client' | 'professional';

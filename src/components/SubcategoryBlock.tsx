@@ -1,454 +1,538 @@
-import React, { useState, useMemo } from 'react';
-import { Check, Edit2, Trash2, X, ChevronDown, ChevronRight } from 'lucide-react';
-import { Goal, TaskItem } from '../types';
-import { PriorityBadge, GlassIconButton } from './UIElements';
-import { PROFESSIONAL_ROLES } from '../utils';
+import React, { useMemo, useState } from 'react';
+import { CalendarX, Check, ChevronDown, ChevronRight, Pencil, Repeat, Trash2, X } from 'lucide-react';
+import { Goal, Subcategory, TaskItem } from '../types';
+import { GlassIconButton } from './UIElements';
+import { MenuButton, MenuSection } from './MenuButton';
+import { WeekdayPicker } from './WeekdayPicker';
+import { PROFESSIONAL_ROLES, formatMonthKey } from '../utils';
+import {
+  applySeriesDays,
+  countLater,
+  describeDays,
+  goalEndDate,
+  isRepeating,
+  sortWeekdays,
+  weekdayOf,
+} from '../recurrence';
+
+type Priority = 'high' | 'medium' | 'low';
+
+const PRIORITY_LABEL: Record<Priority, string> = { high: 'High', medium: 'Medium', low: 'Low' };
+const PRIORITY_DOT: Record<Priority, string> = {
+  high: 'bg-rose-500',
+  medium: 'bg-amber-400',
+  low: 'bg-slate-400',
+};
+const nextPriority = (value: Priority): Priority =>
+  value === 'high' ? 'medium' : value === 'medium' ? 'low' : 'high';
+
+/** One key that steps High → Medium → Low, so priority never needs a dropdown. */
+const PriorityKey: React.FC<{ value: Priority; onChange: (next: Priority) => void }> = ({
+  value,
+  onChange,
+}) => (
+  <button
+    type="button"
+    className="chip inline-flex items-center gap-1.5 px-2.5 py-2 text-xs"
+    onClick={() => onChange(nextPriority(value))}
+    title={`Priority: ${PRIORITY_LABEL[value]}. Click to change.`}
+  >
+    <span className={`w-2 h-2 rounded-full ${PRIORITY_DOT[value]}`} />
+    {PRIORITY_LABEL[value]}
+  </button>
+);
+
+type Confirm = 'delete-one' | 'delete-future' | 'stop';
 
 interface SubcategoryBlockProps {
   name: string;
   expanded: boolean;
   onToggle: () => void;
-  onRename?: (nextName: string) => void;
-  onDelete?: () => void;
   tasks: TaskItem[];
   goal: Goal;
-  subcategoryId?: string;
-  selectedDate?: string;
-  editorRole?: string;
-  canDelete?: boolean;
-  canAdd?: boolean;
-  canRename?: boolean;
-  canEditTasks?: boolean;
-  isOwner?: boolean;
-  onSetRole?: (nextRole: string) => void;
-  onAddTask?: (goalId: string, text: string, priority: 'high' | 'medium' | 'low', subcategoryId?: string, date?: string) => void;
-  onUpdateTask?: (goalId: string, taskId: string, updates: Partial<TaskItem>) => void;
-  onToggleTask?: (goalId: string, taskId: string) => void;
-  onDeleteTask?: (goalId: string, taskId: string) => void;
+  /** The subcategory itself. Absent for the "Uncategorized" group of loose tasks. */
+  sub?: Subcategory;
+  /** May add, edit, complete and delete the tasks in this group. */
+  canEditTasks: boolean;
+  /** May rename, repeat or delete the subcategory itself. */
+  canManage: boolean;
+  /** Owner only: choose which professional role may edit this group. */
+  canSetRole?: boolean;
+  onRename?: (name: string) => void;
+  onSetRole?: (role: string) => void;
+  /** Weekdays to repeat on from this day forward; an empty list stops the routine. */
+  onChangeRepeat?: (days: number[]) => void;
+  onDelete?: (scope: 'one' | 'future') => void;
+  onAddTask?: (text: string, priority: Priority, forward: boolean) => void;
+  onUpdateTask?: (taskId: string, updates: Partial<TaskItem>) => void;
+  onToggleTask?: (taskId: string) => void;
+  onDeleteTask?: (taskId: string) => void;
 }
 
+/**
+ * One subcategory on one day: a header (name, repeat pattern, progress, ⋯ menu)
+ * above its tasks and a single line to add another.
+ *
+ * Everything that changes the subcategory itself lives in the ⋯ menu so the card
+ * stays quiet; renaming and repeating open inline, right where they apply.
+ */
 export const SubcategoryBlock: React.FC<SubcategoryBlockProps> = ({
   name,
   expanded,
   onToggle,
-  onRename,
-  onDelete,
   tasks,
   goal,
-  subcategoryId,
-  selectedDate,
-  editorRole = '',
-  canDelete = true,
-  canAdd = true,
-  canRename = true,
-  canEditTasks = true,
-  isOwner = true,
+  sub,
+  canEditTasks,
+  canManage,
+  canSetRole = false,
+  onRename,
   onSetRole,
+  onChangeRepeat,
+  onDelete,
   onAddTask,
   onUpdateTask,
   onToggleTask,
   onDeleteTask,
 }) => {
+  const [renaming, setRenaming] = useState(false);
+  const [nameDraft, setNameDraft] = useState(name);
+  const [repeatOpen, setRepeatOpen] = useState(false);
+  const [repeatDraft, setRepeatDraft] = useState<number[]>([]);
+  const [confirm, setConfirm] = useState<Confirm | null>(null);
+
   const [text, setText] = useState('');
-  const [priority, setPriority] = useState<'high' | 'medium' | 'low'>('medium');
-  const [editing, setEditing] = useState(false);
-  const [editVal, setEditVal] = useState(name);
+  const [priority, setPriority] = useState<Priority>('medium');
+  const [forward, setForward] = useState(true);
 
-  // Inline editing state for individual tasks
   const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
-  const [editTaskText, setEditTaskText] = useState('');
-  const [editTaskPriority, setEditTaskPriority] = useState<'high' | 'medium' | 'low'>('medium');
+  const [editText, setEditText] = useState('');
+  const [editPriority, setEditPriority] = useState<Priority>('medium');
 
-  const sortedTasks = useMemo(() => {
-    return [...tasks].sort((a, b) => Number(a.completed) - Number(b.completed));
-  }, [tasks]);
+  const repeating = isRepeating(sub);
+  const repeatDays = sub?.repeatDays || [];
+  const endDate = goalEndDate(goal);
+  const plan = { subcategories: goal.subcategories || [], tasks: goal.tasks || [] };
 
+  const sortedTasks = useMemo(
+    () => [...tasks].sort((a, b) => Number(a.completed) - Number(b.completed)),
+    [tasks]
+  );
   const done = tasks.filter((t) => t.completed).length;
 
-  console.log('[SubcategoryBlock Controls Check]', {
-    subcategoryName: name,
-    subcategoryId,
-    goalId: goal.id,
-    editorRoleTag: editorRole,
-    canAdd,
-    canRename,
-    canDelete,
-    canEditTasks,
-    hasOnAddTask: !!onAddTask,
-    hasOnRename: !!onRename,
-    hasOnDelete: !!onDelete,
-    hasOnSetRole: !!onSetRole,
-  });
+  // The later days of this routine, for "this removes N days" and "also add to N days".
+  const later = useMemo(
+    () => (sub && repeating ? countLater(plan, sub) : { days: 0, tasks: 0 }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [goal.subcategories, goal.tasks, sub, repeating]
+  );
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!text.trim() || !subcategoryId || !onAddTask) return;
-    onAddTask(goal.id, text.trim(), priority, subcategoryId, selectedDate);
+  // A dry run of the repeat editor, so the person sees what Apply will do first.
+  const preview = useMemo(
+    () =>
+      repeatOpen && sub && sub.date
+        ? applySeriesDays({ ...plan, anchor: sub, days: repeatDraft, endDate, seed: 0 })
+        : null,
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [repeatOpen, repeatDraft, goal.subcategories, goal.tasks, sub, endDate]
+  );
+
+  const sameDays = sortWeekdays(repeatDraft).join() === sortWeekdays(repeatDays).join();
+  const repeatChanged =
+    !!preview && repeatDraft.length > 0 && (!repeating || !sameDays || preview.added > 0 || preview.removed > 0);
+
+  const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`;
+
+  const previewText = (): string => {
+    if (repeatDraft.length === 0) return 'Pick at least one day.';
+    if (!preview) return '';
+    const parts: string[] = [];
+    if (preview.added > 0) parts.push(`adds ${plural(preview.added, 'day')}`);
+    if (preview.removed > 0) {
+      parts.push(
+        `removes ${plural(preview.removed, 'later day')}${
+          preview.removedTasks > 0 ? ` and ${plural(preview.removedTasks, 'task')}` : ''
+        }`
+      );
+    }
+    const until = formatMonthKey(endDate.slice(0, 7));
+    return parts.length > 0
+      ? `Every ${describeDays(repeatDraft)} until ${until}: ${parts.join(', ')}.`
+      : repeatChanged
+      ? `Every ${describeDays(repeatDraft)} until ${until}.`
+      : 'Already repeating on these days.';
+  };
+
+  const startRename = () => {
+    setNameDraft(name);
+    setRenaming(true);
+  };
+
+  const saveRename = () => {
+    const next = nameDraft.trim();
+    if (next && next !== name && onRename) onRename(next);
+    setRenaming(false);
+  };
+
+  const openRepeat = () => {
+    setRepeatDraft(repeating && repeatDays.length > 0 ? repeatDays : sub?.date ? [weekdayOf(sub.date)] : []);
+    setConfirm(null);
+    setRepeatOpen(true);
+  };
+
+  const confirmText = (): string => {
+    if (confirm === 'delete-one') {
+      return `Delete “${name}” for this day${
+        tasks.length > 0 ? ` and its ${plural(tasks.length, 'task')}` : ''
+      }?`;
+    }
+    if (confirm === 'delete-future') {
+      return `Delete “${name}” from this day on? That removes ${plural(later.days + 1, 'day')} and ${plural(
+        tasks.length + later.tasks,
+        'task'
+      )}.`;
+    }
+    return `Stop repeating “${name}”? ${plural(later.days, 'later day')} and ${plural(
+      later.tasks,
+      'task'
+    )} will be removed. This day stays.`;
+  };
+
+  const runConfirm = () => {
+    if (confirm === 'delete-one') onDelete?.('one');
+    else if (confirm === 'delete-future') onDelete?.('future');
+    else if (confirm === 'stop') onChangeRepeat?.([]);
+    setConfirm(null);
+  };
+
+  const menuSections: MenuSection[] = [];
+  if (sub && canManage) {
+    const actions: MenuSection['items'] = [];
+    if (onRename) {
+      actions.push({
+        key: 'rename',
+        label: 'Rename',
+        icon: <Pencil className="w-3.5 h-3.5" />,
+        onClick: startRename,
+      });
+    }
+    if (onChangeRepeat && sub.date) {
+      actions.push({
+        key: 'repeat',
+        label: repeating ? 'Edit repeat…' : 'Repeat weekly…',
+        icon: <Repeat className="w-3.5 h-3.5" />,
+        onClick: openRepeat,
+      });
+    }
+    if (onChangeRepeat && repeating) {
+      actions.push({
+        key: 'stop',
+        label: 'Stop repeating',
+        icon: <CalendarX className="w-3.5 h-3.5" />,
+        onClick: () => {
+          setRepeatOpen(false);
+          setConfirm('stop');
+        },
+      });
+    }
+    menuSections.push({ items: actions });
+
+    if (canSetRole && onSetRole) {
+      menuSections.push({
+        heading: 'Who can edit',
+        items: [
+          {
+            key: 'role-all',
+            label: 'Client & Pros',
+            active: !sub.editorRole,
+            onClick: () => onSetRole(''),
+          },
+          ...PROFESSIONAL_ROLES.map((role) => ({
+            key: `role-${role}`,
+            label: `${role} only`,
+            active: sub.editorRole === role,
+            onClick: () => onSetRole(role),
+          })),
+        ],
+      });
+    }
+
+    if (onDelete) {
+      const removals: MenuSection['items'] = [
+        {
+          key: 'delete',
+          label: repeating ? 'Delete this day' : 'Delete subcategory',
+          icon: <Trash2 className="w-3.5 h-3.5" />,
+          danger: true,
+          onClick: () => {
+            setRepeatOpen(false);
+            setConfirm('delete-one');
+          },
+        },
+      ];
+      if (repeating) {
+        removals.push({
+          key: 'delete-future',
+          label: 'Delete this & later days',
+          icon: <Trash2 className="w-3.5 h-3.5" />,
+          danger: true,
+          onClick: () => {
+            setRepeatOpen(false);
+            setConfirm('delete-future');
+          },
+        });
+      }
+      menuSections.push({ items: removals });
+    }
+  }
+
+  const handleAddTask = (event: React.FormEvent) => {
+    event.preventDefault();
+    const value = text.trim();
+    if (!value || !onAddTask) return;
+    onAddTask(value, priority, repeating && later.days > 0 && forward);
     setText('');
   };
 
-  const handleSaveRename = () => {
-    const next = editVal.trim();
-    if (next && next !== name && onRename) {
-      onRename(next);
-    } else {
-      setEditVal(name);
-    }
-    setEditing(false);
-  };
-
   return (
-    <div
-      className={`rounded-xl border overflow-hidden bg-white shadow-2xs ${
-        !isOwner ? 'border-blue-200/80' : 'border-violet-200/80'
-      }`}
-    >
-      <div
-        className={`flex flex-wrap sm:flex-nowrap items-center justify-between gap-1.5 p-2 border-b transition ${
-          !isOwner ? 'bg-blue-50/50 border-blue-100/80' : 'bg-violet-50/40 border-violet-100/80'
-        }`}
-      >
-        {/* Toggle Expand / Collapse Button */}
-        <div className="flex items-center gap-1.5 min-w-0 flex-1">
-          <GlassIconButton
-            onClick={onToggle}
-            variant={!isOwner ? 'blue' : 'purple'}
-            size="sm"
-            title={expanded ? 'Collapse group' : 'Expand group to see tasks'}
-            aria-expanded={expanded}
-          >
-            {expanded ? (
-              <ChevronDown className="w-3.5 h-3.5 stroke-[2.5]" />
-            ) : (
-              <ChevronRight className="w-3.5 h-3.5 stroke-[2.5]" />
-            )}
-          </GlassIconButton>
+    <section className="neu rounded-2xl">
+      <div className="flex items-center gap-2 px-3 py-2.5">
+        <GlassIconButton
+          variant="tone"
+          size="sm"
+          onClick={onToggle}
+          aria-expanded={expanded}
+          title={expanded ? 'Collapse' : 'Expand'}
+        >
+          {expanded ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
+        </GlassIconButton>
 
-          {editing ? (
-            <div className="flex-1 flex flex-wrap sm:flex-nowrap items-center gap-1.5 min-w-0 py-0.5">
-              <input
-                type="text"
-                value={editVal}
-                onChange={(e) => setEditVal(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') {
-                    e.preventDefault();
-                    handleSaveRename();
-                  }
-                  if (e.key === 'Escape') {
-                    setEditVal(name);
-                    setEditing(false);
-                  }
-                }}
-                autoFocus
-                className={`flex-1 min-w-[140px] text-sm font-semibold text-slate-900 bg-white border rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-2 ${
-                  !isOwner
-                    ? 'border-blue-500 focus:ring-blue-500/20'
-                    : 'border-violet-600 focus:ring-violet-600/20'
-                }`}
-                placeholder="Subcategory name..."
-              />
-              <div className="flex items-center gap-1">
-                <button
-                  type="button"
-                  onClick={handleSaveRename}
-                  className={`px-3 py-1.5 text-white rounded-lg text-xs font-semibold shadow-2xs transition cursor-pointer flex items-center gap-1 active:scale-95 ${
-                    !isOwner
-                      ? 'bg-blue-700 hover:bg-blue-800'
-                      : 'bg-violet-800 hover:bg-violet-900'
-                  }`}
-                  title="Save changes"
-                >
-                  <Check className="w-3.5 h-3.5 stroke-[2.5]" />
-                  <span>Save</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setEditVal(name);
-                    setEditing(false);
-                  }}
-                  className="px-2.5 py-1.5 bg-slate-200/80 hover:bg-slate-300 text-slate-700 rounded-lg text-xs font-medium transition cursor-pointer active:scale-95"
-                  title="Cancel"
-                >
-                  Cancel
-                </button>
-              </div>
-            </div>
-          ) : (
+        {renaming ? (
+          <div className="flex-1 min-w-0 flex items-center gap-1.5">
+            <input
+              type="text"
+              value={nameDraft}
+              onChange={(e) => setNameDraft(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  saveRename();
+                }
+                if (e.key === 'Escape') setRenaming(false);
+              }}
+              autoFocus
+              aria-label="Subcategory name"
+              className="flex-1 min-w-0 text-sm font-semibold rounded-xl px-3 py-1.5"
+            />
+            <GlassIconButton variant="tone" size="md" onClick={saveRename} title="Save name">
+              <Check className="w-4 h-4" />
+            </GlassIconButton>
+            <GlassIconButton variant="slate" size="md" onClick={() => setRenaming(false)} title="Cancel">
+              <X className="w-4 h-4" />
+            </GlassIconButton>
+          </div>
+        ) : (
+          <>
             <button
               type="button"
+              data-plain
               onClick={onToggle}
-              className="flex-1 min-w-0 text-left py-1 pr-1 cursor-pointer group"
+              className="min-w-0 flex-1 text-left cursor-pointer"
             >
-              <span
-                className={`block text-sm font-bold text-slate-800 transition-colors truncate ${
-                  !isOwner ? 'group-hover:text-blue-700' : 'group-hover:text-violet-800'
-                }`}
-              >
-                {name}
-              </span>
+              <span className="block truncate text-sm font-bold text-slate-800">{name}</span>
             </button>
-          )}
-        </div>
 
-        {/* Right side controls: Count, Role, Edit, Delete */}
-        {!editing && (
-          <div className="flex items-center gap-1 sm:gap-1.5 flex-shrink-0 ml-auto pl-1">
-            <span
-              className={`text-[11px] font-semibold tabular-nums px-1.5 sm:px-2 py-0.5 rounded-md bg-white border shadow-2xs ${
-                !isOwner
-                  ? 'text-blue-950 border-blue-200'
-                  : 'text-violet-900 border-violet-200'
-              }`}
-            >
+            {repeating && repeatDays.length > 0 && (
+              <span className="badge shrink-0 max-sm:hidden!" title="Repeats every week">
+                <Repeat className="w-3 h-3" />
+                {describeDays(repeatDays)}
+              </span>
+            )}
+            {sub?.editorRole && <span className="badge shrink-0">{sub.editorRole} only</span>}
+            <span className="badge tabular-nums shrink-0">
               {done}/{tasks.length}
             </span>
-
-            {onSetRole ? (
-              <select
-                value={editorRole || ''}
-                onClick={(e) => e.stopPropagation()}
-                onChange={(e) => onSetRole(e.target.value)}
-                className={`text-[10px] sm:text-[11px] font-medium text-slate-700 bg-white border border-slate-200 rounded-lg px-1.5 sm:px-2 py-1 max-w-[6.5rem] sm:max-w-[8.5rem] cursor-pointer focus:ring-1 focus:outline-none shadow-2xs ${
-                  !isOwner
-                    ? 'hover:border-blue-300 focus:ring-blue-500'
-                    : 'hover:border-violet-300 focus:ring-violet-600'
-                }`}
-                title="Assign role to this subcategory"
-              >
-                <option value="">Client & Pros</option>
-                {PROFESSIONAL_ROLES.map((r) => (
-                  <option key={r} value={r}>
-                    {r} only
-                  </option>
-                ))}
-              </select>
-            ) : editorRole ? (
-              <span
-                className={`text-[10px] font-bold px-1.5 py-0.5 rounded-md border ${
-                  !isOwner
-                    ? 'text-blue-900 bg-blue-50 border-blue-200'
-                    : 'text-violet-900 bg-violet-50 border-violet-200'
-                }`}
-              >
-                {editorRole}
-              </span>
-            ) : null}
-
-            {canRename && (
-              <GlassIconButton
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setEditVal(name);
-                  setEditing(true);
-                }}
-                variant={!isOwner ? 'blue' : 'purple'}
-                size="sm"
-                title="Edit / Rename Subcategory"
-              >
-                <Edit2 className="w-3.5 h-3.5" />
-              </GlassIconButton>
-            )}
-
-            {canDelete && onDelete && (
-              <GlassIconButton
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onDelete();
-                }}
-                variant="rose"
-                size="sm"
-                title="Delete subcategory"
-              >
-                <Trash2 className="w-3.5 h-3.5" />
-              </GlassIconButton>
-            )}
-          </div>
+          </>
         )}
+
+        {!renaming && <MenuButton sections={menuSections} title="Subcategory actions" />}
       </div>
 
-      {expanded && (
-        <div
-          className={`border-t p-2.5 sm:p-3 space-y-2 bg-white ${
-            !isOwner ? 'border-blue-100' : 'border-violet-100'
-          }`}
-        >
-          {canAdd && onAddTask && (
-            <form onSubmit={handleSubmit} className="space-y-1.5 sm:space-y-2">
-              <div className="flex gap-1.5 sm:gap-2">
-                <input
-                  type="text"
-                  placeholder="Add a task…"
-                  value={text}
-                  onChange={(e) => setText(e.target.value)}
-                  className={`flex-1 text-xs sm:text-sm bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-800 placeholder-slate-400 focus:outline-none focus:bg-white focus:ring-2 ${
-                    !isOwner
-                      ? 'focus:ring-blue-500/20 focus:border-blue-600'
-                      : 'focus:ring-violet-600/20 focus:border-violet-700'
-                  }`}
-                />
-                <button
-                  type="submit"
-                  disabled={!text.trim()}
-                  className={`px-3 sm:px-4 py-2 disabled:opacity-40 text-white text-xs sm:text-sm font-semibold rounded-xl transition cursor-pointer shrink-0 shadow-2xs ${
-                    !isOwner
-                      ? 'bg-blue-700 hover:bg-blue-800'
-                      : 'bg-violet-800 hover:bg-violet-900'
-                  }`}
-                >
-                  Add
-                </button>
-              </div>
-              <div className="flex items-center gap-1.5 text-xs text-slate-500">
-                <span className="text-[11px] sm:text-xs">Priority:</span>
-                <select
-                  value={priority}
-                  onChange={(e) => setPriority(e.target.value as 'high' | 'medium' | 'low')}
-                  className={`bg-slate-50 border border-slate-200 rounded-lg px-2 py-0.5 text-slate-700 focus:outline-none focus:ring-1 text-[11px] sm:text-xs ${
-                    !isOwner ? 'focus:ring-blue-500' : 'focus:ring-violet-600'
-                  }`}
-                >
-                  <option value="high">High</option>
-                  <option value="medium">Medium</option>
-                  <option value="low">Low</option>
-                </select>
-              </div>
-            </form>
-          )}
+      {confirm && (
+        <div className="mx-3 mb-3 neu-inset-sm px-3.5 py-3 flex flex-wrap items-center gap-3">
+          <p className="flex-1 min-w-[12rem] text-xs font-medium text-slate-700">{confirmText()}</p>
+          <button type="button" className="chip px-3 py-1.5 text-xs" onClick={() => setConfirm(null)}>
+            Keep
+          </button>
+          <button type="button" className="btn-danger px-3.5 py-1.5 text-xs" onClick={runConfirm}>
+            {confirm === 'stop' ? 'Stop repeating' : 'Yes, delete'}
+          </button>
+        </div>
+      )}
 
+      {repeatOpen && sub && (
+        <div className="mx-3 mb-3 neu-inset-sm p-3.5 space-y-3">
+          <div className="flex items-center justify-between gap-3 flex-wrap">
+            <span className="section-label">Repeat every</span>
+            <WeekdayPicker value={repeatDraft} onChange={setRepeatDraft} />
+          </div>
+          <p className="text-[11px] font-medium text-slate-600">{previewText()}</p>
+          <div className="flex justify-end gap-2">
+            <button type="button" className="chip px-3 py-1.5 text-xs" onClick={() => setRepeatOpen(false)}>
+              Cancel
+            </button>
+            <button
+              type="button"
+              className="btn-tone px-3.5 py-1.5 text-xs"
+              disabled={!repeatChanged}
+              onClick={() => {
+                onChangeRepeat?.(sortWeekdays(repeatDraft));
+                setRepeatOpen(false);
+              }}
+            >
+              Apply from this day
+            </button>
+          </div>
+        </div>
+      )}
+
+      {expanded && (
+        <div className="px-3 pb-3 space-y-2.5">
           {sortedTasks.length === 0 ? (
-            <div className="text-center py-4 text-slate-400 text-xs">
-              {canAdd ? 'No tasks yet. Add one above.' : 'No tasks in this group.'}
-            </div>
+            <p className="px-1 text-xs text-slate-500">
+              {canEditTasks ? 'No tasks yet. Add the first one below.' : 'No tasks in this group.'}
+            </p>
           ) : (
-            sortedTasks.map((t) => (
-              <div
-                key={t.id}
-                className={`p-2.5 sm:p-3 rounded-xl border transition ${
-                  t.completed
-                    ? !isOwner
-                      ? 'bg-blue-50/20 border-blue-100 text-slate-400'
-                      : 'bg-violet-50/20 border-violet-100 text-slate-400'
-                    : !isOwner
-                    ? 'bg-white border-slate-200 text-slate-800 shadow-2xs hover:border-blue-200'
-                    : 'bg-white border-slate-200 text-slate-800 shadow-2xs hover:border-violet-200'
-                }`}
-              >
-                {editingTaskId === t.id ? (
-                  <div className="space-y-2">
-                    <input
-                      type="text"
-                      value={editTaskText}
-                      onChange={(e) => setEditTaskText(e.target.value)}
-                      className={`w-full text-xs sm:text-sm bg-slate-50 border border-slate-300 rounded-lg px-3 py-1.5 text-slate-800 focus:outline-none focus:bg-white focus:ring-2 font-medium ${
-                        !isOwner
-                          ? 'focus:ring-blue-500/20 focus:border-blue-600'
-                          : 'focus:ring-violet-600/20 focus:border-violet-700'
+            <ul className="neu-inset-sm p-1.5 space-y-0.5">
+              {sortedTasks.map((t) => {
+                const level: Priority = t.priority || 'medium';
+
+                if (editingTaskId === t.id) {
+                  const save = () => {
+                    if (editText.trim() && onUpdateTask) {
+                      onUpdateTask(t.id, { text: editText.trim(), priority: editPriority });
+                    }
+                    setEditingTaskId(null);
+                  };
+                  return (
+                    <li key={t.id} className="flex flex-wrap items-center gap-2 px-2 py-1.5">
+                      <input
+                        type="text"
+                        value={editText}
+                        autoFocus
+                        aria-label="Task"
+                        onChange={(e) => setEditText(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            save();
+                          }
+                          if (e.key === 'Escape') setEditingTaskId(null);
+                        }}
+                        className="flex-1 min-w-[10rem] text-sm font-medium rounded-xl px-3 py-2"
+                      />
+                      <PriorityKey value={editPriority} onChange={setEditPriority} />
+                      <GlassIconButton variant="tone" size="md" onClick={save} title="Save task">
+                        <Check className="w-4 h-4" />
+                      </GlassIconButton>
+                      <GlassIconButton variant="slate" size="md" onClick={() => setEditingTaskId(null)} title="Cancel">
+                        <X className="w-4 h-4" />
+                      </GlassIconButton>
+                    </li>
+                  );
+                }
+
+                return (
+                  <li
+                    key={t.id}
+                    className="group flex items-start gap-3 rounded-xl px-2.5 py-2 transition-colors hover:bg-white/45"
+                  >
+                    <label
+                      className={`flex items-start gap-3 flex-1 min-w-0 ${
+                        canEditTasks ? 'cursor-pointer' : 'cursor-default'
                       }`}
-                      autoFocus
-                    />
-                    <div className="flex items-center justify-between gap-2 flex-wrap">
-                      <select
-                        value={editTaskPriority}
-                        onChange={(e) => setEditTaskPriority(e.target.value as 'high' | 'medium' | 'low')}
-                        className="text-xs bg-slate-50 border border-slate-200 rounded-md px-2 py-1 text-slate-700"
-                      >
-                        <option value="high">High</option>
-                        <option value="medium">Medium</option>
-                        <option value="low">Low</option>
-                      </select>
-                      <div className="flex items-center gap-1.5">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            if (editTaskText.trim() && onUpdateTask) {
-                              onUpdateTask(goal.id, t.id, {
-                                text: editTaskText.trim(),
-                                priority: editTaskPriority,
-                              });
-                            }
-                            setEditingTaskId(null);
-                          }}
-                          className={`px-2.5 py-1 text-white rounded-md text-xs font-semibold cursor-pointer shadow-2xs ${
-                            !isOwner
-                              ? 'bg-blue-700 hover:bg-blue-800'
-                              : 'bg-violet-800 hover:bg-violet-900'
-                          }`}
-                        >
-                          Save
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setEditingTaskId(null)}
-                          className="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-md text-xs font-semibold cursor-pointer"
-                        >
-                          Cancel
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="flex items-start justify-between gap-2">
-                    <label className={`flex items-start gap-2.5 flex-1 min-w-0 pr-1 ${canEditTasks ? 'cursor-pointer' : 'cursor-default'}`}>
+                    >
                       <input
                         type="checkbox"
                         checked={t.completed}
                         disabled={!canEditTasks}
-                        onChange={() => onToggleTask && onToggleTask(goal.id, t.id)}
-                        className={`w-4 h-4 mt-0.5 rounded border-slate-300 disabled:opacity-40 shrink-0 cursor-pointer ${
-                          !isOwner
-                            ? 'accent-blue-700 text-blue-700 focus:ring-blue-500'
-                            : 'accent-violet-800 text-violet-800 focus:ring-violet-600'
-                        }`}
+                        onChange={() => onToggleTask?.(t.id)}
+                        className="w-4 h-4 mt-0.5 shrink-0 cursor-pointer disabled:opacity-50"
                       />
-                      <div className="flex flex-col min-w-0">
-                        <span
-                          className={`text-xs sm:text-sm break-words ${
-                            t.completed ? 'line-through text-slate-400' : 'font-medium text-slate-800'
-                          }`}
-                        >
-                          {t.text}
-                        </span>
-                        <div className="flex items-center gap-2 mt-1">
-                          <PriorityBadge priority={t.priority} />
-                        </div>
-                      </div>
+                      <span
+                        className={`text-sm break-words ${
+                          t.completed ? 'line-through text-slate-400' : 'font-medium text-slate-800'
+                        }`}
+                      >
+                        {t.text}
+                      </span>
                     </label>
 
-                    <div className="flex items-center gap-1 shrink-0">
-                      {canEditTasks && onUpdateTask && (
-                        <GlassIconButton
-                          onClick={() => {
-                            setEditingTaskId(t.id);
-                            setEditTaskText(t.text);
-                            setEditTaskPriority(t.priority || 'medium');
-                          }}
-                          variant={!isOwner ? 'blue' : 'purple'}
-                          size="xs"
-                          title="Edit task"
-                        >
-                          <Edit2 className="w-3 h-3" />
-                        </GlassIconButton>
-                      )}
-                      {canEditTasks && onDeleteTask && (
-                        <GlassIconButton
-                          onClick={() => onDeleteTask(goal.id, t.id)}
-                          variant="rose"
-                          size="xs"
-                          title="Delete task"
-                        >
-                          <Trash2 className="w-3 h-3" />
-                        </GlassIconButton>
-                      )}
-                    </div>
-                  </div>
-                )}
+                    <span
+                      className={`mt-1.5 w-2 h-2 rounded-full shrink-0 ${PRIORITY_DOT[level]}`}
+                      title={`${PRIORITY_LABEL[level]} priority`}
+                    />
+
+                    {canEditTasks && (onUpdateTask || onDeleteTask) && (
+                      <div className="flex items-center gap-1 shrink-0 transition-opacity sm:opacity-0 sm:group-hover:opacity-100 sm:focus-within:opacity-100">
+                        {onUpdateTask && (
+                          <GlassIconButton
+                            variant="tone"
+                            size="xs"
+                            title="Edit task"
+                            onClick={() => {
+                              setEditingTaskId(t.id);
+                              setEditText(t.text);
+                              setEditPriority(level);
+                            }}
+                          >
+                            <Pencil className="w-3 h-3" />
+                          </GlassIconButton>
+                        )}
+                        {onDeleteTask && (
+                          <GlassIconButton variant="rose" size="xs" title="Delete task" onClick={() => onDeleteTask(t.id)}>
+                            <Trash2 className="w-3 h-3" />
+                          </GlassIconButton>
+                        )}
+                      </div>
+                    )}
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+
+          {canEditTasks && onAddTask && (
+            <form onSubmit={handleAddTask} className="space-y-1.5">
+              <div className="flex flex-wrap items-center gap-2">
+                <input
+                  type="text"
+                  value={text}
+                  onChange={(e) => setText(e.target.value)}
+                  placeholder="Add a task…"
+                  aria-label="New task"
+                  className="flex-1 min-w-[10rem] text-sm rounded-xl px-3.5 py-2.5"
+                />
+                <PriorityKey value={priority} onChange={setPriority} />
+                <button type="submit" disabled={!text.trim()} className="btn-tone px-4 py-2.5 text-xs">
+                  Add
+                </button>
               </div>
-            ))
+              {repeating && later.days > 0 && (
+                <label className="flex items-center gap-2 px-1 text-[11px] font-medium text-slate-600 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={forward}
+                    onChange={(e) => setForward(e.target.checked)}
+                    className="w-3.5 h-3.5"
+                  />
+                  <span>Also add to the next {plural(later.days, 'day')} of this routine</span>
+                </label>
+              )}
+            </form>
           )}
         </div>
       )}
-    </div>
+    </section>
   );
 };

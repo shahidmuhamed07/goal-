@@ -51,7 +51,7 @@ const IconAction: React.FC<{
 }> = ({ onClick, title, tone = 'slate', children, badge, dot }) => {
   const tones: Record<string, string> = {
     blue: 'text-blue-700 bg-blue-50 hover:bg-blue-100 border-blue-200',
-    slate: 'text-slate-600 bg-slate-50 hover:bg-slate-100 border-slate-200',
+    slate: 'text-slate-600 bg-slate-300/30 hover:bg-slate-300/50 border-slate-300/40',
     violet: 'text-violet-800 bg-violet-50 hover:bg-violet-100 border-violet-200',
     rose: 'text-rose-600 bg-rose-50 hover:bg-rose-100 border-rose-200',
   };
@@ -261,15 +261,15 @@ export const CollaboratorsPanel: React.FC<CollaboratorsPanelProps> = ({
         </div>
 
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">Client Collaborators</h1>
-          <p className="text-sm text-slate-500 mt-1">
+          <h1 className="page-title">Client Collaborators</h1>
+          <p className="page-lede">
             Viewing team members and professionals connected to <strong>{activeClient?.displayName || activeClient?.email || 'this client'}</strong>.
           </p>
         </div>
 
         {/* WHO ALL THE PEOPLE ARE COLLABORATED WITH THIS CLIENT */}
         <div className="neu rounded-2xl p-6">
-          <h2 className="text-sm font-bold text-slate-900 uppercase tracking-wider flex items-center gap-2">
+          <h2 className="card-title flex items-center gap-2">
             <span>People Connected with this Client</span>
             <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-blue-100 text-blue-900">
               {collaborators.length}
@@ -291,11 +291,7 @@ export const CollaboratorsPanel: React.FC<CollaboratorsPanelProps> = ({
                 return (
                   <li
                     key={c.uid}
-                    className={`border rounded-xl p-4 space-y-2.5 transition ${
-                      isMe
-                        ? 'bg-blue-50/50 border-blue-300/80 shadow-2xs'
-                        : 'bg-white border-slate-200'
-                    }`}
+                    className="neu-inset-sm p-4 space-y-2.5"
                   >
                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                       <div className="flex items-center gap-2 flex-wrap">
@@ -320,7 +316,7 @@ export const CollaboratorsPanel: React.FC<CollaboratorsPanelProps> = ({
                         Assigned Goals:
                       </span>
                       {sharedGoals.length === 0 ? (
-                        <span className="text-xs text-slate-500 font-medium bg-slate-100 px-2 py-0.5 rounded-md">
+                        <span className="text-xs text-slate-500 font-medium bg-slate-300/30 px-2 py-0.5 rounded-md">
                           No goals shared
                         </span>
                       ) : (
@@ -352,7 +348,7 @@ export const CollaboratorsPanel: React.FC<CollaboratorsPanelProps> = ({
 
         {/* ALL CLIENTS YOU SUPPORT */}
         <div className="neu rounded-2xl p-6">
-          <h2 className="text-sm font-bold text-slate-900 uppercase tracking-wider">All Clients You Work With</h2>
+          <h2 className="card-title">All Clients You Work With</h2>
           <p className="text-xs text-slate-500 mt-1 mb-4">
             Switch between client accounts you have been approved to manage.
           </p>
@@ -367,11 +363,7 @@ export const CollaboratorsPanel: React.FC<CollaboratorsPanelProps> = ({
                 return (
                   <li
                     key={c.id}
-                    className={`flex items-center justify-between gap-3 border rounded-xl p-3.5 transition ${
-                      isActive
-                        ? 'bg-blue-50/70 border-blue-300'
-                        : 'bg-white border-slate-200 hover:border-slate-300'
-                    }`}
+                    className="neu-inset-sm flex items-center justify-between gap-3 p-3.5"
                   >
                     <div>
                       <div className="text-sm font-bold text-slate-900">
@@ -382,11 +374,8 @@ export const CollaboratorsPanel: React.FC<CollaboratorsPanelProps> = ({
                     <button
                       type="button"
                       onClick={() => onSwitchWorkspace(isActive ? user.uid : (c.id || ''))}
-                      className={`text-xs font-semibold px-3 py-1.5 rounded-lg cursor-pointer transition ${
-                        isActive
-                          ? 'bg-blue-700 text-white font-bold shadow-2xs'
-                          : 'border border-slate-200 text-slate-700 hover:bg-slate-50'
-                      }`}
+                      className="chip px-3 py-1.5 text-xs"
+                      data-active={isActive}
                     >
                       {isActive ? 'Current Client' : 'Switch Client'}
                     </button>
@@ -431,24 +420,24 @@ export const CollaboratorsPanel: React.FC<CollaboratorsPanelProps> = ({
       )}
 
       <div>
-        <h1 className="text-2xl font-bold text-slate-900">Collaborate</h1>
-        <p className="text-sm text-slate-500 mt-1">
+        <h1 className="page-title">Collaborate</h1>
+        <p className="page-lede">
           Share your code with a trainer, doctor, or dietitian. When you approve access, you can choose exactly which goals they are assigned to manage.
         </p>
       </div>
 
       <div className="neu rounded-2xl p-6">
-        <h2 className="text-sm font-bold text-slate-900 uppercase tracking-wider">My Code</h2>
+        <h2 className="card-title">My Code</h2>
         <p className="text-xs text-slate-400 mt-1 mb-4">Give this to a professional so they can request access to your account.</p>
         <div className="flex items-center gap-3">
-          <div className="font-mono text-2xl tracking-[0.3em] font-bold text-slate-900 bg-slate-50 border border-slate-200 rounded-xl px-5 py-3">
+          <div className="neu-inset-sm font-mono text-2xl tracking-[0.3em] font-bold text-slate-900 px-5 py-3">
             {profile?.code || '••••••'}
           </div>
           <button
             type="button"
             onClick={copyCode}
             disabled={!profile?.code}
-            className="text-xs font-semibold px-3 py-2 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 disabled:opacity-40 cursor-pointer"
+            className="chip px-3.5 py-2 text-xs"
           >
             {copied ? 'Copied' : 'Copy'}
           </button>
@@ -456,7 +445,7 @@ export const CollaboratorsPanel: React.FC<CollaboratorsPanelProps> = ({
       </div>
 
       <div className="neu rounded-2xl p-6">
-        <h2 className="text-sm font-bold text-slate-900 uppercase tracking-wider">Connect as Professional</h2>
+        <h2 className="card-title">Connect as Professional</h2>
         <p className="text-xs text-slate-400 mt-1 mb-4">Enter a client’s code and the role you are requesting.</p>
         <form onSubmit={handleSubmit} className="flex flex-col sm:flex-row gap-2">
           <input
@@ -465,12 +454,12 @@ export const CollaboratorsPanel: React.FC<CollaboratorsPanelProps> = ({
             placeholder="ABC123"
             value={codeInput}
             onChange={(e) => setCodeInput(e.target.value.toUpperCase())}
-            className="sm:w-36 font-mono tracking-widest text-sm bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600"
+            className="sm:w-36 font-mono tracking-widest text-sm rounded-xl px-3 py-2.5"
           />
           <select
             value={role}
             onChange={(e) => setRole(e.target.value as ProfessionalRole)}
-            className="text-sm bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600"
+            className="text-sm rounded-xl px-3 py-2.5"
           >
             {PROFESSIONAL_ROLES.map((r) => (
               <option key={r} value={r}>{r}</option>
@@ -478,7 +467,7 @@ export const CollaboratorsPanel: React.FC<CollaboratorsPanelProps> = ({
           </select>
           <button
             type="submit"
-            className="px-4 py-2.5 bg-violet-700 hover:bg-violet-800 text-white text-sm font-semibold rounded-xl press cursor-pointer"
+            className="btn-tone px-4 py-2.5 text-sm"
           >
             Request access
           </button>
@@ -504,7 +493,7 @@ export const CollaboratorsPanel: React.FC<CollaboratorsPanelProps> = ({
 
       {/* PENDING REQUESTS */}
       <div className="neu rounded-2xl p-6">
-        <h2 className="text-sm font-bold text-slate-900 uppercase tracking-wider">Pending requests</h2>
+        <h2 className="card-title">Pending requests</h2>
         <p className="text-xs text-slate-400 mt-1 mb-4">Professionals waiting for your approval. You will choose which goals to assign upon approving.</p>
         {incomingError && (
           <p className="text-xs text-rose-600 mb-3">
@@ -516,7 +505,7 @@ export const CollaboratorsPanel: React.FC<CollaboratorsPanelProps> = ({
         ) : (
           <ul className="space-y-3">
             {pendingIn.map((r) => (
-              <li key={r.id} className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border border-slate-200 rounded-xl p-4 bg-slate-50/50">
+              <li key={r.id} className="neu-inset-sm flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4">
                 <div>
                   <div className="flex items-center gap-2">
                     <span className="text-sm font-bold text-slate-900">{r.fromName || r.fromEmail || 'Professional'}</span>
@@ -538,7 +527,7 @@ export const CollaboratorsPanel: React.FC<CollaboratorsPanelProps> = ({
                   <button
                     type="button"
                     onClick={() => onDeny(r)}
-                    className="text-xs font-semibold px-3 py-2 rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50 cursor-pointer"
+                    className="chip px-3 py-2 text-xs"
                   >
                     Deny
                   </button>
@@ -551,7 +540,7 @@ export const CollaboratorsPanel: React.FC<CollaboratorsPanelProps> = ({
 
       {/* CONNECTED PROFESSIONALS */}
       <div className="neu rounded-2xl p-6">
-        <h2 className="text-sm font-bold text-slate-900 uppercase tracking-wider">Connected professionals</h2>
+        <h2 className="card-title">Connected professionals</h2>
         <p className="text-xs text-slate-400 mt-1 mb-4">
           People connected to your account. They can only edit daily tasks and subcategories in the goals assigned to them.
         </p>
@@ -565,12 +554,12 @@ export const CollaboratorsPanel: React.FC<CollaboratorsPanelProps> = ({
                 .filter((entry) => entry.level !== null);
 
               return (
-                <li key={c.uid} className="border border-slate-200 rounded-xl p-4 bg-white space-y-3">
+                <li key={c.uid} className="neu-inset-sm p-4 space-y-3">
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                     <div>
                       <div className="flex items-center gap-2">
                         <span className="text-sm font-bold text-slate-900">{c.name || c.email || c.uid}</span>
-                        <span className="text-xs font-semibold px-2 py-0.5 bg-slate-100 text-slate-700 border border-slate-200 rounded-md">
+                        <span className="badge">
                           {c.role}
                         </span>
                       </div>
@@ -578,7 +567,7 @@ export const CollaboratorsPanel: React.FC<CollaboratorsPanelProps> = ({
                     </div>
 
                     {confirmRemoveUid === c.uid ? (
-                      <div className="flex items-center gap-1.5 bg-rose-50 border border-rose-200 p-1 rounded-lg animate-in fade-in duration-150 shrink-0">
+                      <div className="neu-inset-sm flex items-center gap-1.5 p-1 shrink-0">
                         <button
                           type="button"
                           disabled={isRemoving}
@@ -591,7 +580,7 @@ export const CollaboratorsPanel: React.FC<CollaboratorsPanelProps> = ({
                               setConfirmRemoveUid(null);
                             }
                           }}
-                          className="text-xs font-bold bg-rose-600 hover:bg-rose-700 text-white px-2.5 py-1 rounded-md cursor-pointer transition shadow-2xs disabled:opacity-50"
+                          className="btn-danger px-2.5 py-1 text-xs"
                         >
                           {isRemoving ? 'Removing…' : 'Remove'}
                         </button>
@@ -599,7 +588,7 @@ export const CollaboratorsPanel: React.FC<CollaboratorsPanelProps> = ({
                           type="button"
                           disabled={isRemoving}
                           onClick={() => setConfirmRemoveUid(null)}
-                          className="text-xs font-semibold text-slate-600 hover:bg-slate-200 bg-slate-100 px-2 py-1 rounded-md cursor-pointer"
+                          className="chip px-2.5 py-1 text-xs"
                         >
                           Cancel
                         </button>
@@ -648,7 +637,7 @@ export const CollaboratorsPanel: React.FC<CollaboratorsPanelProps> = ({
                       Shared Goals:
                     </span>
                     {sharedGoals.length === 0 ? (
-                      <span className="text-xs text-slate-500 font-medium bg-slate-100 px-2 py-0.5 rounded-md border border-slate-200">
+                      <span className="text-xs text-slate-500 font-medium bg-slate-300/30 px-2 py-0.5 rounded-md">
                         No access to any goal
                       </span>
                     ) : (
@@ -680,7 +669,7 @@ export const CollaboratorsPanel: React.FC<CollaboratorsPanelProps> = ({
 
       {/* CLIENTS I SUPPORT */}
       <div className="neu rounded-2xl p-6">
-        <h2 className="text-sm font-bold text-slate-900 uppercase tracking-wider">Clients I support</h2>
+        <h2 className="card-title">Clients I support</h2>
         <p className="text-xs text-slate-400 mt-1 mb-4">Accounts that approved you as a professional.</p>
         {clientList.length === 0 ? (
           <p className="text-sm text-slate-400">You are not connected to any clients yet.</p>
@@ -695,7 +684,7 @@ export const CollaboratorsPanel: React.FC<CollaboratorsPanelProps> = ({
               return (
                 <li
                   key={c.id}
-                  className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 border border-slate-200 rounded-xl px-3.5 py-3"
+                  className="neu-inset-sm flex flex-wrap items-center justify-between gap-x-3 gap-y-2 px-3.5 py-3"
                 >
                   <div className="min-w-0">
                     <div className="text-sm font-semibold text-slate-900">{clientName}</div>
@@ -717,17 +706,14 @@ export const CollaboratorsPanel: React.FC<CollaboratorsPanelProps> = ({
                     <button
                       type="button"
                       onClick={() => onSwitchWorkspace(active ? user.uid : (c.id || ''))}
-                      className={`text-xs font-semibold px-2.5 py-1.5 rounded-lg cursor-pointer ${
-                        active
-                          ? 'bg-violet-700 text-white shadow-2xs'
-                          : 'border border-slate-200 text-slate-700 hover:bg-slate-50'
-                      }`}
+                      className="chip px-3 py-1.5 text-xs"
+                      data-active={active}
                     >
                       {active ? 'Viewing' : 'Open'}
                     </button>
 
                     {confirmRemoveClientId === c.id ? (
-                      <div className="flex items-center gap-1 bg-rose-50 border border-rose-200 p-1 rounded-lg">
+                      <div className="neu-inset-sm flex items-center gap-1 p-1">
                         <button
                           type="button"
                           disabled={isRemovingClient}
@@ -740,7 +726,7 @@ export const CollaboratorsPanel: React.FC<CollaboratorsPanelProps> = ({
                               setConfirmRemoveClientId(null);
                             }
                           }}
-                          className="text-[11px] font-bold bg-rose-600 hover:bg-rose-700 text-white px-2 py-1 rounded-md cursor-pointer transition shadow-2xs disabled:opacity-50"
+                          className="btn-danger px-2 py-1 text-[11px]"
                         >
                           {isRemovingClient ? '...' : 'Remove'}
                         </button>
@@ -748,7 +734,7 @@ export const CollaboratorsPanel: React.FC<CollaboratorsPanelProps> = ({
                           type="button"
                           disabled={isRemovingClient}
                           onClick={() => setConfirmRemoveClientId(null)}
-                          className="text-[11px] font-semibold text-slate-600 hover:bg-slate-200 bg-slate-100 px-2 py-1 rounded-md cursor-pointer"
+                          className="chip px-2.5 py-1 text-[11px]"
                         >
                           Cancel
                         </button>
@@ -774,11 +760,11 @@ export const CollaboratorsPanel: React.FC<CollaboratorsPanelProps> = ({
 
       {/* ASSIGN GOALS MODAL */}
       {isModalOpen && (
-        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-md flex items-center justify-center p-4 z-50 fade">
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-md flex items-center justify-center p-4 z-[60] fade">
           <div className="neu rounded-3xl max-w-lg w-full p-6 space-y-5 pop">
             <div>
               <div className="flex items-center justify-between">
-                <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-600 bg-emerald-50 px-2.5 py-0.5 rounded-md border border-emerald-100">
+                <span className="badge uppercase tracking-wider">
                   {modalTargetRequest ? 'Approve & Assign Goals' : 'Manage Assigned Goals'}
                 </span>
                 <button
@@ -833,7 +819,7 @@ export const CollaboratorsPanel: React.FC<CollaboratorsPanelProps> = ({
               </div>
 
               {goals.length === 0 ? (
-                <div className="text-center py-6 border border-dashed border-slate-200 rounded-2xl bg-slate-50/50 p-4">
+                <div className="neu-inset text-center py-6 p-4">
                   <p className="text-xs text-slate-500">
                     You haven't created any goals yet. You can approve access now, and assign goals later once you create them.
                   </p>
@@ -844,21 +830,21 @@ export const CollaboratorsPanel: React.FC<CollaboratorsPanelProps> = ({
                     const level = goalAccess[g.id];
                     const cardTone =
                       level === 'edit'
-                        ? 'bg-emerald-50/60 border-emerald-300'
+                        ? 'ring-2 ring-emerald-400/60'
                         : level === 'view'
-                          ? 'bg-sky-50/60 border-sky-300'
-                          : 'bg-slate-50/40 border-slate-200 hover:bg-slate-50';
+                          ? 'ring-2 ring-sky-400/60'
+                          : '';
                     return (
                       <div
                         key={g.id}
-                        className={`flex items-start justify-between gap-3 p-3 rounded-xl border transition ${cardTone}`}
+                        className={`neu-inset-sm flex items-start justify-between gap-3 p-3 transition ${cardTone}`}
                       >
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2">
                             <span className="text-sm font-semibold text-slate-900 truncate">
                               {g.title}
                             </span>
-                            <span className="text-[10px] font-bold text-slate-500 bg-white border border-slate-200 px-1.5 py-0.2 rounded">
+                            <span className="badge">
                               {g.category || 'General'}
                             </span>
                           </div>
@@ -872,11 +858,12 @@ export const CollaboratorsPanel: React.FC<CollaboratorsPanelProps> = ({
                           </div>
                         </div>
 
-                        <div className="flex items-center gap-1 bg-white/80 border border-slate-200 rounded-lg p-0.5 flex-shrink-0">
+                        <div className="neu-inset-sm flex items-center gap-1 p-0.5 flex-shrink-0">
                           <button
                             type="button"
                             onClick={() => setGoalLevel(g.id, null)}
                             title="No access"
+                            data-plain
                             className={`px-1.5 py-1 rounded-md transition cursor-pointer ${
                               !level ? 'bg-slate-700 text-white' : 'text-slate-400 hover:text-slate-600'
                             }`}
@@ -889,6 +876,7 @@ export const CollaboratorsPanel: React.FC<CollaboratorsPanelProps> = ({
                               type="button"
                               onClick={() => setGoalLevel(g.id, option.value)}
                               title={option.value === 'view' ? 'Read-only' : 'Can edit'}
+                              data-plain
                               className={`px-2 py-1 rounded-md text-[11px] font-semibold transition cursor-pointer flex items-center gap-1 ${
                                 level === option.value
                                   ? option.value === 'edit'
@@ -914,7 +902,7 @@ export const CollaboratorsPanel: React.FC<CollaboratorsPanelProps> = ({
               <button
                 type="button"
                 onClick={handleCloseModal}
-                className="text-xs font-semibold px-4 py-2.5 rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50 transition cursor-pointer"
+                className="chip px-4 py-2.5 text-xs"
               >
                 Cancel
               </button>
@@ -937,11 +925,11 @@ export const CollaboratorsPanel: React.FC<CollaboratorsPanelProps> = ({
 
       {/* CREDENTIALS MODAL: what a client can see about a connected professional */}
       {credentialTarget && (
-        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-md flex items-center justify-center p-4 z-50 fade">
-          <div className="bg-white rounded-3xl max-w-xl w-full p-6 shadow-2xl border border-slate-200 max-h-[90vh] overflow-y-auto space-y-4">
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-md flex items-center justify-center p-4 z-[60] fade">
+          <div className="neu rounded-3xl max-w-xl w-full p-6 max-h-[90vh] overflow-y-auto space-y-4 pop">
             <div className="flex items-start justify-between gap-3">
               <div>
-                <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-0.5 rounded-md">
+                <span className="badge uppercase tracking-wider">
                   Professional profile
                 </span>
                 <h3 className="text-lg font-bold text-slate-900 mt-2">
@@ -968,7 +956,7 @@ export const CollaboratorsPanel: React.FC<CollaboratorsPanelProps> = ({
             ) : credentialProfile ? (
               <ProfessionalProfileCard value={credentialProfile} />
             ) : (
-              <div className="border border-dashed border-slate-300 rounded-2xl p-6 text-center space-y-1">
+              <div className="neu-inset p-6 text-center space-y-1">
                 <p className="text-xs font-semibold text-slate-600">
                   This professional has not added a profile yet.
                 </p>
@@ -986,7 +974,7 @@ export const CollaboratorsPanel: React.FC<CollaboratorsPanelProps> = ({
               <button
                 type="button"
                 onClick={() => setCredentialTarget(null)}
-                className="text-xs font-semibold px-4 py-2 rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50 transition cursor-pointer"
+                className="chip px-4 py-2 text-xs"
               >
                 Close
               </button>

@@ -43,8 +43,8 @@ export const AccountProfilePanel: React.FC<AccountProfilePanelProps> = ({
   return (
     <div className="space-y-5 max-w-2xl">
       <div>
-        <h1 className="text-2xl font-bold text-slate-900">Your profile</h1>
-        <p className="text-sm text-slate-500 mt-1">
+        <h1 className="page-title">Your profile</h1>
+        <p className="page-lede">
           Your account details, and the code a trainer, dietitian or doctor uses to connect with you.
         </p>
       </div>
@@ -58,7 +58,7 @@ export const AccountProfilePanel: React.FC<AccountProfilePanelProps> = ({
             className="w-16 h-16 rounded-full object-cover shrink-0 border border-slate-200"
           />
         ) : (
-          <span className="w-16 h-16 rounded-full grid place-items-center text-xl font-black text-white bg-gradient-to-br from-emerald-500 to-teal-700 shrink-0">
+          <span className="w-16 h-16 rounded-full grid place-items-center text-xl font-black text-white bg-gradient-to-br from-emerald-400 to-purple-500 shrink-0">
             {initial}
           </span>
         )}
@@ -78,19 +78,19 @@ export const AccountProfilePanel: React.FC<AccountProfilePanelProps> = ({
 
       {/* Connection code */}
       <div className="neu rounded-2xl p-5 sm:p-6">
-        <h2 className="text-sm font-bold text-slate-900 uppercase tracking-wider">Your connection code</h2>
+        <h2 className="card-title">Your connection code</h2>
         <p className="text-xs text-slate-400 mt-1 mb-4">
           Share this with a professional so they can request access to support your goals.
         </p>
         <div className="flex items-center gap-3">
-          <div className="font-mono text-2xl tracking-[0.3em] font-bold text-slate-900 bg-slate-50 border border-slate-200 rounded-xl px-5 py-3">
+          <div className="neu-inset-sm font-mono text-2xl tracking-[0.3em] font-bold text-slate-900 px-5 py-3">
             {profile?.code || '••••••'}
           </div>
           <button
             type="button"
             onClick={copyCode}
             disabled={!profile?.code}
-            className="text-xs font-semibold px-3 py-2 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 disabled:opacity-40 cursor-pointer flex items-center gap-1.5"
+            className="chip flex items-center gap-1.5 px-3.5 py-2 text-xs"
           >
             {copied ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
             <span>{copied ? 'Copied' : 'Copy'}</span>
@@ -106,7 +106,7 @@ export const AccountProfilePanel: React.FC<AccountProfilePanelProps> = ({
           </span>
           <div className="min-w-0">
             <h2 className="text-base font-bold text-slate-900">Work with clients as a professional</h2>
-            <p className="text-sm text-slate-500 mt-1 leading-relaxed">
+            <p className="page-lede leading-relaxed">
               Turn on a professional profile to connect with clients using their code, and support their
               goals as a trainer, dietitian or doctor. You keep your own goals exactly as they are.
             </p>
