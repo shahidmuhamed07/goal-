@@ -10,3 +10,6 @@ __chrome.html
 .env*
 !.env.example
 goal-path-9f4cc-firebase-adminsdk-fbsvc-d063bff0ea.json
+*.tsbuildinfo
+.env
+*-firebase-adminsdk-*.json
