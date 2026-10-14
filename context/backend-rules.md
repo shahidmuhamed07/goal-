@@ -4,6 +4,7 @@
 > There is **no custom backend** — "backend" here means Firebase Auth + Cloud Firestore + `firestore.rules`.
 > Flows and UI-side permission helpers → [architecture.md](architecture.md). Last verified against the code: 2026-10-11 (commit `1e75ab7`).
 > **Source of truth for access: `firestore.rules`.** This file explains it; if they disagree, the rules file wins — then fix this file.
+> **Repo layout changed on 2026-10-14:** the app now lives in `apps/web/`. A path written here as `src/…` means `apps/web/src/…`. See the root `README.md` for the full layout.
 
 ## 1. Services & configuration
 

@@ -1,0 +1,7 @@
+{
+  "name": "@goalpath/api",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Goal Path backend (Express + MongoDB). Not built yet: this folder holds its place.",
+  "type": "module"
+}
