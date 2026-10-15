@@ -8,7 +8,7 @@ This repository holds everything in one place (a *monorepo*):
 |---|---|---|
 | `apps/web` | The app people use. React + Vite, login with Firebase Auth. | Live |
 | `apps/admin` | The admin dashboard: banners, popups, pages and starter plans. | Working, with practice data |
-| `apps/api` | The backend (Express + MongoDB). | Not built yet |
+| `apps/api` | The backend (Express + MongoDB). Serves live content and the admin routes. | Working; admin routes have no login yet |
 | `packages/shared` | Types and rules the three programs above agree on. | Working |
 | `context/` | Project notes: overview, architecture, UI, rules, progress. | Keep updated |
 
@@ -38,7 +38,7 @@ admin  ──writes──►  content (banners, popups, pages, plans)  ──rea
          └── both use the types in packages/shared ──┘
 ```
 
-Today the admin keeps its content in the browser (practice mode). When `apps/api` exists it will store the content in MongoDB, and the admin and the app will both talk to it. The admin already uses a `ContentApi` interface, so that swap changes one file.
+The admin saves content through `apps/api` into MongoDB; the app asks the API what is live right now. Set up the database once with `npm run db:setup -w @goalpath/api`, then `npm run db:check -w @goalpath/api`. Run the API with `npm run start -w @goalpath/api`. The admin's practice mode (browser storage) is still available with `VITE_USE_MOCK=true`.
 
 ## Working here
 

@@ -18,8 +18,8 @@ export function PlansPage() {
       await save(plan);
       notify(editing?.isNew ? 'Plan created' : 'Plan saved');
       setEditing(null);
-    } catch {
-      notify('Could not save. Please try again.', true);
+    } catch (e) {
+      notify(e instanceof Error ? e.message : 'Could not save. Please try again.', true);
     }
   };
 
@@ -29,8 +29,8 @@ export function PlansPage() {
       await remove(plan.id);
       notify('Plan deleted');
       setEditing(null);
-    } catch {
-      notify('Could not delete. Please try again.', true);
+    } catch (e) {
+      notify(e instanceof Error ? e.message : 'Could not delete. Please try again.', true);
     }
   };
 

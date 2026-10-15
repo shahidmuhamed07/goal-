@@ -18,8 +18,8 @@ export function PagesPage() {
       await save(page);
       notify(editing?.isNew ? 'Page created' : 'Page saved');
       setEditing(null);
-    } catch {
-      notify('Could not save. Please try again.', true);
+    } catch (e) {
+      notify(e instanceof Error ? e.message : 'Could not save. Please try again.', true);
     }
   };
 
@@ -29,8 +29,8 @@ export function PagesPage() {
       await remove(page.id);
       notify('Page deleted');
       setEditing(null);
-    } catch {
-      notify('Could not delete. Please try again.', true);
+    } catch (e) {
+      notify(e instanceof Error ? e.message : 'Could not delete. Please try again.', true);
     }
   };
 

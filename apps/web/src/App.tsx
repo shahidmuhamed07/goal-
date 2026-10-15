@@ -99,6 +99,8 @@ import {
 import { LoginScreen } from './components/LoginScreen';
 import { AppSelect } from './components/AppSelect';
 import { Orb } from './components/Orb';
+import { CmsBanners } from './cms/CmsBanners';
+import { useLiveBanners } from './cms/useLiveBanners';
 import { ProgressBar, GoalPathLogo, GoalPathLoader, GlassIconButton, GlassBadge, StreakBadge } from './components/UIElements';
 import { DailyTaskSection } from './components/DailyTaskSection';
 import { SubcategoryBlock } from './components/SubcategoryBlock';
@@ -599,6 +601,9 @@ export default function App() {
   useEffect(() => {
     if (needsOnboarding) setPersonaPickerOpen(true);
   }, [needsOnboarding]);
+
+  // Banners the admin has published for this kind of person. Empty when the API is unreachable.
+  const liveBanners = useLiveBanners(user ? (profile?.persona === 'professional' ? 'professional' : 'owner') : undefined);
   const workspaceProfile = isOwner
     ? profile
     : activeClientProfile || clientList.find((c) => c.id === workspaceUid) || null;
@@ -2488,6 +2493,9 @@ export default function App() {
         </div>
       </header>
 
+      {/* Announcement bar from the admin */}
+      <CmsBanners banners={liveBanners} placement="announcement-bar" />
+
       {/* VIEW SWITCHER TABS BAR */}
       <div className="hidden sm:block px-2.5 sm:px-6 py-2 sm:py-3">
         <div className="max-w-6xl mx-auto flex items-center justify-between gap-3">
@@ -2664,6 +2672,9 @@ export default function App() {
                 </div>
                   </>
                 )}
+
+                {/* Banner from the admin, above the goal list */}
+                {isOwner && <CmsBanners banners={liveBanners} placement="goals-banner" />}
 
                 {/* Clients you work with: one row each, and the whole row is the
                     control, so nobody has to guess that a name is clickable. */}
@@ -2856,6 +2867,9 @@ export default function App() {
                     height="h-2.5"
                   />
                 )}
+
+                {/* Card from the admin, under the progress bar */}
+                <CmsBanners banners={liveBanners} placement="today-card" limit={1} />
 
                 {/* Goals Work Breakdown for Today */}
                 {goals.length === 0 ? (

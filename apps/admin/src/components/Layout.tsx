@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
 import { FileText, Gauge, LayoutTemplate, Megaphone, Menu, MessageSquareMore, RotateCcw, Route } from 'lucide-react';
-import { api } from '../lib';
+import { api, apiLocation } from '../lib';
 import { useToast } from './Toasts';
 
 const NAV = [
@@ -49,6 +49,12 @@ export function Layout() {
           ))}
         </nav>
         <div className="sidebar-foot">
+          {!api.isMock && (
+            <div className="well small">
+              <b>Connected to the API</b>
+              <p className="muted">{apiLocation}</p>
+            </div>
+          )}
           {api.isMock && (
             <div className="well small">
               <b>Practice mode</b>

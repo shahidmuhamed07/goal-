@@ -23,8 +23,8 @@ export function BannersPage() {
       await save(banner);
       notify(editing?.isNew ? 'Banner created' : 'Banner saved');
       setEditing(null);
-    } catch {
-      notify('Could not save. Please try again.', true);
+    } catch (e) {
+      notify(e instanceof Error ? e.message : 'Could not save. Please try again.', true);
     }
   };
 
@@ -34,8 +34,8 @@ export function BannersPage() {
       await remove(banner.id);
       notify('Banner deleted');
       setEditing(null);
-    } catch {
-      notify('Could not delete. Please try again.', true);
+    } catch (e) {
+      notify(e instanceof Error ? e.message : 'Could not delete. Please try again.', true);
     }
   };
 

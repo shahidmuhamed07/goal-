@@ -159,3 +159,25 @@ export interface PlanTemplate extends ContentMeta {
   description: string;
   routines: RoutineTemplate[];
 }
+
+/* ---------------------------------------------------------- what the app gets */
+
+/** The four kinds of content the admin manages. Used as route and collection names. */
+export const CONTENT_COLLECTIONS = ['banners', 'popups', 'pages', 'plans'] as const;
+export type ContentCollection = (typeof CONTENT_COLLECTIONS)[number];
+
+/**
+ * A banner as the app receives it: only what is needed to draw it. Internal
+ * fields (name, status, dates, audience) stay on the server.
+ */
+export type PublicBanner = Pick<
+  Banner,
+  'id' | 'placement' | 'title' | 'body' | 'imageUrl' | 'ctaLabel' | 'ctaUrl' | 'tone' | 'priority'
+>;
+
+/** The reply of the public "what is live right now" route. */
+export interface LiveContent {
+  /** The server's clock, so the app can tell how fresh this is. ISO. */
+  serverTime: string;
+  banners: PublicBanner[];
+}

@@ -2,6 +2,29 @@
   "name": "@goalpath/api",
   "version": "0.0.0",
   "private": true,
-  "description": "Goal Path backend (Express + MongoDB). Not built yet: this folder holds its place.",
-  "type": "module"
+  "description": "Goal Path backend: serves live content to the app and lets the admin manage it. Express + MongoDB.",
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/server.ts",
+    "start": "tsx src/server.ts",
+    "test": "node --import tsx --test src/*.test.ts",
+    "lint": "tsc --noEmit",
+    "db:check": "tsx src/checkDb.ts",
+    "db:setup": "python3 -I scripts/set_mongo_uri.py"
+  },
+  "dependencies": {
+    "@goalpath/shared": "*",
+    "cors": "^2.8.5",
+    "dotenv": "^17.2.3",
+    "express": "^4.21.2",
+    "mongodb": "^6.10.0",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/cors": "^2.8.17",
+    "@types/express": "^4.17.21",
+    "@types/node": "^22.14.0",
+    "tsx": "^4.21.0",
+    "typescript": "~5.8.2"
+  }
 }

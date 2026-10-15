@@ -18,8 +18,8 @@ export function PopupsPage() {
       await save(popup);
       notify(editing?.isNew ? 'Popup created' : 'Popup saved');
       setEditing(null);
-    } catch {
-      notify('Could not save. Please try again.', true);
+    } catch (e) {
+      notify(e instanceof Error ? e.message : 'Could not save. Please try again.', true);
     }
   };
 
@@ -29,8 +29,8 @@ export function PopupsPage() {
       await remove(popup.id);
       notify('Popup deleted');
       setEditing(null);
-    } catch {
-      notify('Could not delete. Please try again.', true);
+    } catch (e) {
+      notify(e instanceof Error ? e.message : 'Could not delete. Please try again.', true);
     }
   };
 
