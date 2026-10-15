@@ -10,12 +10,15 @@ import {
   type LiveContent,
   type PublicBanner,
 } from '@goalpath/shared';
+import type { AdminAuth } from './auth';
 import { SCHEMAS } from './schemas';
 import { DuplicateError, type ContentStore, type Doc } from './store';
 
 export interface AppOptions {
   corsOrigins: string[];
   isProduction: boolean;
+  /** How admins prove who they are. Without it the admin is open on a developer's machine and locked in production. */
+  adminAuth?: AdminAuth;
   /** Lets tests control "now". */
   now?: () => Date;
 }
@@ -33,7 +36,7 @@ export function createApp(store: ContentStore, options: AppOptions) {
   const app = express();
   app.disable('x-powered-by');
   app.use(express.json({ limit: '256kb' }));
-  app.use(cors({ origin: options.corsOrigins, methods: ['GET', 'PUT', 'DELETE'] }));
+  app.use(cors({ origin: options.corsOrigins, methods: ['GET', 'PUT', 'DELETE'], allowedHeaders: ['content-type', 'authorization'] }));
 
   app.get('/health', (_req, res) => {
     res.json({ ok: true, time: now().toISOString() });
@@ -62,15 +65,41 @@ export function createApp(store: ContentStore, options: AppOptions) {
   });
 
   /**
-   * ADMIN. Anyone who can reach these routes can change content, so for now they
-   * only run outside production. Real protection (a Firebase login check, plus
-   * Cloudflare Access in front) comes next; until then they refuse to run live.
+   * ADMIN. Needs a valid login token from an email on the allowed list.
+   * Without any login set up: refused in production (fail closed), open on a
+   * developer's own machine so the project still runs before login is configured.
    */
-  const requireAdmin: RequestHandler = (_req, res, next) => {
-    if (options.isProduction) {
-      res.status(503).json({ error: 'admin_auth_not_configured' });
+  const requireAdmin: RequestHandler = async (req, res, next) => {
+    const auth = options.adminAuth;
+    if (!auth) {
+      if (options.isProduction) {
+        res.status(503).json({ error: 'admin_auth_not_configured' });
+        return;
+      }
+      next();
       return;
     }
+
+    const header = req.get('authorization') ?? '';
+    const token = header.startsWith('Bearer ') ? header.slice(7).trim() : '';
+    if (!token) {
+      res.status(401).json({ error: 'login_required' });
+      return;
+    }
+
+    let identity;
+    try {
+      identity = await auth.verify(token);
+    } catch {
+      res.status(401).json({ error: 'login_required' });
+      return;
+    }
+
+    if (!identity.emailVerified || !auth.allowedEmails.includes(identity.email)) {
+      res.status(403).json({ error: 'not_allowed' });
+      return;
+    }
+    res.locals.adminEmail = identity.email;
     next();
   };
 
@@ -84,6 +113,12 @@ export function createApp(store: ContentStore, options: AppOptions) {
     }
     res.locals.collection = value;
     next();
+  });
+
+  // Lets the admin screen ask "am I allowed in, and as whom?" right after sign-in.
+  adminRoutes.get('/me', (_req, res) => {
+    res.set('Cache-Control', 'no-store');
+    res.json({ email: res.locals.adminEmail ?? null });
   });
 
   adminRoutes.get('/:collection', async (_req, res, next) => {

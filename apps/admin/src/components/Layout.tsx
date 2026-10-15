@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
 import { FileText, Gauge, LayoutTemplate, Megaphone, Menu, MessageSquareMore, RotateCcw, Route } from 'lucide-react';
 import { api, apiLocation } from '../lib';
+import { useSession } from './AuthGate';
 import { useToast } from './Toasts';
 
 const NAV = [
@@ -17,6 +18,7 @@ export function Layout() {
   const [open, setOpen] = useState(false);
   const location = useLocation();
   const notify = useToast();
+  const session = useSession();
 
   useEffect(() => setOpen(false), [location.pathname]);
 
@@ -53,6 +55,14 @@ export function Layout() {
             <div className="well small">
               <b>Connected to the API</b>
               <p className="muted">{apiLocation}</p>
+              {session.email ? (
+                <>
+                  <p className="muted" style={{ marginTop: 6, overflowWrap: 'anywhere' }}>Signed in as {session.email}</p>
+                  <button className="btn quiet small" style={{ marginTop: 8 }} onClick={session.signOut}>Sign out</button>
+                </>
+              ) : (
+                <p className="muted" style={{ marginTop: 6 }}>No login on this server (local only).</p>
+              )}
             </div>
           )}
           {api.isMock && (

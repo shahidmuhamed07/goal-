@@ -127,3 +127,80 @@ describe('production safety', () => {
     assert.equal((await fetch(`${base}/api/content/live`)).status, 200);
   });
 });
+
+describe('admin login', () => {
+  // A fake token checker: the token text decides who you are.
+  const verify = async (token: string) => {
+    if (token === 'owner-token') return { email: 'owner@example.com', emailVerified: true };
+    if (token === 'stranger-token') return { email: 'stranger@example.com', emailVerified: true };
+    if (token === 'unverified-token') return { email: 'owner@example.com', emailVerified: false };
+    throw new Error('bad token');
+  };
+  const store = new MemoryStore();
+  const app = createApp(store, {
+    corsOrigins: ['http://localhost:3001'],
+    isProduction: true, // login must work in production, where the "open" fallback is off
+    adminAuth: { verify, allowedEmails: ['owner@example.com'] },
+    now: () => NOW,
+  });
+  const server = app.listen(0);
+  const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+  after(() => server.close());
+
+  const get = (path: string, token?: string) => fetch(`${base}${path}`, { headers: token ? { authorization: `Bearer ${token}` } : {} });
+
+  it('lets the owner in and says who they are', async () => {
+    const res = await get('/api/admin/me', 'owner-token');
+    assert.equal(res.status, 200);
+    assert.deepEqual(await res.json(), { email: 'owner@example.com' });
+  });
+
+  it('lets the owner read and write content', async () => {
+    const item = banner({ id: 'ban_auth' });
+    const res = await fetch(`${base}/api/admin/banners/${item.id}`, {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json', authorization: 'Bearer owner-token' },
+      body: JSON.stringify(item),
+    });
+    assert.equal(res.status, 200);
+    assert.equal((await get('/api/admin/banners', 'owner-token')).status, 200);
+  });
+
+  it('asks for a login when there is no token (401)', async () => {
+    assert.equal((await get('/api/admin/banners')).status, 401);
+  });
+
+  it('refuses a token that is not valid (401)', async () => {
+    assert.equal((await get('/api/admin/banners', 'forged-token')).status, 401);
+  });
+
+  it('refuses a real login that is not on the list (403)', async () => {
+    assert.equal((await get('/api/admin/banners', 'stranger-token')).status, 403);
+  });
+
+  it('refuses an email that is not verified (403)', async () => {
+    assert.equal((await get('/api/admin/banners', 'unverified-token')).status, 403);
+  });
+
+  it('refuses writes from a stranger and stores nothing', async () => {
+    const res = await fetch(`${base}/api/admin/banners/ban_evil`, {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json', authorization: 'Bearer stranger-token' },
+      body: JSON.stringify(banner({ id: 'ban_evil' })),
+    });
+    assert.equal(res.status, 403);
+    assert.ok(!(await store.list('banners')).some((b) => b.id === 'ban_evil'));
+  });
+
+  it('keeps public content open to everyone', async () => {
+    assert.equal((await get('/api/content/live')).status, 200);
+  });
+
+  it('allows the Authorization header in a browser preflight', async () => {
+    const res = await fetch(`${base}/api/admin/banners`, {
+      method: 'OPTIONS',
+      headers: { origin: 'http://localhost:3001', 'access-control-request-method': 'GET', 'access-control-request-headers': 'authorization' },
+    });
+    assert.match(res.headers.get('access-control-allow-headers') ?? '', /authorization/i);
+  });
+});

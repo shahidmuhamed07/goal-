@@ -1,4 +1,6 @@
 import { Navigate, Route, Routes } from 'react-router-dom';
+import { api } from './lib';
+import { AuthGate } from './components/AuthGate';
 import { Layout } from './components/Layout';
 import { ToastProvider } from './components/Toasts';
 import { BannersPage } from './features/banners/BannersPage';
@@ -8,7 +10,7 @@ import { PlansPage } from './features/plans/PlansPage';
 import { PopupsPage } from './features/popups/PopupsPage';
 
 export function App() {
-  return (
+  const routes = (
     <ToastProvider>
       <Routes>
         <Route element={<Layout />}>
@@ -22,4 +24,7 @@ export function App() {
       </Routes>
     </ToastProvider>
   );
+
+  // Practice mode has no server, so no login. Everything else waits for the API to say "welcome".
+  return api.isMock ? routes : <AuthGate>{routes}</AuthGate>;
 }

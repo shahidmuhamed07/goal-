@@ -233,3 +233,9 @@ td .sub { color: var(--ink-2); font-size: 13px; }
 .block-head .tag { background: var(--card); color: var(--ink-2); }
 
 @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
+
+/* --- sign-in screen ----------------------------------------------------- */
+.gate { min-height: 100%; display: grid; place-items: center; padding: 24px 16px;
+  background-image: radial-gradient(60% 40% at 0% 0%, color-mix(in srgb, var(--pink-soft) 70%, transparent) 0%, transparent 70%), radial-gradient(60% 40% at 100% 0%, color-mix(in srgb, var(--brand-soft) 70%, transparent) 0%, transparent 70%); }
+.gate-card { width: min(420px, 100%); display: grid; gap: 14px; justify-items: start; padding: 28px; }
+.error-text { color: var(--red); font-weight: 600; font-size: 14px; }
