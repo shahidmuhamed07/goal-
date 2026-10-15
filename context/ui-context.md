@@ -3,6 +3,7 @@
 > Read this for: look and feel, colours, reusable classes/components, animations, responsive behaviour, screens, UX rules, copy tone.
 > For data flow and permissions → [architecture.md](architecture.md). For code style → [coding-guidelines.md](coding-guidelines.md).
 > Last verified against the code: 2026-10-11 (commit `1e75ab7` plus the uncommitted Lovi redesign). Source of truth for styling: `src/index.css`.
+> **Repo layout changed on 2026-10-14:** the app now lives in `apps/web/`. A path written here as `src/…` means `apps/web/src/…`. See the root `README.md` for the full layout.
 
 ## 1. Design language in one paragraph
 

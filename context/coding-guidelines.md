@@ -2,6 +2,7 @@
 
 > Read this before writing or reviewing code. It records the conventions the codebase **actually follows** (observed 2026-10-11, commit `1e75ab7` plus the uncommitted "uniform design + goal editing flow" change) plus the rules for working here safely.
 > No ESLint/Prettier config exists in the repo, so the only enforcement is `tsc` and review. **Match the surrounding code** — its comment density, naming and idioms — over any outside preference.
+> **Repo layout changed on 2026-10-14:** the app now lives in `apps/web/`. A path written here as `src/…` means `apps/web/src/…`. See the root `README.md` for the full layout.
 
 ## 1. Rules for AI agents and new contributors (hard constraints)
 

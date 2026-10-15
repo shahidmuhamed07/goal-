@@ -9,6 +9,25 @@
 
 It is a single-page React app talking directly to Firebase (Auth + Firestore). There is no custom backend.
 
+
+## Repository layout (monorepo, since 2026-10-14)
+
+```
+goal-/
+├── apps/
+│   ├── web/        the app people use (everything described in this file lives here: src/, index.html, vite config)
+│   ├── admin/      admin dashboard: banners, popups, pages, starter plans (React + Vite, plain CSS)
+│   └── api/        backend, not built yet (Express + MongoDB planned)
+├── packages/
+│   └── shared/     @goalpath/shared: content types and the "is it live?" rules used by all apps
+├── context/        these notes
+├── firebase.json, firestore.rules, .firebaserc   Firebase config (hosting now serves apps/web/dist)
+├── package.json    npm workspaces + root scripts (dev, dev:admin, build, lint)
+└── tsconfig.base.json, .editorconfig, .nvmrc
+```
+
+**Direction:** Firebase stays for login only. Content and goals move to MongoDB behind `apps/api`; the admin is built first, against a practice data layer.
+
 ## How to use this context folder
 
 Every file here is meant to be read by both humans and AI agents. Open only what the task needs:

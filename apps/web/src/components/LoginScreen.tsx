@@ -1,4 +1,6 @@
 import React, { useState } from 'react';
+import { CmsBanners } from '../cms/CmsBanners';
+import { useLiveBanners } from '../cms/useLiveBanners';
 import { AlertTriangle, Check, Copy, Eye, EyeOff, Loader2, Mail, X } from 'lucide-react';
 import {
   createUserWithEmailAndPassword,
@@ -51,6 +53,8 @@ const friendlyAuthError = (code: string | undefined, message: string): string =>
  * gradient stays on screen behind it.
  */
 export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, loading, error, info }) => {
+  // A notice from the admin for people who are not signed in yet.
+  const loginBanners = useLiveBanners();
   const [mode, setMode] = useState<Mode>('signin');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -150,6 +154,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, loading, erro
 
       {/* Messages and the two ways in */}
       <div className="px-5 pb-8 space-y-3 safe-bottom">
+        <CmsBanners banners={loginBanners} placement="login-notice" limit={1} />
         {isUnauthorizedDomain ? (
           <div className="bg-white text-slate-800 rounded-3xl p-4 text-left space-y-2.5 text-xs shadow-lg">
             <div className="font-bold flex items-center gap-1.5 text-amber-800">

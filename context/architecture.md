@@ -3,6 +3,7 @@
 > Read this for: where code lives, how data flows, how permissions/workspaces/navigation work, how to build and deploy.
 > For field-level data model and security rules → [backend-rules.md](backend-rules.md). For look & feel → [ui-context.md](ui-context.md).
 > Last verified against the code: 2026-10-11 (commit `1e75ab7` plus the uncommitted "uniform design + goal editing flow" change).
+> **Repo layout changed on 2026-10-14:** the app now lives in `apps/web/`. A path written here as `src/…` means `apps/web/src/…`. See the root `README.md` for the full layout.
 
 ## 1. System shape
 
