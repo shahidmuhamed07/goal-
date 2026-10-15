@@ -1,5 +1,12 @@
 import type { ContentCollection } from '@goalpath/shared';
 
+/**
+ * Everything the store can hold. `admins` is the list of managers; it is NOT
+ * one of the content collections, so the generic content routes can never read
+ * or write it.
+ */
+export type StoreCollection = ContentCollection | 'admins';
+
 /** A stored item: always has a string `id`, plus whatever fields its kind defines. */
 export type Doc = { id: string } & Record<string, unknown>;
 
@@ -9,11 +16,12 @@ export type Doc = { id: string } & Record<string, unknown>;
  */
 export interface ContentStore {
   ready(): Promise<void>;
-  list(collection: ContentCollection): Promise<Doc[]>;
+  list(collection: StoreCollection): Promise<Doc[]>;
+  get(collection: StoreCollection, id: string): Promise<Doc | null>;
   /** Creates or replaces. Throws a `DuplicateError` when a unique field (a page address) is taken. */
-  upsert(collection: ContentCollection, doc: Doc): Promise<void>;
+  upsert(collection: StoreCollection, doc: Doc): Promise<void>;
   /** Returns whether something was removed. */
-  remove(collection: ContentCollection, id: string): Promise<boolean>;
+  remove(collection: StoreCollection, id: string): Promise<boolean>;
   close(): Promise<void>;
 }
 

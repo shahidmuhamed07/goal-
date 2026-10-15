@@ -140,7 +140,7 @@ describe('admin login', () => {
   const app = createApp(store, {
     corsOrigins: ['http://localhost:3001'],
     isProduction: true, // login must work in production, where the "open" fallback is off
-    adminAuth: { verify, allowedEmails: ['owner@example.com'] },
+    adminAuth: { verify, ownerEmails: ['owner@example.com'] },
     now: () => NOW,
   });
   const server = app.listen(0);
@@ -152,7 +152,7 @@ describe('admin login', () => {
   it('lets the owner in and says who they are', async () => {
     const res = await get('/api/admin/me', 'owner-token');
     assert.equal(res.status, 200);
-    assert.deepEqual(await res.json(), { email: 'owner@example.com' });
+    assert.deepEqual(await res.json(), { email: 'owner@example.com', role: 'owner' });
   });
 
   it('lets the owner read and write content', async () => {
@@ -202,5 +202,100 @@ describe('admin login', () => {
       headers: { origin: 'http://localhost:3001', 'access-control-request-method': 'GET', 'access-control-request-headers': 'authorization' },
     });
     assert.match(res.headers.get('access-control-allow-headers') ?? '', /authorization/i);
+  });
+});
+
+describe('team: owners and managers', () => {
+  const people: Record<string, string> = {
+    'owner-token': 'owner@example.com',
+    'manager-token': 'manager@example.com',
+    'newbie-token': 'newbie@example.com',
+  };
+  const verify = async (token: string) => {
+    const email = people[token];
+    if (!email) throw new Error('bad token');
+    return { email, emailVerified: true };
+  };
+  const store = new MemoryStore();
+  const app = createApp(store, {
+    corsOrigins: ['http://localhost:3001'],
+    isProduction: true,
+    adminAuth: { verify, ownerEmails: ['owner@example.com'] },
+    now: () => NOW,
+  });
+  const server = app.listen(0);
+  const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+  after(() => server.close());
+
+  const call = (method: string, path: string, token?: string, body?: unknown) =>
+    fetch(`${base}${path}`, {
+      method,
+      headers: { ...(token ? { authorization: `Bearer ${token}` } : {}), ...(body ? { 'content-type': 'application/json' } : {}) },
+      body: body ? JSON.stringify(body) : undefined,
+    });
+  const add = (email: string, token = 'owner-token') => call('PUT', `/api/admin/team/${encodeURIComponent(email)}`, token);
+
+  it('an unknown person has no access until an owner adds them', async () => {
+    assert.equal((await call('GET', '/api/admin/banners', 'newbie-token')).status, 403);
+  });
+
+  it('an owner adds a manager, who can then use the admin right away', async () => {
+    assert.equal((await add('Manager@Example.com')).status, 201); // upper case is normalised
+    const me = await call('GET', '/api/admin/me', 'manager-token');
+    assert.deepEqual(await me.json(), { email: 'manager@example.com', role: 'manager' });
+    assert.equal((await call('GET', '/api/admin/banners', 'manager-token')).status, 200);
+  });
+
+  it('a manager can create and change content', async () => {
+    const item = banner({ id: 'ban_by_manager' });
+    assert.equal((await call('PUT', `/api/admin/banners/${item.id}`, 'manager-token', item)).status, 200);
+    assert.equal((await call('DELETE', `/api/admin/banners/${item.id}`, 'manager-token')).status, 204);
+  });
+
+  it('a manager cannot see or change the team', async () => {
+    assert.equal((await call('GET', '/api/admin/team', 'manager-token')).status, 403);
+    assert.equal((await add('newbie@example.com', 'manager-token')).status, 403);
+    assert.equal((await call('DELETE', '/api/admin/team/manager%40example.com', 'manager-token')).status, 403);
+    assert.equal((await call('GET', '/api/admin/me', 'newbie-token')).status, 403); // newbie still not added
+  });
+
+  it('the team list shows owners and managers', async () => {
+    const list = (await (await call('GET', '/api/admin/team', 'owner-token')).json()) as { email: string; role: string }[];
+    assert.deepEqual(
+      list.map((m) => `${m.role}:${m.email}`),
+      ['owner:owner@example.com', 'manager:manager@example.com'],
+    );
+  });
+
+  it('adding the same person twice is harmless and keeps the first record', async () => {
+    const first = (await (await call('GET', '/api/admin/team', 'owner-token')).json()) as { addedAt?: string }[];
+    assert.equal((await add('manager@example.com')).status, 200);
+    const again = (await (await call('GET', '/api/admin/team', 'owner-token')).json()) as { addedAt?: string }[];
+    assert.equal(again.length, first.length);
+  });
+
+  it('an owner cannot be added as a manager or removed', async () => {
+    assert.equal((await add('owner@example.com')).status, 409);
+    assert.equal((await call('DELETE', '/api/admin/team/owner%40example.com', 'owner-token')).status, 400);
+  });
+
+  it('rejects something that is not an email', async () => {
+    assert.equal((await add('not-an-email')).status, 400);
+  });
+
+  it('removing a manager takes effect on their very next request', async () => {
+    assert.equal((await call('DELETE', '/api/admin/team/manager%40example.com', 'owner-token')).status, 204);
+    assert.equal((await call('GET', '/api/admin/banners', 'manager-token')).status, 403);
+    assert.equal((await call('DELETE', '/api/admin/team/manager%40example.com', 'owner-token')).status, 404);
+  });
+
+  it('the manager list cannot be read or written through the content routes', async () => {
+    assert.equal((await call('GET', '/api/admin/admins', 'owner-token')).status, 404);
+    assert.equal((await call('PUT', '/api/admin/admins/hacker', 'owner-token', { id: 'hacker' })).status, 404);
+  });
+
+  it('stops the team growing without limit', async () => {
+    for (let i = 0; i < 20; i++) assert.ok([201, 200].includes((await add(`person${i}@example.com`)).status));
+    assert.equal((await add('onetoomany@example.com')).status, 409);
   });
 });

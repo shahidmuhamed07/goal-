@@ -11,8 +11,8 @@ export type TokenVerifier = (token: string) => Promise<Identity>;
 
 export interface AdminAuth {
   verify: TokenVerifier;
-  /** Lower-case email addresses that may use the admin. */
-  allowedEmails: string[];
+  /** Lower-case emails of the owners (from the private settings). Owners may also manage the team. */
+  ownerEmails: string[];
 }
 
 /** Google publishes the keys that sign every Firebase login token here. */

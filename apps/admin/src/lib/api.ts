@@ -1,4 +1,4 @@
-import type { Banner, Page, PlanTemplate, Popup } from '@goalpath/shared';
+import type { Banner, Page, PlanTemplate, Popup, TeamMember } from '@goalpath/shared';
 
 /**
  * How the admin reads and writes content.
@@ -14,6 +14,13 @@ export interface Repository<T extends { id: string }> {
   remove(id: string): Promise<void>;
 }
 
+/** Managing who may use the admin. Only owners are allowed to call it. */
+export interface TeamApi {
+  list(): Promise<TeamMember[]>;
+  add(email: string): Promise<void>;
+  remove(email: string): Promise<void>;
+}
+
 export interface ContentApi {
   /** True while data is fake and only lives in this browser. */
   readonly isMock: boolean;
@@ -21,6 +28,8 @@ export interface ContentApi {
   popups: Repository<Popup>;
   pages: Repository<Page>;
   plans: Repository<PlanTemplate>;
+  /** Only available when the server has real login (not in practice mode). */
+  team?: TeamApi;
   /** Puts the sample data back. Only meaningful for the mock. */
   resetSamples?(): Promise<void>;
 }

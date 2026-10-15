@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react';
 import { onAuthStateChanged } from 'firebase/auth';
 import { LogIn, LogOut, Route } from 'lucide-react';
+import type { AdminRole } from '@goalpath/shared';
 import { apiLocation } from '../lib';
 import { auth, getIdToken, signInWithGoogle, signOutAdmin } from '../lib/firebase';
 import { checkAccess } from '../lib/httpApi';
@@ -8,15 +9,17 @@ import { checkAccess } from '../lib/httpApi';
 interface Session {
   /** Who is signed in. Null when the API is open on this machine (no login configured). */
   email: string | null;
+  /** What this person may do. On a developer's machine with no login set up, everyone is an owner. */
+  role: AdminRole;
   signOut: () => void;
 }
-const SessionContext = createContext<Session>({ email: null, signOut: () => {} });
+const SessionContext = createContext<Session>({ email: null, role: 'owner', signOut: () => {} });
 export const useSession = () => useContext(SessionContext);
 
 type State =
   | { kind: 'loading' }
   | { kind: 'signed-out'; message?: string }
-  | { kind: 'allowed'; email: string | null }
+  | { kind: 'allowed'; email: string | null; role: AdminRole }
   | { kind: 'denied'; email: string }
   | { kind: 'error'; message: string };
 
@@ -42,7 +45,7 @@ export function AuthGate({ children }: { children: ReactNode }) {
       const token = await getIdToken();
       const user = auth.currentUser;
       const result = await checkAccess(apiLocation, token);
-      if (result.status === 'allowed') setState({ kind: 'allowed', email: result.email });
+      if (result.status === 'allowed') setState({ kind: 'allowed', email: result.email, role: result.role });
       else if (result.status === 'not-allowed') setState({ kind: 'denied', email: user?.email ?? 'this account' });
       else setState({ kind: 'signed-out', message: user ? 'Your sign-in has expired. Please sign in again.' : undefined });
     } catch (e) {
@@ -66,7 +69,7 @@ export function AuthGate({ children }: { children: ReactNode }) {
   };
 
   if (state.kind === 'allowed') {
-    return <SessionContext.Provider value={{ email: state.email, signOut: () => void signOutAdmin() }}>{children}</SessionContext.Provider>;
+    return <SessionContext.Provider value={{ email: state.email, role: state.role, signOut: () => void signOutAdmin() }}>{children}</SessionContext.Provider>;
   }
 
   return (

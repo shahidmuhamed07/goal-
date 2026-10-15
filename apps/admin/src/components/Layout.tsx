@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
-import { FileText, Gauge, LayoutTemplate, Megaphone, Menu, MessageSquareMore, RotateCcw, Route } from 'lucide-react';
+import { FileText, Gauge, LayoutTemplate, Megaphone, Menu, MessageSquareMore, RotateCcw, Route, UsersRound } from 'lucide-react';
 import { api, apiLocation } from '../lib';
 import { useSession } from './AuthGate';
 import { useToast } from './Toasts';
@@ -43,7 +43,7 @@ export function Layout() {
           <span>Goal Path<small>Admin</small></span>
         </div>
         <nav className="nav" aria-label="Sections">
-          {NAV.map(({ to, label, icon: Icon, end }) => (
+          {[...NAV, ...(api.team && session.role === 'owner' && session.email ? [{ to: '/team', label: 'Team', icon: UsersRound, end: false }] : [])].map(({ to, label, icon: Icon, end }) => (
             <NavLink key={to} to={to} end={end}>
               <Icon size={19} />
               {label}
@@ -57,7 +57,7 @@ export function Layout() {
               <p className="muted">{apiLocation}</p>
               {session.email ? (
                 <>
-                  <p className="muted" style={{ marginTop: 6, overflowWrap: 'anywhere' }}>Signed in as {session.email}</p>
+                  <p className="muted" style={{ marginTop: 6, overflowWrap: 'anywhere' }}>Signed in as {session.email} ({session.role})</p>
                   <button className="btn quiet small" style={{ marginTop: 8 }} onClick={session.signOut}>Sign out</button>
                 </>
               ) : (
