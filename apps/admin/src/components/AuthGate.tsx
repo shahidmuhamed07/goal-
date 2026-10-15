@@ -23,6 +23,21 @@ type State =
   | { kind: 'denied'; email: string }
   | { kind: 'error'; message: string };
 
+/** Shown while we wait. After a few seconds it explains why, so a sleeping free server does not look broken. */
+function WaitingMessage() {
+  const [slow, setSlow] = useState(false);
+  useEffect(() => {
+    const timer = window.setTimeout(() => setSlow(true), 5000);
+    return () => window.clearTimeout(timer);
+  }, []);
+  return (
+    <>
+      <p className="muted">Checking your sign-in…</p>
+      {slow && <p className="muted small">The server is waking up. On the free plan this can take up to a minute the first time. Please wait.</p>}
+    </>
+  );
+}
+
 /** What to tell the person when Google's sign-in window fails. */
 function explainSignInError(e: unknown): string {
   const code = typeof e === 'object' && e && 'code' in e ? String((e as { code: unknown }).code) : '';
@@ -49,8 +64,18 @@ export function AuthGate({ children }: { children: ReactNode }) {
       else if (result.status === 'not-allowed') setState({ kind: 'denied', email: user?.email ?? 'this account' });
       else setState({ kind: 'signed-out', message: user ? 'Your sign-in has expired. Please sign in again.' : undefined });
     } catch (e) {
+      const timedOut = e instanceof DOMException && e.name === 'TimeoutError';
       const offline = e instanceof TypeError;
-      setState({ kind: 'error', message: offline ? `Cannot reach the API at ${apiLocation}. Is it running?` : e instanceof Error ? e.message : 'Something went wrong.' });
+      setState({
+        kind: 'error',
+        message: timedOut
+          ? 'The server did not answer in time. It may still be waking up: wait a moment and try again.'
+          : offline
+          ? `Cannot reach the API at ${apiLocation}. Is it running?`
+          : e instanceof Error
+          ? e.message
+          : 'Something went wrong.',
+      });
     }
   }, []);
 
@@ -77,7 +102,7 @@ export function AuthGate({ children }: { children: ReactNode }) {
       <div className="card gate-card">
         <span className="brand-mark"><Route size={20} /></span>
         <h1 className="page-title" style={{ fontSize: 26 }}>Goal Path Admin</h1>
-        {state.kind === 'loading' && <p className="muted">Checking your sign-in…</p>}
+        {state.kind === 'loading' && <WaitingMessage />}
         {state.kind === 'signed-out' && (
           <>
             <p className="muted">Sign in with the Google account that manages Goal Path.</p>
