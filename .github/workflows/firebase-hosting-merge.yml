@@ -22,6 +22,9 @@ jobs:
 
       - name: Build project
         run: npm run build -w @goalpath/web
+        env:
+          # Where the app asks for banners from the admin. A public address, not a secret.
+          VITE_API_URL: https://goal-tcrb.onrender.com
 
       - name: Deploy to Firebase Hosting Live Channel
         uses: FirebaseExtended/action-hosting-deploy@v0
