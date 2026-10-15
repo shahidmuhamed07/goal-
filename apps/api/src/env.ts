@@ -8,6 +8,10 @@ const schema = z.object({
   MONGODB_URI: z.string().optional(),
   MONGODB_DB: z.string().default('goalpath'),
   CORS_ORIGINS: z.string().default('http://localhost:3000,http://localhost:3001'),
+  /** The Firebase project that issues login tokens. Public information, not a secret. */
+  FIREBASE_PROJECT_ID: z.string().default('goal-path-9f4cc'),
+  /** Comma-separated emails allowed to use the admin. Empty means no login is set up. */
+  ADMIN_EMAILS: z.string().default(''),
 });
 
 export type Env = z.infer<typeof schema>;

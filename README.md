@@ -45,3 +45,9 @@ The admin saves content through `apps/api` into MongoDB; the app asks the API wh
 - Keep `main` working. Make changes on a branch, then merge.
 - Log every change in `context/progress-tracker.md`.
 - Never commit secrets. `.env*` files and Firebase admin keys are ignored; check before you commit.
+
+## Who can use the admin
+
+- **Owners** are the Google emails in `ADMIN_EMAILS` (a private setting on the API: `apps/api/.env` locally, Environment on Render). They can change content and add or remove managers on the **Team** page.
+- **Managers** are added by an owner. They can change content but cannot add or remove anyone.
+- To make someone an owner, add their email to `ADMIN_EMAILS` (comma separated) and restart the API.

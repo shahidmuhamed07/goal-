@@ -1,3 +1,4 @@
+import { createFirebaseVerifier, parseEmails } from './auth';
 import { loadEnv } from './env';
 import { createApp } from './app';
 import { MemoryStore } from './memoryStore';
@@ -18,13 +19,24 @@ async function main() {
     process.exit(1);
   }
 
+  const ownerEmails = parseEmails(env.ADMIN_EMAILS);
+  const adminAuth = ownerEmails.length > 0 ? { verify: createFirebaseVerifier(env.FIREBASE_PROJECT_ID), ownerEmails } : undefined;
+  if (!adminAuth) {
+    console.warn(
+      env.NODE_ENV === 'production'
+        ? 'ADMIN_EMAILS is empty: the admin is locked until you set it.'
+        : 'ADMIN_EMAILS is empty: the admin is OPEN on this machine. Set it to test real login.',
+    );
+  }
+
   const app = createApp(store, {
+    adminAuth,
     corsOrigins: env.CORS_ORIGINS.split(',').map((s) => s.trim()).filter(Boolean),
     isProduction: env.NODE_ENV === 'production',
   });
 
   const server = app.listen(env.PORT, () => {
-    console.log(`API ready on http://localhost:${env.PORT}  (store: ${env.STORE}${env.STORE === 'mongo' ? `, database: ${env.MONGODB_DB}` : ', nothing is saved'})`);
+    console.log(`API ready on http://localhost:${env.PORT}  (store: ${env.STORE}${env.STORE === 'mongo' ? `, database: ${env.MONGODB_DB}` : ', nothing is saved'}, admin login: ${adminAuth ? `on, ${ownerEmails.length} owner(s)` : 'off'})`);
   });
 
   const stop = async () => {

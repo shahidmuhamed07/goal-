@@ -1,21 +1,28 @@
 import cors from 'cors';
 import express, { type ErrorRequestHandler, type RequestHandler } from 'express';
-import { ZodError } from 'zod';
+import { ZodError, z } from 'zod';
 import {
   CONTENT_COLLECTIONS,
   isLive,
   matchesAudience,
+  type AdminRole,
+  type AdminUser,
   type Banner,
   type ContentCollection,
   type LiveContent,
+  type Me,
   type PublicBanner,
+  type TeamMember,
 } from '@goalpath/shared';
+import type { AdminAuth } from './auth';
 import { SCHEMAS } from './schemas';
 import { DuplicateError, type ContentStore, type Doc } from './store';
 
 export interface AppOptions {
   corsOrigins: string[];
   isProduction: boolean;
+  /** How admins prove who they are. Without it the admin is open on a developer's machine and locked in production. */
+  adminAuth?: AdminAuth;
   /** Lets tests control "now". */
   now?: () => Date;
 }
@@ -33,7 +40,7 @@ export function createApp(store: ContentStore, options: AppOptions) {
   const app = express();
   app.disable('x-powered-by');
   app.use(express.json({ limit: '256kb' }));
-  app.use(cors({ origin: options.corsOrigins, methods: ['GET', 'PUT', 'DELETE'] }));
+  app.use(cors({ origin: options.corsOrigins, methods: ['GET', 'PUT', 'DELETE'], allowedHeaders: ['content-type', 'authorization'] }));
 
   app.get('/health', (_req, res) => {
     res.json({ ok: true, time: now().toISOString() });
@@ -62,13 +69,64 @@ export function createApp(store: ContentStore, options: AppOptions) {
   });
 
   /**
-   * ADMIN. Anyone who can reach these routes can change content, so for now they
-   * only run outside production. Real protection (a Firebase login check, plus
-   * Cloudflare Access in front) comes next; until then they refuse to run live.
+   * ADMIN. Needs a valid login token from someone on the team: an owner (set in
+   * the private settings) or a manager (added by an owner, kept in the database).
+   * The role is looked up on EVERY request, so removing a manager works at once.
+   * Without any login set up: refused in production (fail closed), open on a
+   * developer's own machine so the project still runs before login is configured.
    */
-  const requireAdmin: RequestHandler = (_req, res, next) => {
-    if (options.isProduction) {
-      res.status(503).json({ error: 'admin_auth_not_configured' });
+  const requireAdmin: RequestHandler = async (req, res, next) => {
+    const auth = options.adminAuth;
+    if (!auth) {
+      if (options.isProduction) {
+        res.status(503).json({ error: 'admin_auth_not_configured' });
+        return;
+      }
+      res.locals.adminEmail = null;
+      res.locals.adminRole = 'owner' satisfies AdminRole;
+      next();
+      return;
+    }
+
+    const header = req.get('authorization') ?? '';
+    const token = header.startsWith('Bearer ') ? header.slice(7).trim() : '';
+    if (!token) {
+      res.status(401).json({ error: 'login_required' });
+      return;
+    }
+
+    let identity;
+    try {
+      identity = await auth.verify(token);
+    } catch {
+      res.status(401).json({ error: 'login_required' });
+      return;
+    }
+    if (!identity.emailVerified) {
+      res.status(403).json({ error: 'not_allowed' });
+      return;
+    }
+
+    try {
+      let role: AdminRole | null = null;
+      if (auth.ownerEmails.includes(identity.email)) role = 'owner';
+      else if (await store.get('admins', identity.email)) role = 'manager';
+      if (!role) {
+        res.status(403).json({ error: 'not_allowed' });
+        return;
+      }
+      res.locals.adminEmail = identity.email;
+      res.locals.adminRole = role;
+      next();
+    } catch (e) {
+      next(e);
+    }
+  };
+
+  /** Only owners may pass. Runs after requireAdmin. */
+  const requireOwner: RequestHandler = (_req, res, next) => {
+    if (res.locals.adminRole !== 'owner') {
+      res.status(403).json({ error: 'owners_only' });
       return;
     }
     next();
@@ -85,6 +143,81 @@ export function createApp(store: ContentStore, options: AppOptions) {
     res.locals.collection = value;
     next();
   });
+
+  // "Who am I, and what may I do?", asked right after sign-in.
+  adminRoutes.get('/me', (_req, res) => {
+    res.set('Cache-Control', 'no-store');
+    const me: Me = { email: res.locals.adminEmail ?? null, role: res.locals.adminRole };
+    res.json(me);
+  });
+
+  /* ---- team: owners only ------------------------------------------------ */
+
+  const MAX_MANAGERS = 20;
+  const emailSchema = z.string().trim().toLowerCase().email().max(254);
+
+  // Team management only makes sense when real login exists, because it needs to know who is asking.
+  const requireLoginConfigured: RequestHandler = (_req, res, next) => {
+    if (!options.adminAuth) {
+      res.status(400).json({ error: 'login_not_configured' });
+      return;
+    }
+    next();
+  };
+
+  adminRoutes.get('/team', requireOwner, requireLoginConfigured, async (_req, res, next) => {
+    try {
+      const owners: TeamMember[] = options.adminAuth!.ownerEmails.map((email) => ({ email, role: 'owner' }));
+      const managers = ((await store.list('admins')) as unknown as AdminUser[]).map(
+        (m): TeamMember => ({ email: m.email, role: 'manager', addedBy: m.addedBy, addedAt: m.addedAt }),
+      );
+      res.set('Cache-Control', 'no-store');
+      res.json([...owners, ...managers]);
+    } catch (e) {
+      next(e);
+    }
+  });
+
+  // Adding the same person twice is harmless: the first record is kept.
+  adminRoutes.put('/team/:email', requireOwner, requireLoginConfigured, async (req, res, next) => {
+    try {
+      const email = emailSchema.parse(req.params.email);
+      if (options.adminAuth!.ownerEmails.includes(email)) {
+        res.status(409).json({ error: 'already_owner' });
+        return;
+      }
+      const existing = await store.get('admins', email);
+      if (existing) {
+        res.json(existing);
+        return;
+      }
+      if ((await store.list('admins')).length >= MAX_MANAGERS) {
+        res.status(409).json({ error: 'team_full' });
+        return;
+      }
+      const manager: AdminUser = { id: email, email, role: 'manager', addedBy: res.locals.adminEmail, addedAt: now().toISOString() };
+      await store.upsert('admins', manager as unknown as Doc);
+      res.status(201).json(manager);
+    } catch (e) {
+      next(e);
+    }
+  });
+
+  adminRoutes.delete('/team/:email', requireOwner, requireLoginConfigured, async (req, res, next) => {
+    try {
+      const email = emailSchema.parse(req.params.email);
+      if (options.adminAuth!.ownerEmails.includes(email)) {
+        res.status(400).json({ error: 'owner_cannot_be_removed' });
+        return;
+      }
+      const removed = await store.remove('admins', email);
+      res.status(removed ? 204 : 404).end();
+    } catch (e) {
+      next(e);
+    }
+  });
+
+  /* ---- content: owners and managers ------------------------------------- */
 
   adminRoutes.get('/:collection', async (_req, res, next) => {
     try {
