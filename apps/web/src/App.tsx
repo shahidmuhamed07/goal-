@@ -3372,26 +3372,34 @@ export default function App() {
         </div>
       </footer>
 
+      {/* The screens below are mounted only while open, so each opening starts clean.
+          Left mounted, they kept the last step, answers or half-typed text after closing. */}
+
       {/* CREATE GOAL MODAL */}
-      <CreateGoalModal
-        isOpen={isModalOpen}
-        onClose={() => setIsModalOpen(false)}
-        collaborators={profile?.collaborators || []}
-        onSave={handleCreateGoal}
-      />
+      {isModalOpen && (
+        <CreateGoalModal
+          isOpen
+          onClose={() => setIsModalOpen(false)}
+          collaborators={profile?.collaborators || []}
+          onSave={handleCreateGoal}
+        />
+      )}
 
       {/* GOAL ASSIGNMENT MODAL */}
-      <GoalAssignmentModal
-        isOpen={!!managingAssignedGoal}
-        onClose={() => setManagingAssignedGoal(null)}
-        goal={managingAssignedGoal}
-        collaborators={profile?.collaborators || []}
-        onSave={handleSaveGoalCollaboratorAssignments}
-      />
+      {managingAssignedGoal && (
+        <GoalAssignmentModal
+          isOpen
+          onClose={() => setManagingAssignedGoal(null)}
+          goal={managingAssignedGoal}
+          collaborators={profile?.collaborators || []}
+          onSave={handleSaveGoalCollaboratorAssignments}
+        />
+      )}
 
       {/* GIVE UP MOTIVATIONAL INTERVENTION MODAL */}
+      {giveUpTargetGoal && (
       <GiveUpInterventionModal
-        isOpen={!!giveUpTargetGoal}
+        isOpen
         onClose={() => setGiveUpTargetGoal(null)}
         goal={giveUpTargetGoal}
         onConfirmGiveUp={async () => {
@@ -3405,6 +3413,7 @@ export default function App() {
           await handleExtendGoalDeadline(goalId, monthsToAdd);
         }}
       />
+      )}
 
       {/* DOUBLE-BACK EXIT HINT: phone + laptop, above the tab bar */}
       {exitPromptVisible && (
@@ -3467,12 +3476,14 @@ export default function App() {
       </nav>
 
       {/* FIRST-RUN QUESTIONS: asked once for a new account, and again from the account menu */}
-      <Onboarding
-        isOpen={!!user && !!profile && !dataLoading && isOwner && personaPickerOpen}
-        name={((profile?.displayName || user.displayName || '').split(' ')[0] || '').trim()}
-        onFinish={handleFinishOnboarding}
-        onClose={handleCloseOnboarding}
-      />
+      {!!user && !!profile && !dataLoading && isOwner && personaPickerOpen && (
+        <Onboarding
+          isOpen
+          name={((profile?.displayName || user.displayName || '').split(' ')[0] || '').trim()}
+          onFinish={handleFinishOnboarding}
+          onClose={handleCloseOnboarding}
+        />
+      )}
     </div>
   );
 }
