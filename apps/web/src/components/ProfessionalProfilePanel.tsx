@@ -717,8 +717,8 @@ export const ProfessionalProfilePanel: React.FC<ProfessionalProfilePanelProps> =
 
       {/* Leave-professional confirm: only appears when the red icon is tapped. */}
       {confirmLeave && (
-        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-md flex items-center justify-center p-4 z-[60] fade">
-          <div className="neu rounded-3xl max-w-sm w-full p-6 space-y-4 pop">
+        <div className="scrim">
+          <div className="dialog space-y-4" data-size="sm">
             <div className="flex items-start gap-3">
               <span className="w-10 h-10 rounded-xl grid place-items-center bg-rose-100 text-rose-600 shrink-0">
                 <TriangleAlert className="w-5 h-5" />

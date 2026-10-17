@@ -119,6 +119,10 @@ const handleToggleTask = async (goalId: string, taskId: string) => {
 - Fields: write only size and spacing (`w-full text-sm rounded-xl px-3.5 py-2.5`); the groove, colour and focus ring are global.
 - Icons: named imports from `lucide-react`. Prefer `AppSelect` over a native `<select>` for new dropdowns (a couple of older spots still use native).
 
+### 4.6a The UI standard
+
+Dialogs, dropdowns, back buttons, icon buttons, access controls, card descriptions and spacing each have **one shared part**. Use it; do not write the look again by hand. The full table, the spacing scale and the text hierarchy are in [ui-context.md](ui-context.md#the-ui-standard-read-this-before-you-build-or-change-a-screen). `npm test -w @goalpath/web` includes `uiStandards.test.ts`, which fails with the file and line if a hand-made overlay, a native `<select>`, a small "← Back" chip or the old pale description text appears. If you need something the shared parts do not cover, **add a shared part** (and a line in that test) instead of making a one-off.
+
 ### 4.7 Comments
 
 The codebase uses **prose comments that explain why**, typically a `/** … */` block above a non-obvious function, effect or state variable (e.g. why a query is shaped a certain way, why a write is ordered a certain way). Match that: comment intent, constraints and gotchas; don't narrate what the code obviously does. Section markers in JSX (`{/* VIEW 2: … */}`) are used in `App.tsx`.

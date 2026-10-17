@@ -179,7 +179,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ me, other, onClose }) => {
       style={vv ? { top: vv.top, height: vv.height } : { top: 0, bottom: 0 }}
     >
       <div
-        className="absolute inset-0 bg-slate-900/50 backdrop-blur-md"
+        className="absolute inset-0 scrim-dim"
         onClick={onClose}
         aria-hidden="true"
       />

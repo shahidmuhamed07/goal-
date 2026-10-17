@@ -234,7 +234,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, loading, erro
             type="button"
             aria-label="Close"
             data-plain
-            className="absolute inset-0 bg-slate-900/25 backdrop-blur-[2px] cursor-default"
+            className="absolute inset-0 scrim-dim cursor-default"
             onClick={() => setShowEmailForm(false)}
           />
           <form onSubmit={handleEmailSubmit} className="sheet sheet-up relative px-6 pt-5 pb-8 text-slate-900 safe-bottom">

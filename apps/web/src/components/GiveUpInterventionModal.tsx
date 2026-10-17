@@ -70,8 +70,8 @@ export const GiveUpInterventionModal: React.FC<GiveUpInterventionModalProps> = (
   };
 
   return (
-    <div className="fixed inset-0 z-[60] bg-slate-900/45 backdrop-blur-md flex items-center justify-center p-3 sm:p-5 overflow-y-auto fade">
-      <div className="neu rounded-3xl pop max-w-lg w-full shadow-2xl overflow-hidden transition-all text-slate-800 my-auto">
+    <div className="scrim">
+      <div className="dialog overflow-hidden! p-0! text-slate-800" data-size="lg">
         
         {/* Top Header */}
         <div className="border-b border-slate-300/40 px-5 sm:px-6 py-4 flex items-center justify-between gap-3">

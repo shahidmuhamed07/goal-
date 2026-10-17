@@ -118,6 +118,7 @@ import { ProfessionalProfilePanel } from './components/ProfessionalProfilePanel'
 import { AccountProfilePanel } from './components/AccountProfilePanel';
 import { Onboarding } from './components/Onboarding';
 import { GuidedGoal } from './components/GuidedGoal';
+import { BackButton } from './components/BackButton';
 import { nicheForCategory, type NicheKey } from './guidedGoal';
 import { ChatPanel } from './components/ChatPanel';
 import { threadHasUnread } from './chat';
@@ -3182,20 +3183,18 @@ export default function App() {
                         </div>
                       ) : (
                         <>
-                          <div className="flex items-center gap-1.5 flex-wrap">
-                            <button
-                              onClick={() => {
-                                setSelectedGoalId(null);
-                                setActiveTab('dashboard');
-                              }}
-                              className="chip px-2.5 py-1 text-[11px]"
-                            >
-                              ← Back
-                            </button>
+                          <BackButton
+                            label="All goals"
+                            onClick={() => {
+                              setSelectedGoalId(null);
+                              setActiveTab('dashboard');
+                            }}
+                          />
+                          <div className="mt-3 flex items-center gap-1.5 flex-wrap">
                             <span className="badge">{currentGoal.category || 'General'}</span>
                             <span className="badge">{formatFullMonth(currentGoal.targetDate)}</span>
                           </div>
-                          <h1 className="mt-1.5 text-xl sm:text-3xl font-bold text-slate-900">
+                          <h1 className="mt-2 text-xl sm:text-3xl font-bold text-slate-900">
                             {currentGoal.title}
                           </h1>
                           {currentGoal.description && (

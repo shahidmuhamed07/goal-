@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { LogOut, Check, Target, X, Eye, Pencil, Ban, BadgeCheck, ExternalLink, Trash2, MessageCircle } from 'lucide-react';
+import { LogOut, Check, Target, Eye, Pencil, BadgeCheck, ExternalLink, Trash2, MessageCircle } from 'lucide-react';
 import { User } from 'firebase/auth';
 import { doc, getDoc } from 'firebase/firestore';
 import { db } from '../firebase';
@@ -14,6 +14,9 @@ import {
 } from '../types';
 import { PROFESSIONAL_ROLES, formatMonthKey, formatJoinedDate, getGoalAccessLevel } from '../utils';
 import { ProfessionalProfileCard } from './ProfessionalProfilePanel';
+import { AccessPicker } from './AccessPicker';
+import { AppSelect } from './AppSelect';
+import { Dialog } from './Dialog';
 
 interface CollaboratorsPanelProps {
   user: User;
@@ -40,7 +43,7 @@ interface CollaboratorsPanelProps {
   unreadChatUids: Set<string>;
 }
 
-/** A small round icon-button used across the roster lists. */
+/** A round icon button for the roster lists, with an optional count or unread dot. */
 const IconAction: React.FC<{
   onClick: () => void;
   title: string;
@@ -48,33 +51,24 @@ const IconAction: React.FC<{
   children: React.ReactNode;
   badge?: number;
   dot?: boolean;
-}> = ({ onClick, title, tone = 'slate', children, badge, dot }) => {
-  const tones: Record<string, string> = {
-    blue: 'text-blue-700 bg-blue-50 hover:bg-blue-100 border-blue-200',
-    slate: 'text-slate-600 bg-slate-300/30 hover:bg-slate-300/50 border-slate-300/40',
-    violet: 'text-violet-800 bg-violet-50 hover:bg-violet-100 border-violet-200',
-    rose: 'text-rose-600 bg-rose-50 hover:bg-rose-100 border-rose-200',
-  };
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      title={title}
-      aria-label={title}
-      className={`relative w-8 h-8 grid place-items-center rounded-lg border transition cursor-pointer ${tones[tone]}`}
-    >
-      {children}
-      {typeof badge === 'number' && badge > 0 && (
-        <span className="absolute -top-1.5 -right-1.5 min-w-[15px] h-[15px] px-1 rounded-full bg-violet-700 text-white text-[9px] font-bold flex items-center justify-center leading-none border-2 border-white">
-          {badge}
-        </span>
-      )}
-      {dot && (
-        <span className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-rose-500 border-2 border-white" />
-      )}
-    </button>
-  );
-};
+}> = ({ onClick, title, tone = 'slate', children, badge, dot }) => (
+  <button
+    type="button"
+    onClick={onClick}
+    title={title}
+    aria-label={title}
+    className="icon-action"
+    data-tone={tone === 'rose' ? 'danger' : tone === 'slate' ? undefined : 'tone'}
+  >
+    {children}
+    {typeof badge === 'number' && badge > 0 && (
+      <span className="absolute -top-1 -right-1 min-w-[16px] h-4 px-1 rounded-full bg-[color:var(--tone-600)] text-white text-[10px] font-bold grid place-items-center leading-none ring-2 ring-white">
+        {badge}
+      </span>
+    )}
+    {dot && <span className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-rose-500 ring-2 ring-white" />}
+  </button>
+);
 
 /** A compact message icon-button with an unread dot, shared by both lists. */
 const MessageButton: React.FC<{ onClick: () => void; hasUnread: boolean }> = ({
@@ -85,11 +79,6 @@ const MessageButton: React.FC<{ onClick: () => void; hasUnread: boolean }> = ({
     <MessageCircle className="w-4 h-4" />
   </IconAction>
 );
-
-const ACCESS_LEVELS: { value: GoalAccessLevel; label: string; icon: React.ReactNode }[] = [
-  { value: 'view', label: 'View', icon: <Eye className="w-3.5 h-3.5" /> },
-  { value: 'edit', label: 'Edit', icon: <Pencil className="w-3.5 h-3.5" /> },
-];
 
 export const CollaboratorsPanel: React.FC<CollaboratorsPanelProps> = ({
   user,
@@ -428,7 +417,7 @@ export const CollaboratorsPanel: React.FC<CollaboratorsPanelProps> = ({
 
       <div className="neu rounded-2xl p-6">
         <h2 className="card-title">My Code</h2>
-        <p className="text-xs text-slate-400 mt-1 mb-4">Give this to a professional so they can request access to your account.</p>
+        <p className="card-lede">Give this to a professional so they can request access to your account.</p>
         <div className="flex items-center gap-3">
           <div className="neu-inset-sm font-mono text-2xl tracking-[0.3em] font-bold text-slate-900 px-5 py-3">
             {profile?.code || '••••••'}
@@ -446,7 +435,7 @@ export const CollaboratorsPanel: React.FC<CollaboratorsPanelProps> = ({
 
       <div className="neu rounded-2xl p-6">
         <h2 className="card-title">Connect as Professional</h2>
-        <p className="text-xs text-slate-400 mt-1 mb-4">Enter a client’s code and the role you are requesting.</p>
+        <p className="card-lede">Enter a client’s code and the role you are requesting.</p>
         <form onSubmit={handleSubmit} className="flex flex-col sm:flex-row gap-2">
           <input
             type="text"
@@ -456,15 +445,16 @@ export const CollaboratorsPanel: React.FC<CollaboratorsPanelProps> = ({
             onChange={(e) => setCodeInput(e.target.value.toUpperCase())}
             className="sm:w-36 font-mono tracking-widest text-sm rounded-xl px-3 py-2.5"
           />
-          <select
+          <AppSelect
             value={role}
-            onChange={(e) => setRole(e.target.value as ProfessionalRole)}
-            className="text-sm rounded-xl px-3 py-2.5"
-          >
-            {PROFESSIONAL_ROLES.map((r) => (
-              <option key={r} value={r}>{r}</option>
-            ))}
-          </select>
+            onChange={(value) => setRole(value as ProfessionalRole)}
+            options={PROFESSIONAL_ROLES.map((r) => ({ value: r, label: r }))}
+            ariaLabel="Role you are requesting"
+            align="left"
+            size="md"
+            wrapperClassName="sm:w-44"
+            className="field-control w-full text-sm rounded-xl px-3 py-2.5"
+          />
           <button
             type="submit"
             className="btn-tone px-4 py-2.5 text-sm"
@@ -494,7 +484,7 @@ export const CollaboratorsPanel: React.FC<CollaboratorsPanelProps> = ({
       {/* PENDING REQUESTS */}
       <div className="neu rounded-2xl p-6">
         <h2 className="card-title">Pending requests</h2>
-        <p className="text-xs text-slate-400 mt-1 mb-4">Professionals waiting for your approval. You will choose which goals to assign upon approving.</p>
+        <p className="card-lede">Professionals waiting for your approval. You will choose which goals to assign upon approving.</p>
         {incomingError && (
           <p className="text-xs text-rose-600 mb-3">
             Could not load incoming requests: {incomingError}
@@ -541,7 +531,7 @@ export const CollaboratorsPanel: React.FC<CollaboratorsPanelProps> = ({
       {/* CONNECTED PROFESSIONALS */}
       <div className="neu rounded-2xl p-6">
         <h2 className="card-title">Connected professionals</h2>
-        <p className="text-xs text-slate-400 mt-1 mb-4">
+        <p className="card-lede">
           People connected to your account. They can only edit daily tasks and subcategories in the goals assigned to them.
         </p>
         {collaborators.length === 0 ? (
@@ -670,7 +660,7 @@ export const CollaboratorsPanel: React.FC<CollaboratorsPanelProps> = ({
       {/* CLIENTS I SUPPORT */}
       <div className="neu rounded-2xl p-6">
         <h2 className="card-title">Clients I support</h2>
-        <p className="text-xs text-slate-400 mt-1 mb-4">Accounts that approved you as a professional.</p>
+        <p className="card-lede">Accounts that approved you as a professional.</p>
         {clientList.length === 0 ? (
           <p className="text-sm text-slate-400">You are not connected to any clients yet.</p>
         ) : (
@@ -745,7 +735,8 @@ export const CollaboratorsPanel: React.FC<CollaboratorsPanelProps> = ({
                         onClick={() => setConfirmRemoveClientId(c.id || '')}
                         aria-label={`Remove ${clientName} from your client list`}
                         title="Remove this client"
-                        className="w-8 h-8 flex items-center justify-center rounded-lg text-rose-600 bg-rose-50 hover:bg-rose-100 border border-rose-200 cursor-pointer transition shrink-0"
+                        className="icon-action"
+                        data-tone="danger"
                       >
                         <Trash2 className="w-3.5 h-3.5" />
                       </button>
@@ -758,229 +749,117 @@ export const CollaboratorsPanel: React.FC<CollaboratorsPanelProps> = ({
         )}
       </div>
 
-      {/* ASSIGN GOALS MODAL */}
+      {/* ASSIGN GOALS DIALOG */}
       {isModalOpen && (
-        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-md flex items-center justify-center p-4 z-[60] fade">
-          <div className="neu rounded-3xl max-w-lg w-full p-6 space-y-5 pop">
-            <div>
-              <div className="flex items-center justify-between">
-                <span className="badge uppercase tracking-wider">
-                  {modalTargetRequest ? 'Approve & Assign Goals' : 'Manage Assigned Goals'}
-                </span>
-                <button
-                  type="button"
-                  onClick={handleCloseModal}
-                  className="text-slate-400 hover:text-slate-600 p-1 rounded-lg hover:bg-slate-100 transition cursor-pointer"
-                >
-                  <X className="w-4 h-4" />
-                </button>
-              </div>
-              <h3 className="text-lg font-bold text-slate-900 mt-2">
-                Assign Goals to {targetPersonName}
-              </h3>
-              <p className="text-xs text-slate-500 mt-1 leading-relaxed">
-                Choose what this <strong>{targetPersonRole}</strong> may do with each goal.{' '}
-                <strong>View</strong> is read-only, <strong>Edit</strong> also lets them add and change
-                routines and daily tasks. Goals left on <strong>No access</strong> stay invisible to them.
-              </p>
-            </div>
-
-            {/* Goals selection list */}
-            <div className="space-y-3">
-              <div className="flex items-center justify-between text-xs">
-                <span className="font-semibold text-slate-700">
-                  Shared Goals ({Object.keys(goalAccess).length}/{goals.length}):
-                </span>
-                {goals.length > 0 && (
-                  <div className="flex items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const next: Record<string, GoalAccessLevel> = {};
-                        goals.forEach((g) => {
-                          next[g.id] = 'edit';
-                        });
-                        setGoalAccess(next);
-                      }}
-                      className="text-emerald-600 font-semibold hover:underline cursor-pointer text-xs"
-                    >
-                      Everyone can edit
-                    </button>
-                    <span className="text-slate-300">•</span>
-                    <button
-                      type="button"
-                      onClick={() => setGoalAccess({})}
-                      className="text-rose-600 font-semibold hover:underline cursor-pointer text-xs"
-                    >
-                      Clear
-                    </button>
-                  </div>
-                )}
-              </div>
-
-              {goals.length === 0 ? (
-                <div className="neu-inset text-center py-6 p-4">
-                  <p className="text-xs text-slate-500">
-                    You haven't created any goals yet. You can approve access now, and assign goals later once you create them.
-                  </p>
-                </div>
-              ) : (
-                <div className="max-h-60 overflow-y-auto space-y-2 pr-1">
-                  {goals.map((g) => {
-                    const level = goalAccess[g.id];
-                    const cardTone =
-                      level === 'edit'
-                        ? 'ring-2 ring-emerald-400/60'
-                        : level === 'view'
-                          ? 'ring-2 ring-sky-400/60'
-                          : '';
-                    return (
-                      <div
-                        key={g.id}
-                        className={`neu-inset-sm flex items-start justify-between gap-3 p-3 transition ${cardTone}`}
-                      >
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2">
-                            <span className="text-sm font-semibold text-slate-900 truncate">
-                              {g.title}
-                            </span>
-                            <span className="badge">
-                              {g.category || 'General'}
-                            </span>
-                          </div>
-                          {g.description && (
-                            <p className="text-xs text-slate-500 line-clamp-1 mt-0.5">
-                              {g.description}
-                            </p>
-                          )}
-                          <div className="text-[11px] text-slate-400 mt-1">
-                            Target: {formatMonthKey(g.targetDate)} · {g.milestones?.length || 0} milestones
-                          </div>
-                        </div>
-
-                        <div className="neu-inset-sm flex items-center gap-1 p-0.5 flex-shrink-0">
-                          <button
-                            type="button"
-                            onClick={() => setGoalLevel(g.id, null)}
-                            title="No access"
-                            data-plain
-                            className={`px-1.5 py-1 rounded-md transition cursor-pointer ${
-                              !level ? 'bg-slate-700 text-white' : 'text-slate-400 hover:text-slate-600'
-                            }`}
-                          >
-                            <Ban className="w-3.5 h-3.5" />
-                          </button>
-                          {ACCESS_LEVELS.map((option) => (
-                            <button
-                              key={option.value}
-                              type="button"
-                              onClick={() => setGoalLevel(g.id, option.value)}
-                              title={option.value === 'view' ? 'Read-only' : 'Can edit'}
-                              data-plain
-                              className={`px-2 py-1 rounded-md text-[11px] font-semibold transition cursor-pointer flex items-center gap-1 ${
-                                level === option.value
-                                  ? option.value === 'edit'
-                                    ? 'bg-emerald-600 text-white'
-                                    : 'bg-sky-600 text-white'
-                                  : 'text-slate-500 hover:text-slate-700'
-                              }`}
-                            >
-                              {option.icon}
-                              <span>{option.label}</span>
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-
-            {/* Action buttons */}
-            <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-slate-100">
-              <button
-                type="button"
-                onClick={handleCloseModal}
-                className="chip px-4 py-2.5 text-xs"
-              >
+        <Dialog
+          size="xl"
+          kicker={modalTargetRequest ? 'Approve & assign goals' : 'Manage assigned goals'}
+          title={`Assign goals to ${targetPersonName}`}
+          description={
+            <>
+              Choose what this <strong>{targetPersonRole}</strong> may do with each goal. <strong>View</strong> is
+              read-only, <strong>Edit</strong> also lets them add and change routines and daily tasks. Goals left on{' '}
+              <strong>No access</strong> stay invisible to them.
+            </>
+          }
+          onClose={handleCloseModal}
+          footer={
+            <>
+              <button type="button" onClick={handleCloseModal} className="chip px-4 py-2.5 text-sm">
                 Cancel
               </button>
-              <button
-                type="button"
-                onClick={handleConfirmAssignment}
-                className="text-xs font-semibold px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs transition cursor-pointer flex items-center gap-1.5"
-              >
-                <Check className="w-3.5 h-3.5 stroke-[2.5]" />
-                <span>
-                  {modalTargetRequest
-                    ? `Confirm & Approve (${Object.keys(goalAccess).length} Goals)`
-                    : 'Save Goal Access'}
-                </span>
+              <button type="button" onClick={handleConfirmAssignment} className="btn-tone inline-flex items-center gap-1.5 px-5 py-2.5 text-sm">
+                <Check className="w-4 h-4 stroke-[2.5]" />
+                {modalTargetRequest ? `Approve with ${Object.keys(goalAccess).length} goals` : 'Save goal access'}
               </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* CREDENTIALS MODAL: what a client can see about a connected professional */}
-      {credentialTarget && (
-        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-md flex items-center justify-center p-4 z-[60] fade">
-          <div className="neu rounded-3xl max-w-xl w-full p-6 max-h-[90vh] overflow-y-auto space-y-4 pop">
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <span className="badge uppercase tracking-wider">
-                  Professional profile
-                </span>
-                <h3 className="text-lg font-bold text-slate-900 mt-2">
-                  {credentialTarget.name || credentialTarget.email || 'Professional'}
-                </h3>
-                <p className="text-xs text-slate-500 mt-0.5">
-                  Shared by them. Qualifications link out to a source you can verify yourself.
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={() => setCredentialTarget(null)}
-                className="text-slate-400 hover:text-slate-600 p-1 rounded-lg hover:bg-slate-100 transition cursor-pointer shrink-0"
-                title="Close"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            {credentialLoading ? (
-              <p className="text-xs font-semibold text-slate-500 py-6 text-center">
-                Loading profile...
-              </p>
-            ) : credentialProfile ? (
-              <ProfessionalProfileCard value={credentialProfile} />
-            ) : (
-              <div className="neu-inset p-6 text-center space-y-1">
-                <p className="text-xs font-semibold text-slate-600">
-                  This professional has not added a profile yet.
-                </p>
-                <p className="text-[11px] text-slate-400">
-                  You can still see the goals they have been given access to.
-                </p>
+            </>
+          }
+        >
+          <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
+            <span className="text-sm font-semibold text-slate-800">
+              Shared goals ({Object.keys(goalAccess).length}/{goals.length})
+            </span>
+            {goals.length > 0 && (
+              <div className="flex items-center gap-3 text-sm font-semibold">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const next: Record<string, GoalAccessLevel> = {};
+                    goals.forEach((g) => {
+                      next[g.id] = 'edit';
+                    });
+                    setGoalAccess(next);
+                  }}
+                  className="text-[color:var(--tone-700)] hover:underline cursor-pointer"
+                >
+                  Everyone can edit
+                </button>
+                <span className="text-slate-300" aria-hidden="true">·</span>
+                <button type="button" onClick={() => setGoalAccess({})} className="text-rose-600 hover:underline cursor-pointer">
+                  Clear
+                </button>
               </div>
             )}
+          </div>
 
-            <div className="pt-3 border-t border-slate-100 flex items-center justify-between gap-3">
-              <span className="text-[11px] text-slate-400 flex items-center gap-1.5">
+          {goals.length === 0 ? (
+            <div className="neu-inset p-5 text-center">
+              <p className="meta">
+                You haven’t created any goals yet. You can approve access now, and assign goals later once you create them.
+              </p>
+            </div>
+          ) : (
+            <ul className="max-h-[22rem] space-y-2.5 overflow-y-auto pr-1">
+              {goals.map((g) => (
+                <li key={g.id} className="neu-inset-sm flex flex-col gap-3 p-3.5 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="text-sm font-bold text-slate-900">{g.title}</span>
+                      <span className="badge">{g.category || 'General'}</span>
+                    </div>
+                    <p className="meta mt-0.5">
+                      Target {formatMonthKey(g.targetDate)} · {g.milestones?.length || 0} milestones
+                    </p>
+                  </div>
+                  <AccessPicker value={goalAccess[g.id]} onChange={(level) => setGoalLevel(g.id, level)} who={g.title} />
+                </li>
+              ))}
+            </ul>
+          )}
+        </Dialog>
+      )}
+
+      {/* PROFESSIONAL PROFILE DIALOG: what a client can see about a connected professional */}
+      {credentialTarget && (
+        <Dialog
+          size="xl"
+          kicker="Professional profile"
+          title={credentialTarget.name || credentialTarget.email || 'Professional'}
+          description="Shared by them. Qualifications link out to a source you can verify yourself."
+          onClose={() => setCredentialTarget(null)}
+          footer={
+            <>
+              <span className="meta mr-auto inline-flex items-center gap-1.5">
                 <ExternalLink className="w-3 h-3" />
                 Links open in a new tab
               </span>
-              <button
-                type="button"
-                onClick={() => setCredentialTarget(null)}
-                className="chip px-4 py-2 text-xs"
-              >
+              <button type="button" onClick={() => setCredentialTarget(null)} className="chip px-4 py-2.5 text-sm">
                 Close
               </button>
+            </>
+          }
+        >
+          {credentialLoading ? (
+            <p className="meta py-6 text-center font-semibold">Loading profile…</p>
+          ) : credentialProfile ? (
+            <ProfessionalProfileCard value={credentialProfile} />
+          ) : (
+            <div className="neu-inset space-y-1 p-6 text-center">
+              <p className="text-sm font-semibold text-slate-700">This professional has not added a profile yet.</p>
+              <p className="meta">You can still see the goals they have been given access to.</p>
             </div>
-          </div>
-        </div>
+          )}
+        </Dialog>
       )}
     </div>
   );

@@ -79,7 +79,7 @@ export const AccountProfilePanel: React.FC<AccountProfilePanelProps> = ({
       {/* Connection code */}
       <div className="neu rounded-2xl p-5 sm:p-6">
         <h2 className="card-title">Your connection code</h2>
-        <p className="text-xs text-slate-400 mt-1 mb-4">
+        <p className="card-lede">
           Share this with a professional so they can request access to support your goals.
         </p>
         <div className="flex items-center gap-3">

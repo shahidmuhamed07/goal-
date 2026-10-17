@@ -129,8 +129,8 @@ export const CreateGoalModal: React.FC<CreateGoalModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 bg-slate-900/45 backdrop-blur-md flex items-center justify-center p-3 sm:p-4 z-[60] fade">
-      <div className="neu rounded-3xl pop max-w-lg w-full p-5 sm:p-7 max-h-[92vh] overflow-y-auto space-y-5">
+    <div className="scrim">
+      <div className="dialog space-y-5" data-size="lg">
         {/* Modal Header */}
         <div className="flex justify-between items-center pb-3 border-b border-slate-300/40">
           <div className="flex items-center gap-2.5">

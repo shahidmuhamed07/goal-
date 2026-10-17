@@ -99,6 +99,54 @@ The accent is set **once**, on the app root: `data-role="owner"` (periwinkle) or
 - `.neu*` classes force `background` and `border: none`; a stray `bg-*` utility will not win.
 - `html` has `scroll-padding-top: 120px` and smooth scrolling.
 
+## The UI standard (read this before you build or change a screen)
+
+Spacing, text sizes, dialogs and controls are decided **once**, in shared parts. Build from them and a new screen looks like the old ones with no extra effort. The test `apps/web/src/uiStandards.test.ts` fails (naming the file and line) if an old pattern comes back, so a reviewer does not have to catch it by eye.
+
+### Use these, never hand-build them
+
+| Need | Use | Never |
+|---|---|---|
+| A dialog | `<Dialog>` (`components/Dialog.tsx`): kicker, title, description, close button, body, footer, Esc to close | your own `fixed inset-0` overlay, a blur, a dark tint |
+| Behind an overlay | `.scrim` (full layer) or `.scrim-dim` (just the dim). Light dim, **no blur** | `bg-slate-900/..`, `backdrop-blur-*` |
+| A dropdown | `<AppSelect>` with `className="field-control ..."` and `wrapperClassName` for width | a native `<select>` |
+| No access / View / Edit | `<AccessPicker>` | hand-made buttons |
+| Going back out of a screen | `<BackButton label="All goals">`: 44px pill, on its **own row** above the badges and title | a small "← Back" chip beside badges |
+| A round icon button | `.icon-action` (36px), `data-tone="tone"` or `"danger"` | squares with borders, other sizes |
+| Text under a card title | `.card-lede` | `text-xs text-slate-400 mt-1 mb-4` |
+| Small supporting text (email, date, count) | `.meta` | pale slate-400 text people need to read |
+| A text-field look on a custom control | `.field-control` | copying the input styles |
+
+### Spacing (an 8-point rhythm)
+
+- Between cards on a screen: `space-y-6` (24px).
+- Card padding: `p-4 sm:p-6`. Inside a card: title, then `.card-lede` (it spaces itself), then content with `space-y-4` (16px).
+- Related small controls in a row: `gap-2` (8px). Related rows: `gap-3` (12px). Groups: `gap-4` (16px).
+- A dialog is always: header, then 16px, body (`gap` 16px), then 20px and a hairline above the footer. `<Dialog>` does this; do not re-space it.
+- Controls that sit side by side share one height: **40px** for fields, dropdown buttons and filled buttons. Round icon buttons are 36px; the back button is 44px (it must be easy to find and tap).
+
+### Text hierarchy (five levels, always in this order)
+
+1. Page title: `.page-title` (display font, 28 to 34px).
+2. Card or dialog title: `.card-title` (display font, 17px; dialogs 20px).
+3. Body: 14px, `text-slate-700` or `text-slate-900`.
+4. Supporting text: `.meta` or `.card-lede` (12 to 13px, `slate-500`).
+5. Field labels: `.section-label` (12px, semibold, `slate-500`).
+
+`slate-400` is only for decoration (placeholders, disabled, icons), never for words someone needs to read.
+
+### Overlays
+
+One look: a light dim (`rgb(26 25 39 / 0.32)`), **no blur**, a white panel with a stronger shadow so it stands out without muddying the page behind. If you think a dialog needs a different overlay, change the shared `.scrim` rule so every dialog changes together.
+
+### Before you finish a UI change
+
+1. Built from the shared parts above? (`npm test -w @goalpath/web` checks the common slips.)
+2. Looked at it at phone width (375px) **and** desktop, with a dialog open if it has one?
+3. Controls in a row the same height and aligned? A dropdown list that opens inside the screen?
+4. A way back out that is easy to see?
+5. Added anything new that other screens will want? Make it a shared part and add it to the table and the test.
+
 ## 4. Motion
 
 | Class / keyframe | Effect |
@@ -166,6 +214,10 @@ The earlier "Quick sample tasks", the long description paragraph and the six pre
 | `GlassIconButton` | `UIElements.tsx` | Small icon button; passes any button attribute through. `variant: tone|purple|emerald|rose|slate|amber|blue`, `size: xs|sm|md|lg`, `active`. **Default to `tone`** (follows owner/professional automatically); `rose` for delete. |
 | `GlassBadge` | `UIElements.tsx` | Uppercase pill. `variant: purple|emerald|amber|slate|blue`. |
 | `StreakBadge` | `UIElements.tsx` | `stats: StreakStats`, `onClick?`, `compact?`. States: none ("Start streak"), at risk ("Keep it alive", flickering hollow flame), done today (filled flame). |
+| `Dialog` | `Dialog.tsx` | The one dialog shell. `title`, `kicker?`, `description?`, `size` (`sm`/`md`/`lg`/`xl`), `footer?`, `closeOnScrim?` (off by default so a stray tap never loses typing). |
+| `AccessPicker` | `AccessPicker.tsx` | No access / View / Edit as one labelled row. `value`, `onChange(level \| null)`, `who`. |
+| `BackButton` | `BackButton.tsx` | The way back out of a screen. `label`, `onClick`. |
+| `GuidedGoal` | `GuidedGoal.tsx` | The optional "Help me plan" questions for a new goal. |
 | `AppSelect` | `AppSelect.tsx` | Custom dropdown replacing native `<select>` (consistent font/colour/width). `options[{value,label,hint?}]`, `ariaLabel`, `align`. |
 | `LoginScreen` | | Google + email/password auth UI. |
 | `Onboarding` | `Onboarding.tsx` | The first-run questions (see §6). Props: `isOpen`, `name`, `onFinish(answers, plans)`, `onClose`. Contains `OptionRow`, `AskBubble`, `Confetti`, `SlideToCommit`. |

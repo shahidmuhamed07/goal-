@@ -17,6 +17,10 @@ interface AppSelectProps {
   className?: string;
   align?: 'left' | 'right';
   disabled?: boolean;
+  /** Sizes the wrapper (for example `sm:w-44`), so the trigger can fill it. */
+  wrapperClassName?: string;
+  /** `md` makes the list text match a normal field (14px); `sm` suits compact bars. */
+  size?: 'sm' | 'md';
 }
 
 /**
@@ -35,6 +39,8 @@ export const AppSelect: React.FC<AppSelectProps> = ({
   className = '',
   align = 'right',
   disabled = false,
+  wrapperClassName = '',
+  size = 'sm',
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const triggerRef = useRef<HTMLButtonElement>(null);
@@ -59,7 +65,7 @@ export const AppSelect: React.FC<AppSelectProps> = ({
   };
 
   return (
-    <div className="relative min-w-0">
+    <div className={`relative min-w-0 ${wrapperClassName}`}>
       <button
         ref={triggerRef}
         type="button"
@@ -98,7 +104,7 @@ export const AppSelect: React.FC<AppSelectProps> = ({
                   role="option"
                   aria-selected={isSelected}
                   onClick={() => pick(option.value)}
-                  className={`w-full text-left px-2.5 py-2 rounded-xl text-xs font-semibold transition flex items-center gap-2 cursor-pointer ${
+                  className={`w-full text-left px-3 py-2.5 rounded-xl font-semibold transition flex items-center gap-2 cursor-pointer ${size === 'md' ? 'text-sm' : 'text-xs'} ${
                     isSelected
                       ? 'neu-inset-sm text-emerald-800'
                       : 'text-slate-700 hover:text-slate-900'
