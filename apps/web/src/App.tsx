@@ -89,11 +89,13 @@ import {
   applySeriesDays,
   createSeries,
   describeDays,
+  describePattern,
   estimateBytes,
   goalEndDate,
   occurrencesFrom,
   removeSubcategories,
   updateFrom,
+  type RepeatPattern,
 } from './recurrence';
 
 import { LoginScreen } from './components/LoginScreen';
@@ -1563,7 +1565,7 @@ export default function App() {
     goalId: string,
     name: string,
     fromDate: string,
-    days: number[]
+    pattern: RepeatPattern
   ): Promise<string | null> => {
     if (!canEditGoal(goalId)) return null;
     const targetGoal = goals.find((g) => g.id === goalId);
@@ -1573,7 +1575,7 @@ export default function App() {
       subcategories: targetGoal.subcategories || [],
       tasks: targetGoal.tasks || [],
       name,
-      days,
+      pattern,
       fromDate,
       endDate: goalEndDate(targetGoal),
       editorRole: isOwner ? null : professionalRole || null,
@@ -1587,7 +1589,7 @@ export default function App() {
     try {
       await updateDoc(doc(db, 'goals', goalId), { subcategories: created.subcategories });
       setSuccessMessage(
-        `“${name}” added to ${created.count} ${created.count === 1 ? 'day' : 'days'}: every ${describeDays(days)}.`
+        `“${name}” added to ${created.count} ${created.count === 1 ? 'day' : 'days'}: ${describePattern(pattern)}.`
       );
       return created.firstId;
     } catch (err) {
@@ -1604,7 +1606,8 @@ export default function App() {
   const handleChangeSubcategoryRepeat = async (
     goalId: string,
     subcategoryId: string,
-    days: number[]
+    days: number[],
+    everyWeeks?: number
   ) => {
     if (!canEditGoal(goalId)) return;
     const targetGoal = goals.find((g) => g.id === goalId);
@@ -1620,6 +1623,7 @@ export default function App() {
       tasks: targetGoal.tasks || [],
       anchor: sub,
       days,
+      everyWeeks,
       endDate: goalEndDate(targetGoal),
     });
     if (!fitsInGoalDocument(result.subcategories, result.tasks)) return;
@@ -1632,7 +1636,7 @@ export default function App() {
       setSuccessMessage(
         days.length === 0
           ? `“${sub.name}” no longer repeats.`
-          : `“${sub.name}” now repeats every ${describeDays(days)}.`
+          : `“${sub.name}” now repeats: ${describePattern({ kind: 'weekly', days, everyWeeks: everyWeeks ?? sub.repeatEvery ?? 1 })}.`
       );
     } catch (err) {
       console.error('Change repeat error:', err);

@@ -3,6 +3,7 @@ import { Calendar, ChevronDown, ChevronLeft, ChevronRight, Plus, Repeat } from '
 import { Goal, Subcategory, TaskItem } from '../types';
 import { SubcategoryBlock } from './SubcategoryBlock';
 import { WeekdayPicker } from './WeekdayPicker';
+import { MiniCalendar } from './MiniCalendar';
 import { GlassIconButton } from './UIElements';
 import { DayMark } from './DayMark';
 import { getCategoryPresets } from '../categoryPresets';
@@ -18,11 +19,13 @@ import {
   buildDayStats,
   datesOnWeekdays,
   describeDays,
+  describePattern,
   getWeekDates,
   goalEndDate,
   goalStartDate,
   startOfWeek,
   weekdayOf,
+  type RepeatPattern,
 } from '../recurrence';
 
 type Priority = 'high' | 'medium' | 'low';
@@ -41,12 +44,17 @@ interface DailyTaskSectionProps {
     goalId: string,
     name: string,
     fromDate: string,
-    days: number[]
+    pattern: RepeatPattern
   ) => Promise<string | null>;
   onRenameSubcategory: (goalId: string, subcategoryId: string, name: string) => void;
   onDeleteSubcategory: (goalId: string, subcategoryId: string, scope: 'one' | 'future') => void;
   onSetSubcategoryRole?: (goalId: string, subcategoryId: string, editorRole: string) => void;
-  onChangeSubcategoryRepeat: (goalId: string, subcategoryId: string, days: number[]) => void;
+  onChangeSubcategoryRepeat: (
+    goalId: string,
+    subcategoryId: string,
+    days: number[],
+    everyWeeks?: number
+  ) => void;
   onAddTask: (
     goalId: string,
     text: string,
@@ -69,6 +77,14 @@ const longDate = (date: string): string => {
     day: 'numeric',
     timeZone: 'UTC',
   });
+};
+
+/** "Mon Oct 19": a day in a short list, where commas would be confusing. */
+const shortDate = (date: string): string => {
+  const [y, m, d] = date.split('-').map(Number);
+  return new Date(Date.UTC(y, m - 1, d))
+    .toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', timeZone: 'UTC' })
+    .replace(',', '');
 };
 
 /** "Oct 5 – 11, 2026", or "Sep 28 – Oct 4, 2026" when the week crosses a month. */
@@ -145,6 +161,11 @@ export const DailyTaskSection: React.FC<DailyTaskSectionProps> = ({
   const [addOpen, setAddOpen] = useState(false);
   const [newName, setNewName] = useState('');
   const [weekly, setWeekly] = useState(false);
+  // 1 = every week, 2 = every other week.
+  const [everyWeeks, setEveryWeeks] = useState(1);
+  // Days picked one by one on the small calendar, instead of weekdays.
+  const [datesMode, setDatesMode] = useState(false);
+  const [pickedDates, setPickedDates] = useState<string[]>([]);
   const [repeatDays, setRepeatDays] = useState<number[]>([]);
   const [adding, setAdding] = useState(false);
 
@@ -272,6 +293,9 @@ export const DailyTaskSection: React.FC<DailyTaskSectionProps> = ({
   const openAdd = () => {
     setAddOpen(true);
     setWeekly(false);
+    setEveryWeeks(1);
+    setDatesMode(false);
+    setPickedDates([]);
     setRepeatDays([weekdayOf(selectedDate)]);
   };
 
@@ -281,19 +305,30 @@ export const DailyTaskSection: React.FC<DailyTaskSectionProps> = ({
   };
 
   const repeatDates = useMemo(
-    () => (weekly ? datesOnWeekdays(selectedDate, horizonEnd, repeatDays) : []),
-    [weekly, selectedDate, horizonEnd, repeatDays]
+    () => (weekly ? datesOnWeekdays(selectedDate, horizonEnd, repeatDays, everyWeeks) : []),
+    [weekly, selectedDate, horizonEnd, repeatDays, everyWeeks]
   );
+
+  /** How the new subcategory repeats, or null for "just this day". */
+  const pattern: RepeatPattern | null = weekly
+    ? { kind: 'weekly', days: repeatDays, everyWeeks }
+    : datesMode
+    ? { kind: 'dates', dates: pickedDates }
+    : null;
+
+  const togglePicked = (date: string) =>
+    setPickedDates((prev) => (prev.includes(date) ? prev.filter((d) => d !== date) : [...prev, date].sort()));
 
   const handleAdd = async (event: React.FormEvent) => {
     event.preventDefault();
     const name = newName.trim();
     if (!name || adding) return;
     if (weekly && repeatDays.length === 0) return;
+    if (datesMode && pickedDates.length === 0) return;
     setAdding(true);
     try {
-      const id = weekly
-        ? await onAddRepeatingSubcategory(goal.id, name, selectedDate, repeatDays)
+      const id = pattern
+        ? await onAddRepeatingSubcategory(goal.id, name, selectedDate, pattern)
         : await onAddSubcategory(goal.id, name, selectedDate);
       if (id) {
         setExpandedIds((prev) => ({ ...prev, [id]: true }));
@@ -501,36 +536,108 @@ export const DailyTaskSection: React.FC<DailyTaskSectionProps> = ({
                 <button
                   type="button"
                   className="chip px-3 py-1.5 text-xs"
-                  data-active={!weekly}
-                  onClick={() => setWeekly(false)}
+                  data-active={!weekly && !datesMode}
+                  onClick={() => {
+                    setWeekly(false);
+                    setDatesMode(false);
+                  }}
                 >
                   Just this day
                 </button>
                 <button
                   type="button"
                   className="chip inline-flex items-center gap-1.5 px-3 py-1.5 text-xs"
-                  data-active={weekly}
+                  data-active={weekly && everyWeeks === 1}
                   onClick={() => {
                     setWeekly(true);
+                    setDatesMode(false);
+                    setEveryWeeks(1);
                     if (repeatDays.length === 0) setRepeatDays([weekdayOf(selectedDate)]);
                   }}
                 >
                   <Repeat className="w-3.5 h-3.5" />
                   Every week
                 </button>
+                <button
+                  type="button"
+                  className="chip inline-flex items-center gap-1.5 px-3 py-1.5 text-xs"
+                  data-active={weekly && everyWeeks === 2}
+                  onClick={() => {
+                    setWeekly(true);
+                    setDatesMode(false);
+                    setEveryWeeks(2);
+                    if (repeatDays.length === 0) setRepeatDays([weekdayOf(selectedDate)]);
+                  }}
+                >
+                  <Repeat className="w-3.5 h-3.5" />
+                  Every other week
+                </button>
+                <button
+                  type="button"
+                  className="chip inline-flex items-center gap-1.5 px-3 py-1.5 text-xs"
+                  data-active={datesMode}
+                  onClick={() => {
+                    setDatesMode(true);
+                    setWeekly(false);
+                    if (pickedDates.length === 0) setPickedDates([selectedDate]);
+                  }}
+                >
+                  <Calendar className="w-3.5 h-3.5" />
+                  Pick dates
+                </button>
               </div>
 
               {weekly && (
                 <div className="space-y-2">
                   <WeekdayPicker value={repeatDays} onChange={setRepeatDays} />
+                  <div className="flex flex-wrap items-center gap-2">
+                    <button
+                      type="button"
+                      className="chip px-2.5 py-1 text-[11px]"
+                      data-active={repeatDays.length === 7}
+                      onClick={() => setRepeatDays([0, 1, 2, 3, 4, 5, 6])}
+                    >
+                      Every day
+                    </button>
+                    <button
+                      type="button"
+                      className="chip px-2.5 py-1 text-[11px]"
+                      data-active={repeatDays.length === 5 && [1, 2, 3, 4, 5].every((d) => repeatDays.includes(d))}
+                      onClick={() => setRepeatDays([1, 2, 3, 4, 5])}
+                    >
+                      Weekdays
+                    </button>
+                  </div>
                   <p className="text-[11px] font-medium text-slate-600">
                     {repeatDays.length === 0
                       ? 'Pick at least one day.'
                       : repeatDates.length === 0
                       ? 'No matching days left in this goal.'
-                      : `Every ${describeDays(repeatDays)} from ${longDate(repeatDates[0])} until ${formatMonthKey(
-                          horizonEnd.slice(0, 7)
-                        )} · ${repeatDates.length} ${repeatDates.length === 1 ? 'day' : 'days'}.`}
+                      : `${describePattern({ kind: 'weekly', days: repeatDays, everyWeeks })} from ${longDate(
+                          repeatDates[0]
+                        )} until ${formatMonthKey(horizonEnd.slice(0, 7))} · ${repeatDates.length} ${
+                          repeatDates.length === 1 ? 'day' : 'days'
+                        }.`}
+                  </p>
+                </div>
+              )}
+
+              {datesMode && (
+                <div className="space-y-2">
+                  <MiniCalendar
+                    min={horizonStart}
+                    max={horizonEnd}
+                    selected={pickedDates}
+                    onToggle={togglePicked}
+                    startOn={selectedDate}
+                  />
+                  <p className="text-[11px] font-medium text-slate-600">
+                    {pickedDates.length === 0
+                      ? 'Tap the days you want. Tap a day again to remove it.'
+                      : `${describePattern({ kind: 'dates', dates: pickedDates })}: ${pickedDates
+                          .slice(0, 3)
+                          .map((d) => shortDate(d))
+                          .join(' · ')}${pickedDates.length > 3 ? ` · and ${pickedDates.length - 3} more` : ''}.`}
                   </p>
                 </div>
               )}
@@ -543,9 +650,20 @@ export const DailyTaskSection: React.FC<DailyTaskSectionProps> = ({
               <button
                 type="submit"
                 className="btn-tone px-4 py-2 text-xs"
-                disabled={!newName.trim() || adding || (weekly && repeatDates.length === 0)}
+                disabled={
+                  !newName.trim() ||
+                  adding ||
+                  (weekly && repeatDates.length === 0) ||
+                  (datesMode && pickedDates.length === 0)
+                }
               >
-                {weekly ? 'Add to every week' : 'Add subcategory'}
+                {weekly
+                  ? everyWeeks === 2
+                    ? 'Add every other week'
+                    : 'Add to every week'
+                  : datesMode
+                  ? `Add to ${pickedDates.length} ${pickedDates.length === 1 ? 'day' : 'days'}`
+                  : 'Add subcategory'}
               </button>
             </div>
           </form>
@@ -609,7 +727,7 @@ export const DailyTaskSection: React.FC<DailyTaskSectionProps> = ({
                   : undefined
               }
               onChangeRepeat={
-                canEditThisSub ? (days) => onChangeSubcategoryRepeat(goal.id, sub.id, days) : undefined
+                canEditThisSub ? (days, every) => onChangeSubcategoryRepeat(goal.id, sub.id, days, every) : undefined
               }
               onDelete={canRemoveThisSub ? (scope) => onDeleteSubcategory(goal.id, sub.id, scope) : undefined}
               onAddTask={

@@ -112,15 +112,51 @@ export const buildDayStats = (
   return map;
 };
 
-/** Every date from `from` to `to` (inclusive) that falls on one of `days`. */
-export const datesOnWeekdays = (from: string, to: string, days: number[]): string[] => {
+/** Whole weeks from the week of `a` to the week of `b` (Monday-first weeks). Negative when `b` is earlier. */
+export const weeksBetween = (a: string, b: string): number => {
+  const ms = (d: string) => {
+    const [y, m, day] = startOfWeek(d).split('-').map(Number);
+    return Date.UTC(y, m - 1, day);
+  };
+  return Math.round((ms(b) - ms(a)) / (7 * 86_400_000));
+};
+
+/**
+ * Every date from `from` to `to` (inclusive) that falls on one of `days`.
+ * With `everyWeeks` of 2, only every second week counts, starting with the week
+ * that contains `weekAnchor` (by default `from`).
+ */
+export const datesOnWeekdays = (
+  from: string,
+  to: string,
+  days: number[],
+  everyWeeks = 1,
+  weekAnchor = from
+): string[] => {
   const wanted = new Set(days);
+  const step = Math.max(1, Math.floor(everyWeeks));
   const dates: string[] = [];
   // The guard keeps a bad range from looping forever; 24 months is ~730 days.
   for (let date = from, i = 0; date <= to && i < 1000; date = shiftDateString(date, 1), i += 1) {
-    if (wanted.has(weekdayOf(date))) dates.push(date);
+    if (wanted.has(weekdayOf(date)) && weeksBetween(weekAnchor, date) % step === 0) dates.push(date);
   }
   return dates;
+};
+
+/** How a new routine repeats: on weekdays (every week, or every other week), or on days picked one by one. */
+export type RepeatPattern =
+  | { kind: 'weekly'; days: number[]; everyWeeks: number }
+  | { kind: 'dates'; dates: string[] };
+
+/** "Every Tue · Thu", "Every other Mon · Fri", "Every day" or "5 picked days". */
+export const describePattern = (pattern: RepeatPattern): string => {
+  if (pattern.kind === 'dates') {
+    const n = new Set(pattern.dates).size;
+    return `${n} picked ${n === 1 ? 'day' : 'days'}`;
+  }
+  const days = describeDays(pattern.days);
+  if (pattern.everyWeeks > 1) return `Every other week: ${days}`;
+  return days === 'Every day' ? days : `Every ${days}`;
 };
 
 /** "Tue · Thu", "Weekdays", "Weekends" or "Every day". */
@@ -130,6 +166,13 @@ export const describeDays = (days: number[]): string => {
   if (sorted.join() === '1,2,3,4,5') return 'Weekdays';
   if (sorted.join() === '6,0') return 'Weekends';
   return sorted.map((day) => WEEKDAY_SHORT[day]).join(' · ');
+};
+
+/** The label for a routine's badge: "Tue · Fri", "Every other week: Tue · Fri" or "4 picked days". */
+export const describeRepeat = (sub: Subcategory, occurrences: number): string => {
+  if (sub.repeatDates) return describePattern({ kind: 'dates', dates: Array.from({ length: occurrences }, (_, i) => String(i)) });
+  const days = describeDays(sub.repeatDays || []);
+  return (sub.repeatEvery ?? 1) > 1 ? `Every other week: ${days}` : days;
 };
 
 export const isRepeating = (sub?: Pick<Subcategory, 'repeatId'> | null): boolean =>
@@ -176,15 +219,22 @@ export const applySeriesDays = ({
   anchor,
   days,
   endDate,
+  everyWeeks,
   seed = Date.now(),
 }: PlanArrays & {
   anchor: Subcategory;
   days: number[];
   endDate: string;
+  /** Weeks between repeats. Defaults to what the routine already uses (1 when none). */
+  everyWeeks?: number;
   seed?: number;
 }): SeriesChange => {
   const anchorDate = anchor.date;
-  if (!anchorDate) return { subcategories, tasks, added: 0, removed: 0, removedTasks: 0 };
+  const nothing = { subcategories, tasks, added: 0, removed: 0, removedTasks: 0 };
+  if (!anchorDate) return nothing;
+  // A routine built from picked dates has no weekdays to edit; it can only be stopped.
+  if (anchor.repeatDates && days.length > 0) return nothing;
+  const every = Math.max(1, Math.floor(everyWeeks ?? anchor.repeatEvery ?? 1));
 
   const wanted = sortWeekdays(days);
   const stopping = wanted.length === 0;
@@ -195,7 +245,13 @@ export const applySeriesDays = ({
 
   const dropIds = new Set(
     subcategories
-      .filter((s) => isLaterOccurrence(s) && (stopping || !wanted.includes(weekdayOf(s.date!))))
+      .filter(
+        (s) =>
+          isLaterOccurrence(s) &&
+          (stopping ||
+            !wanted.includes(weekdayOf(s.date!)) ||
+            weeksBetween(anchorDate, s.date!) % every !== 0)
+      )
       .map((s) => s.id)
   );
   const removedTasks = tasks.filter((t) => t.subcategoryId && dropIds.has(t.subcategoryId)).length;
@@ -203,8 +259,8 @@ export const applySeriesDays = ({
   let nextSubs: Subcategory[] = subcategories
     .filter((s) => !dropIds.has(s.id))
     .map((s) => {
-      if (s.id === anchor.id) return stopping ? withoutRepeat(s) : withRepeat(s, repeatId, wanted);
-      if (isLaterOccurrence(s)) return withRepeat(s, repeatId, wanted);
+      if (s.id === anchor.id) return stopping ? withoutRepeat(s) : withRepeat(s, repeatId, wanted, every);
+      if (isLaterOccurrence(s)) return withRepeat(s, repeatId, wanted, every);
       return s;
     });
   let nextTasks = tasks.filter((t) => !(t.subcategoryId && dropIds.has(t.subcategoryId)));
@@ -229,7 +285,7 @@ export const applySeriesDays = ({
     const newSubs: Subcategory[] = [];
     const newTasks: TaskItem[] = [];
 
-    datesOnWeekdays(dayAfter, endDate, wanted).forEach((date) => {
+    datesOnWeekdays(dayAfter, endDate, wanted, every, anchorDate).forEach((date) => {
       if (alreadyThere.has(date) || sameNameOn(date)) return;
       const id = `sc-${seed}-${newSubs.length}`;
       newSubs.push({
@@ -240,6 +296,7 @@ export const applySeriesDays = ({
         editorRole: anchor.editorRole ?? null,
         repeatId,
         repeatDays: wanted,
+        ...(every > 1 ? { repeatEvery: every } : {}),
       });
       template.forEach((t, i) => {
         newTasks.push({
@@ -263,27 +320,43 @@ export const applySeriesDays = ({
 
 /**
  * Creates a brand-new routine: one subcategory on every matching day from
- * `fromDate` to `endDate`. Returns null when no day matches.
+ * `fromDate` to `endDate`. Give either `days` (every week, the original form) or
+ * a `pattern` (every other week, or days picked one by one). Returns null when
+ * no day matches.
  */
 export const createSeries = ({
   subcategories,
   tasks,
   name,
   days,
+  pattern,
   fromDate,
   endDate,
   editorRole,
   seed = Date.now(),
 }: PlanArrays & {
   name: string;
-  days: number[];
+  days?: number[];
+  pattern?: RepeatPattern;
   fromDate: string;
   endDate: string;
   editorRole?: string | null;
   seed?: number;
 }): (PlanArrays & { firstId: string; count: number }) | null => {
-  const wanted = sortWeekdays(days);
-  const dates = datesOnWeekdays(fromDate, endDate, wanted);
+  const how: RepeatPattern = pattern ?? { kind: 'weekly', days: days ?? [], everyWeeks: 1 };
+
+  let dates: string[];
+  let extra: Pick<Subcategory, 'repeatDays' | 'repeatEvery' | 'repeatDates'>;
+  if (how.kind === 'dates') {
+    // Only real days inside the goal, each once, in order.
+    dates = [...new Set(how.dates)].filter((d) => /^\d{4}-\d{2}-\d{2}$/.test(d) && d <= endDate).sort();
+    extra = { repeatDates: true };
+  } else {
+    const wanted = sortWeekdays(how.days);
+    const every = Math.max(1, Math.floor(how.everyWeeks));
+    dates = datesOnWeekdays(fromDate, endDate, wanted, every, fromDate);
+    extra = { repeatDays: wanted, ...(every > 1 ? { repeatEvery: every } : {}) };
+  }
   if (dates.length === 0) return null;
 
   const repeatId = `rp-${seed}`;
@@ -295,7 +368,7 @@ export const createSeries = ({
     date,
     editorRole: editorRole ?? null,
     repeatId,
-    repeatDays: wanted,
+    ...extra,
   }));
 
   return {
@@ -371,13 +444,12 @@ export const countLater = (
 };
 
 // Firestore rejects `undefined`, so repeat fields are added or dropped, never nulled.
-const withRepeat = (sub: Subcategory, repeatId: string, days: Weekday[]): Subcategory => ({
-  ...sub,
-  repeatId,
-  repeatDays: days,
-});
+const withRepeat = (sub: Subcategory, repeatId: string, days: Weekday[], every = 1): Subcategory => {
+  const { repeatEvery: _old, ...rest } = sub;
+  return { ...rest, repeatId, repeatDays: days, ...(every > 1 ? { repeatEvery: every } : {}) };
+};
 
 const withoutRepeat = (sub: Subcategory): Subcategory => {
-  const { repeatId: _repeatId, repeatDays: _repeatDays, ...rest } = sub;
+  const { repeatId: _repeatId, repeatDays: _repeatDays, repeatEvery: _every, repeatDates: _dates, ...rest } = sub;
   return rest;
 };

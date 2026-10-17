@@ -27,6 +27,13 @@ export interface Subcategory {
   repeatId?: string;
   /** Weekdays the routine runs on, 0 = Sunday … 6 = Saturday. */
   repeatDays?: number[];
+  /**
+   * Weeks between repeats. Missing means every week; 2 means every other week,
+   * counted from the week of the routine's first day.
+   */
+  repeatEvery?: number;
+  /** True when the routine was built from days picked on a calendar, not from weekdays. */
+  repeatDates?: boolean;
 }
 
 export interface TaskItem {

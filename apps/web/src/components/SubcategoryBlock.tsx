@@ -9,6 +9,8 @@ import {
   applySeriesDays,
   countLater,
   describeDays,
+  describePattern,
+  describeRepeat,
   goalEndDate,
   isRepeating,
   sortWeekdays,
@@ -60,8 +62,11 @@ interface SubcategoryBlockProps {
   canSetRole?: boolean;
   onRename?: (name: string) => void;
   onSetRole?: (role: string) => void;
-  /** Weekdays to repeat on from this day forward; an empty list stops the routine. */
-  onChangeRepeat?: (days: number[]) => void;
+  /**
+   * Weekdays to repeat on from this day forward, and how many weeks apart (1 = every
+   * week, 2 = every other week). An empty list stops the routine.
+   */
+  onChangeRepeat?: (days: number[], everyWeeks?: number) => void;
   onDelete?: (scope: 'one' | 'future') => void;
   onAddTask?: (text: string, priority: Priority, forward: boolean) => void;
   onUpdateTask?: (taskId: string, updates: Partial<TaskItem>) => void;
@@ -99,6 +104,7 @@ export const SubcategoryBlock: React.FC<SubcategoryBlockProps> = ({
   const [nameDraft, setNameDraft] = useState(name);
   const [repeatOpen, setRepeatOpen] = useState(false);
   const [repeatDraft, setRepeatDraft] = useState<number[]>([]);
+  const [everyDraft, setEveryDraft] = useState(1);
   const [confirm, setConfirm] = useState<Confirm | null>(null);
 
   const [text, setText] = useState('');
@@ -111,6 +117,9 @@ export const SubcategoryBlock: React.FC<SubcategoryBlockProps> = ({
 
   const repeating = isRepeating(sub);
   const repeatDays = sub?.repeatDays || [];
+  const repeatEvery = sub?.repeatEvery ?? 1;
+  // A routine built from days picked on a calendar has no weekdays to edit; it can only be stopped.
+  const pickedDays = !!sub?.repeatDates;
   const endDate = goalEndDate(goal);
   const plan = { subcategories: goal.subcategories || [], tasks: goal.tasks || [] };
 
@@ -131,15 +140,17 @@ export const SubcategoryBlock: React.FC<SubcategoryBlockProps> = ({
   const preview = useMemo(
     () =>
       repeatOpen && sub && sub.date
-        ? applySeriesDays({ ...plan, anchor: sub, days: repeatDraft, endDate, seed: 0 })
+        ? applySeriesDays({ ...plan, anchor: sub, days: repeatDraft, everyWeeks: everyDraft, endDate, seed: 0 })
         : null,
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [repeatOpen, repeatDraft, goal.subcategories, goal.tasks, sub, endDate]
+    [repeatOpen, repeatDraft, everyDraft, goal.subcategories, goal.tasks, sub, endDate]
   );
 
   const sameDays = sortWeekdays(repeatDraft).join() === sortWeekdays(repeatDays).join();
   const repeatChanged =
-    !!preview && repeatDraft.length > 0 && (!repeating || !sameDays || preview.added > 0 || preview.removed > 0);
+    !!preview &&
+    repeatDraft.length > 0 &&
+    (!repeating || !sameDays || everyDraft !== repeatEvery || preview.added > 0 || preview.removed > 0);
 
   const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`;
 
@@ -156,11 +167,12 @@ export const SubcategoryBlock: React.FC<SubcategoryBlockProps> = ({
       );
     }
     const until = formatMonthKey(endDate.slice(0, 7));
+    const label = describePattern({ kind: 'weekly', days: repeatDraft, everyWeeks: everyDraft });
     return parts.length > 0
-      ? `Every ${describeDays(repeatDraft)} until ${until}: ${parts.join(', ')}.`
+      ? `${label} until ${until}: ${parts.join(', ')}.`
       : repeatChanged
-      ? `Every ${describeDays(repeatDraft)} until ${until}.`
-      : 'Already repeating on these days.';
+      ? `${label} until ${until}.`
+      : 'Already repeating like this.';
   };
 
   const startRename = () => {
@@ -176,6 +188,7 @@ export const SubcategoryBlock: React.FC<SubcategoryBlockProps> = ({
 
   const openRepeat = () => {
     setRepeatDraft(repeating && repeatDays.length > 0 ? repeatDays : sub?.date ? [weekdayOf(sub.date)] : []);
+    setEveryDraft(repeating ? repeatEvery : 1);
     setConfirm(null);
     setRepeatOpen(true);
   };
@@ -216,7 +229,7 @@ export const SubcategoryBlock: React.FC<SubcategoryBlockProps> = ({
         onClick: startRename,
       });
     }
-    if (onChangeRepeat && sub.date) {
+    if (onChangeRepeat && sub.date && !pickedDays) {
       actions.push({
         key: 'repeat',
         label: repeating ? 'Edit repeat…' : 'Repeat weekly…',
@@ -342,10 +355,13 @@ export const SubcategoryBlock: React.FC<SubcategoryBlockProps> = ({
               <span className="block truncate text-sm font-bold text-slate-800">{name}</span>
             </button>
 
-            {repeating && repeatDays.length > 0 && (
-              <span className="badge shrink-0 max-sm:hidden!" title="Repeats every week">
+            {repeating && (repeatDays.length > 0 || pickedDays) && (
+              <span
+                className="badge shrink-0 max-sm:hidden!"
+                title={pickedDays ? 'Repeats on days picked on a calendar' : repeatEvery > 1 ? 'Repeats every other week' : 'Repeats every week'}
+              >
                 <Repeat className="w-3 h-3" />
-                {describeDays(repeatDays)}
+                {sub ? describeRepeat(sub, plan.subcategories.filter((s) => s.repeatId === sub.repeatId).length) : ''}
               </span>
             )}
             {sub?.editorRole && <span className="badge shrink-0">{sub.editorRole} only</span>}
@@ -372,8 +388,16 @@ export const SubcategoryBlock: React.FC<SubcategoryBlockProps> = ({
 
       {repeatOpen && sub && (
         <div className="mx-3 mb-3 neu-inset-sm p-3.5 space-y-3">
+          <div className="flex items-center gap-2 flex-wrap">
+            <button type="button" className="chip px-3 py-1.5 text-xs" data-active={everyDraft === 1} onClick={() => setEveryDraft(1)}>
+              Every week
+            </button>
+            <button type="button" className="chip px-3 py-1.5 text-xs" data-active={everyDraft === 2} onClick={() => setEveryDraft(2)}>
+              Every other week
+            </button>
+          </div>
           <div className="flex items-center justify-between gap-3 flex-wrap">
-            <span className="section-label">Repeat every</span>
+            <span className="section-label">On</span>
             <WeekdayPicker value={repeatDraft} onChange={setRepeatDraft} />
           </div>
           <p className="text-[11px] font-medium text-slate-600">{previewText()}</p>
@@ -386,7 +410,7 @@ export const SubcategoryBlock: React.FC<SubcategoryBlockProps> = ({
               className="btn-tone px-3.5 py-1.5 text-xs"
               disabled={!repeatChanged}
               onClick={() => {
-                onChangeRepeat?.(sortWeekdays(repeatDraft));
+                onChangeRepeat?.(sortWeekdays(repeatDraft), everyDraft);
                 setRepeatOpen(false);
               }}
             >
