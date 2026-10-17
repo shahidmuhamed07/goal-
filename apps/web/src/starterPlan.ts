@@ -447,7 +447,7 @@ const dietTweak = (eating?: string): string | null => {
  * Spreads routines over the chosen days so every day has something and no
  * routine is left without one: routine i takes days i, i + k, i + 2k …
  */
-const spreadOverDays = (routineCount: number, days: number[]): number[][] => {
+export const spreadOverDays = (routineCount: number, days: number[]): number[][] => {
   const sorted = sortWeekdays(days);
   if (sorted.length === 0) return Array.from({ length: routineCount }, () => []);
   return Array.from({ length: routineCount }, (_, i) => {

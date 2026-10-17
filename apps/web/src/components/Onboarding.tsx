@@ -93,7 +93,7 @@ const EATING_ICONS: Record<string, React.ElementType> = {
 };
 
 /** One choice: a white pill with an icon, a label and a round mark. */
-const OptionRow: React.FC<{
+export const OptionRow: React.FC<{
   icon?: React.ElementType;
   label: string;
   hint?: string;
@@ -119,7 +119,7 @@ const OptionRow: React.FC<{
 );
 
 /** The guide beside a speech bubble that holds the question. */
-const AskBubble: React.FC<{ title: React.ReactNode; sub?: string }> = ({ title, sub }) => (
+export const AskBubble: React.FC<{ title: React.ReactNode; sub?: string }> = ({ title, sub }) => (
   <div className="flex items-center gap-3 -ml-1">
     <Orb size={58} />
     <div className="flex-1 rounded-[1.75rem] bg-white/70 backdrop-blur px-5 py-4 shadow-[0_10px_30px_-18px_rgba(70,60,160,0.4)]">

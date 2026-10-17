@@ -117,6 +117,7 @@ import { GiveUpInterventionModal } from './components/GiveUpInterventionModal';
 import { ProfessionalProfilePanel } from './components/ProfessionalProfilePanel';
 import { AccountProfilePanel } from './components/AccountProfilePanel';
 import { Onboarding } from './components/Onboarding';
+import { GuidedGoal } from './components/GuidedGoal';
 import { ChatPanel } from './components/ChatPanel';
 import { threadHasUnread } from './chat';
 
@@ -250,6 +251,8 @@ export default function App() {
   const [personaPickerOpen, setPersonaPickerOpen] = useState(false);
   const [selectedGoalId, setSelectedGoalId] = useState<string | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  // The guided "create a goal" questions. The plain form stays one tap away from inside it.
+  const [guidedOpen, setGuidedOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('all');
   const [dailyMasterDate, setDailyMasterDate] = useState<string>(getTodayDateString());
@@ -1249,6 +1252,57 @@ export default function App() {
   };
 
   /**
+   * Saves one goal from a plan: the goal, a checkpoint for each month, and (when
+   * asked) the plan's routines written onto the calendar. Returns the new goal's id.
+   * Shared by the first-time questions and the guided "create a goal" flow.
+   */
+  const createGoalFromPlan = async (
+    plan: StarterPlan,
+    withRoutines: boolean,
+    index = 0
+  ): Promise<string | null> => {
+    if (!user) return null;
+    const startKey = getCurrentMonthKey();
+    const targetDate = addMonthsToKey(startKey, plan.months);
+    const monthKeys = generateMonthRange(startKey, targetDate);
+    const milestones: Milestone[] = monthKeys.map((mKey, idx) => ({
+      id: `m-${Date.now()}-${index}-${idx}`,
+      monthKey: mKey,
+      title:
+        idx === monthKeys.length - 1
+          ? `Final: Complete ${plan.title}`
+          : `Checkpoint for ${formatMonthKey(mKey)}`,
+      completed: false,
+    }));
+
+    const planned = withRoutines
+      ? materializePlan(plan, {
+          fromDate: todayDate,
+          endDate: goalEndDate({ targetDate, milestones }),
+          seed: Date.now() + index * 1000,
+        })
+      : { subcategories: [] as Subcategory[], tasks: [] as TaskItem[] };
+
+    // A long goal with many routines can outgrow one Firestore document; say so instead of failing at the database.
+    if (!fitsInGoalDocument(planned.subcategories, planned.tasks)) return null;
+
+    const docRef = await addDoc(collection(db, 'goals'), {
+      userId: user.uid,
+      title: plan.title,
+      category: plan.category,
+      description: plan.description,
+      createdAt: todayDate,
+      targetDate,
+      milestones,
+      subcategories: planned.subcategories,
+      tasks: planned.tasks,
+      viewerUids: [],
+      editorUids: [],
+    });
+    return docRef.id;
+  };
+
+  /**
    * Finishes the first-run questions: records the answers on the profile and,
    * for someone planning their own goals, creates a goal for each thing they
    * chose to work on, with the starter routines already written onto the
@@ -1260,44 +1314,11 @@ export default function App() {
   ): Promise<string[]> => {
     if (!user) return [];
     const chosenAt = new Date().toISOString();
-    const startKey = getCurrentMonthKey();
     const createdIds: string[] = [];
 
     for (const plan of plans) {
-      const targetDate = addMonthsToKey(startKey, plan.months);
-      const monthKeys = generateMonthRange(startKey, targetDate);
-      const milestones: Milestone[] = monthKeys.map((mKey, idx) => ({
-        id: `m-${Date.now()}-${createdIds.length}-${idx}`,
-        monthKey: mKey,
-        title:
-          idx === monthKeys.length - 1
-            ? `Final: Complete ${plan.title}`
-            : `Checkpoint for ${formatMonthKey(mKey)}`,
-        completed: false,
-      }));
-
-      const planned = answers.starter
-        ? materializePlan(plan, {
-            fromDate: todayDate,
-            endDate: goalEndDate({ targetDate, milestones }),
-            seed: Date.now() + createdIds.length * 1000,
-          })
-        : { subcategories: [] as Subcategory[], tasks: [] as TaskItem[] };
-
-      const docRef = await addDoc(collection(db, 'goals'), {
-        userId: user.uid,
-        title: plan.title,
-        category: plan.category,
-        description: plan.description,
-        createdAt: todayDate,
-        targetDate,
-        milestones,
-        subcategories: planned.subcategories,
-        tasks: planned.tasks,
-        viewerUids: [],
-        editorUids: [],
-      });
-      createdIds.push(docRef.id);
+      const id = await createGoalFromPlan(plan, answers.starter, createdIds.length);
+      if (id) createdIds.push(id);
     }
 
     // Firestore rejects undefined, so only answered questions are stored.
@@ -1330,6 +1351,19 @@ export default function App() {
     setPersonaPickerOpen(false);
     if (openGoalId) openGoal(openGoalId);
     else if (profile?.persona === 'professional') setActiveTab('professional');
+  };
+
+  /** Saves a goal made in the guided flow and opens it. */
+  const handleCreateGuidedGoal = async (plan: StarterPlan): Promise<string | null> => {
+    try {
+      const id = await createGoalFromPlan(plan, true);
+      if (id) setSuccessMessage(`“${plan.title}” is ready. Edit anything you like.`);
+      return id;
+    } catch (err) {
+      console.error('Create guided goal error:', err);
+      setErrorMessage('Could not create the goal. Please try again.');
+      return null;
+    }
   };
 
   const handleCreateGoal = async (newGoalData: {
@@ -2401,7 +2435,7 @@ export default function App() {
             {isOwner && (
               <button
                 type="button"
-                onClick={() => setIsModalOpen(true)}
+                onClick={() => setGuidedOpen(true)}
                 aria-label="New Goal"
                 data-plain
                 className="btn-tone hidden sm:flex text-xs sm:text-sm px-2.5 sm:px-4 py-1.5 sm:py-2 items-center gap-1.5 shrink-0"
@@ -2816,7 +2850,7 @@ export default function App() {
                     </p>
                     {isOwner && (
                       <button
-                        onClick={() => setIsModalOpen(true)}
+                        onClick={() => setGuidedOpen(true)}
                         data-plain
                         className="btn-tone text-sm px-5 py-2.5 flex items-center gap-2 mx-auto"
                       >
@@ -3375,6 +3409,21 @@ export default function App() {
       {/* The screens below are mounted only while open, so each opening starts clean.
           Left mounted, they kept the last step, answers or half-typed text after closing. */}
 
+      {/* GUIDED CREATE-A-GOAL QUESTIONS */}
+      {guidedOpen && (
+        <GuidedGoal
+          onClose={(goalId) => {
+            setGuidedOpen(false);
+            if (goalId) openGoal(goalId);
+          }}
+          onCreate={handleCreateGuidedGoal}
+          onManual={() => {
+            setGuidedOpen(false);
+            setIsModalOpen(true);
+          }}
+        />
+      )}
+
       {/* CREATE GOAL MODAL */}
       {isModalOpen && (
         <CreateGoalModal
@@ -3456,7 +3505,7 @@ export default function App() {
 
               <button
                 type="button"
-                onClick={() => setIsModalOpen(true)}
+                onClick={() => setGuidedOpen(true)}
                 aria-label="New Goal"
                 title="New Goal"
                 data-plain
