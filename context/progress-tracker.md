@@ -120,6 +120,14 @@ Found by reading the code on 2026-10-11; none of these have been reproduced unle
 
 ## Changelog
 
+### 2026-10-17 — Fix: closing a dialog and opening it again showed the old screen  (branch `fix/guided-plan-reset`)
+- **Type:** fix
+- **What & why:** The guided plan questions, New goal, Give up and Goal assignment dialogs stayed *mounted* while closed (they returned `null`), so React kept their state. After quitting the guided questions and opening them again, the old step and answers (even the finished "Your plan is ready" screen) came back instead of a fresh start; a half-typed goal title survived Cancel the same way. `App.tsx` now mounts each of the four only while it is open, so every opening starts clean.
+- **Files:** `apps/web/src/App.tsx` (31 lines).
+- **Verified:** in a throwaway page (deleted afterwards) showing both mountings of the real guided-plan screen: with the old mounting, quit and reopen returned to the same later question; with the new mounting it returned to the first screen. Type-check passes. **Not verified:** the four dialogs inside the signed-in app (needs a real session).
+- **Lesson:** a dialog that returns `null` when closed keeps its state. Mount it conditionally, or reset it on open.
+- **Docs updated:** this file.
+
 ### 2026-10-15 — Admin team: owners and managers  (branch `feature/admin-team`, uncommitted)
 - **Type:** feature + security
 - **What & why:** The admin now has two roles. **Owners** are the emails in the private `ADMIN_EMAILS` setting; they can change content and, on a new **Team** page, add or remove **managers**. **Managers** are stored in MongoDB (collection `admins`); they can change banners, popups, pages and starter plans but cannot see or change the team. The role is looked up on every request, so removing a manager works on their next request. Owners cannot be demoted or removed from the screen (they exist only in the server settings), and the manager list is not reachable through the generic content routes. Limit of 20 managers.
