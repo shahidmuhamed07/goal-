@@ -1,11 +1,4 @@
-import {
-  LENGTH_OPTIONS,
-  TIME_OPTIONS,
-  spreadOverDays,
-  tasksForMinutes,
-  type Focus,
-  type StarterPlan,
-} from './starterPlan';
+import { spreadOverDays, tasksForMinutes, type StarterPlan } from './starterPlan';
 
 /**
  * The guided way to create a goal.
@@ -33,14 +26,13 @@ export interface GuidedQuestion {
   id: string;
   title: string;
   hint?: string;
-  /** `single`: pick one. `multi`: pick any. `text`: type an answer. */
-  kind: 'single' | 'multi' | 'text';
-  options?: GuidedOption[];
-  /** Adds a "Something else" choice that opens a box to type in. */
+  /** `single`: tap one. `multi`: tap any (none is fine). Nothing here ever has to be typed. */
+  kind: 'single' | 'multi';
+  options: GuidedOption[];
+  /** Adds a "Something else" choice. Typing a name for it is optional. */
   allowOther?: boolean;
-  placeholder?: string;
-  /** A question the person may leave empty. Choices are always optional to refine, text is required unless this is set. */
-  optional?: boolean;
+  /** Ask this question only when it applies to the answers so far. */
+  showIf?: (answers: Answers) => boolean;
 }
 
 /** What every niche asks last: when, for how long each time, and for how many months. */
@@ -55,8 +47,11 @@ export interface RoutineDraft {
   tasks: string[];
 }
 
+/** The niches people can start from. `custom` is "Something else": a generic starting point for any goal. */
+export type NicheKey = 'career' | 'business' | 'health' | 'fitness' | 'money' | 'learning' | 'custom';
+
 export interface Niche {
-  key: Focus;
+  key: NicheKey;
   label: string;
   tagline: string;
   /** The goal category the app files it under. */
@@ -95,14 +90,17 @@ export class AnswerReader {
     return this.one(id) === value || this.many(id).includes(value);
   }
 
-  /** Typed text for a text question, or what was typed under "Something else". */
-  text(id: string, max = 60): string {
-    const typed = this.answers[id];
-    if (typeof typed === 'string' && this.questions.find((q) => q.id === id)?.kind === 'text') {
-      return cleanText(typed, max);
-    }
-    const other = this.answers[`${id}_other`];
-    return typeof other === 'string' ? cleanText(other, max) : '';
+  /** What was typed under "Something else", if anything. Always optional. */
+  other(id: string, max = 60): string {
+    const typed = this.answers[`${id}_other`];
+    return typeof typed === 'string' ? cleanText(typed, max) : '';
+  }
+
+  /** The label of the chosen option (for titles), or what was typed under "Something else". */
+  label(id: string, max = 60): string {
+    const value = this.one(id);
+    if (value === 'other') return this.other(id, max);
+    return this.questions.find((q) => q.id === id)?.options.find((o) => o.value === value)?.label ?? '';
   }
 }
 
@@ -154,7 +152,7 @@ const career: Niche = {
     {
       id: 'focus',
       title: 'What would help you most?',
-      hint: 'Pick as many as you like.',
+      hint: 'Pick as many as you like, or none.',
       kind: 'multi',
       options: [
         opt('skills', 'Learning skills'),
@@ -163,18 +161,9 @@ const career: Niche = {
         opt('interviews', 'Interview practice'),
       ],
     },
-    {
-      id: 'target',
-      title: 'Which role or field?',
-      hint: 'Optional. It goes into your goal and tasks.',
-      kind: 'text',
-      optional: true,
-      placeholder: 'e.g. product designer',
-    },
   ],
   plan: (r) => {
     const aim = r.one('aim');
-    const target = r.text('target');
     const focus = r.many('focus');
     const searching = aim === 'job' || aim === 'switch' || r.has('level', 'between');
 
@@ -183,7 +172,7 @@ const career: Niche = {
       routines.push({
         name: 'Job search',
         tasks: [
-          `Apply to 3 ${target ? `${target} ` : ''}roles that fit you`,
+          'Apply to 3 roles that fit you',
           'Tailor your CV for one role',
           'Save 5 new openings to look at',
           'Follow up on one application',
@@ -207,7 +196,7 @@ const career: Niche = {
       routines.push({
         name: 'Skill building',
         tasks: [
-          `Study for 30 minutes: ${or(target, 'a skill your next role needs')}`,
+          'Study for 30 minutes: a skill your next role needs',
           'Practise with one small exercise',
           'Write notes on what you learned',
           'Build one small piece of work',
@@ -253,15 +242,13 @@ const career: Niche = {
     }
 
     const titles: Record<string, string> = {
-      job: target ? `Land a ${target} role` : 'Land a new job',
+      job: 'Land a new job',
       promo: 'Earn my next promotion',
-      switch: target ? `Move into ${target}` : 'Switch to a new field',
+      switch: 'Switch to a new field',
       grow: 'Grow my career',
     };
-    const title = aim === 'other' ? or(r.text('aim', 70), 'Reach my career goal') : titles[aim ?? 'grow'] ?? 'Grow my career';
-
     return {
-      title,
+      title: aim === 'other' ? or(r.other('aim', 70), 'Reach my career goal') : titles[aim ?? 'grow'] ?? 'Grow my career',
       description: 'Small weekly steps toward your next move. Change anything that does not fit.',
       routines: ensure(routines, [
         { name: 'Skill building', tasks: ['Study for 30 minutes', 'Practise one small exercise', 'Write notes', 'Review last week', 'Build something small'] },
@@ -282,12 +269,6 @@ const business: Niche = {
   category: 'Business',
   questions: [
     {
-      id: 'stage',
-      title: 'Where is your business?',
-      kind: 'single',
-      options: [opt('idea', 'Just an idea'), opt('started', 'Started, no sales yet'), opt('selling', 'Making some sales'), opt('growing', 'Growing steadily')],
-    },
-    {
       id: 'aim',
       title: 'What do you want most?',
       kind: 'single',
@@ -295,20 +276,30 @@ const business: Niche = {
       options: [opt('customers', 'My first customers'), opt('sales', 'More sales'), opt('systems', 'To get organised'), opt('launch', 'To launch my product')],
     },
     {
+      id: 'stage',
+      title: 'Where is your business?',
+      kind: 'single',
+      options: [opt('idea', 'Just an idea'), opt('started', 'Started, no sales yet'), opt('selling', 'Making some sales'), opt('growing', 'Growing steadily')],
+    },
+    {
       id: 'focus',
       title: 'Where do you need the most help?',
-      hint: 'Pick as many as you like.',
+      hint: 'Pick as many as you like, or none.',
       kind: 'multi',
       options: [opt('marketing', 'Getting seen'), opt('outreach', 'Talking to customers'), opt('product', 'The product or service'), opt('money', 'Money and admin')],
     },
-    { id: 'what', title: 'What is the business?', hint: 'Optional. A few words.', kind: 'text', optional: true, placeholder: 'e.g. home bakery' },
   ],
   plan: (r) => {
     const aim = r.one('aim');
-    const what = r.text('what');
     const focus = r.many('focus');
     const routines: RoutineDraft[] = [];
 
+    if (r.has('stage', 'idea')) {
+      routines.push({
+        name: 'Test the idea',
+        tasks: ['Talk to 3 people who might buy it', 'Write down what they said in their own words', 'List the biggest risk', 'Sketch the simplest version', 'Decide one thing to test this week'],
+      });
+    }
     if (aim === 'customers' || aim === 'sales' || focus.includes('outreach')) {
       routines.push({
         name: 'Customer outreach',
@@ -318,7 +309,7 @@ const business: Niche = {
     if (focus.includes('marketing') || aim === 'launch') {
       routines.push({
         name: 'Marketing',
-        tasks: [`Post once about ${or(what, 'your business')}`, 'Reply to every comment or message', 'Share one customer story', 'Plan next week’s content', 'Look at what worked last week'],
+        tasks: ['Post once about your business', 'Reply to every comment or message', 'Share one customer story', 'Plan next week’s content', 'Look at what worked last week'],
       });
     }
     if (focus.includes('product') || aim === 'launch') {
@@ -335,14 +326,13 @@ const business: Niche = {
     }
 
     const titles: Record<string, string> = {
-      customers: `Win my first customers${what ? ` for my ${what}` : ''}`,
-      sales: `Grow sales${what ? ` for my ${what}` : ''}`,
+      customers: 'Win my first customers',
+      sales: 'Grow my sales',
       systems: 'Get my business organised',
-      launch: `Launch${what ? ` my ${what}` : ' my product'}`,
+      launch: 'Launch my product',
     };
-
     return {
-      title: aim === 'other' ? or(r.text('aim', 70), 'Grow my business') : titles[aim ?? 'sales'] ?? 'Grow my business',
+      title: aim === 'other' ? or(r.other('aim', 70), 'Grow my business') : titles[aim ?? 'sales'] ?? 'Grow my business',
       description: 'Weekly habits that move the business forward. Adjust them as you learn what works.',
       routines: ensure(routines, [
         { name: 'Customer outreach', tasks: ['Reach out to 5 people', 'Follow up with 2 contacts', 'Ask for feedback', 'Note common questions', 'Write down one objection'] },
@@ -356,10 +346,13 @@ const business: Niche = {
 
 /* ---------------------------------------------------------------- health */
 
+const notEating = (a: Answers) => a.aim !== 'eat';
+const eating = (a: Answers) => a.aim === 'eat';
+
 const health: Niche = {
   key: 'health',
-  label: 'Sleep and wellbeing',
-  tagline: 'Sleep, stress and steady energy',
+  label: 'Health',
+  tagline: 'Eating, sleep, stress and energy',
   category: 'Health',
   questions: [
     {
@@ -367,54 +360,79 @@ const health: Niche = {
       title: 'What do you want to improve?',
       kind: 'single',
       allowOther: true,
-      options: [opt('sleep', 'Sleep better'), opt('stress', 'Feel less stressed'), opt('energy', 'Have more energy'), opt('habits', 'Build healthier habits')],
+      options: [opt('eat', 'Eat better'), opt('sleep', 'Sleep better'), opt('stress', 'Feel less stressed'), opt('energy', 'Have more energy')],
+    },
+    {
+      id: 'style',
+      title: 'Do you follow an eating style?',
+      kind: 'single',
+      showIf: eating,
+      options: [opt('any', 'No particular style'), opt('vegetarian', 'Vegetarian'), opt('vegan', 'Vegan'), opt('protein', 'High-protein'), opt('lowcarb', 'Low-carb')],
+    },
+    {
+      id: 'meals',
+      title: 'Where do most meals come from?',
+      kind: 'single',
+      showIf: eating,
+      options: [opt('home', 'I cook at home'), opt('mixed', 'A mix of both'), opt('out', 'Mostly eating out or ordering')],
     },
     {
       id: 'issues',
       title: 'What gets in the way?',
-      hint: 'Pick as many as you like.',
+      hint: 'Pick as many as you like, or none.',
       kind: 'multi',
+      showIf: notEating,
       options: [opt('phone', 'Phone late at night'), opt('caffeine', 'Too much caffeine'), opt('schedule', 'An uneven schedule'), opt('mind', 'A busy mind'), opt('movement', 'Not enough movement')],
     },
     {
       id: 'day',
       title: 'What is your day like?',
       kind: 'single',
+      showIf: notEating,
       options: [opt('early', 'I start early'), opt('regular', 'Fairly regular hours'), opt('late', 'I go to bed late'), opt('irregular', 'It changes a lot')],
     },
-    { id: 'note', title: 'Anything we should know?', hint: 'Optional.', kind: 'text', optional: true, placeholder: 'e.g. I work night shifts' },
   ],
   plan: (r) => {
     const aim = r.one('aim');
+
+    if (aim === 'eat') {
+      const style = r.one('style') ?? 'any';
+      const meals = r.one('meals') ?? 'mixed';
+      const protein: Record<string, string> = {
+        any: 'Protein with every meal',
+        vegetarian: 'Protein with every meal (eggs, paneer, lentils)',
+        vegan: 'Protein with every meal (tofu, beans, lentils)',
+        protein: 'Aim for 30 g of protein at every meal',
+        lowcarb: 'Protein and vegetables at every meal',
+      };
+      const routines: RoutineDraft[] = [];
+      if (meals !== 'home') {
+        routines.push({ name: 'Eating out, smartly', tasks: ['Check the menu before you go', 'Choose a protein and a vegetable', 'Skip the sugary drink', 'Stop when you feel 80% full', 'Share a dessert instead of ordering your own'] });
+      }
+      if (meals !== 'out') {
+        routines.push({ name: 'Plan and prep', tasks: ['Plan the week’s meals', 'Grocery shop for fresh food', 'Batch-cook lunches for the week', 'Wash and chop vegetables', 'Portion out healthy snacks'] });
+      }
+      routines.push({ name: 'High-protein day', tasks: [protein[style] ?? protein.any, 'A protein-rich snack', 'Drink 2 to 3 litres of water', 'Log what you ate', 'Take a 10-minute walk after dinner'] });
+      routines.push({ name: 'Veggie-forward day', tasks: ['Half of every plate is vegetables', 'No sugary drinks', 'Try one new vegetable', 'Eat slowly, away from screens', 'Go for an evening walk'] });
+      return { title: 'Eat well, feel great', description: 'Simple weekly habits for steady, healthy eating.', routines };
+    }
+
     const issues = r.many('issues');
     const routines: RoutineDraft[] = [];
-
     if (aim === 'sleep' || issues.includes('phone') || issues.includes('schedule') || r.has('day', 'late')) {
-      routines.push({
-        name: 'Wind-down',
-        tasks: ['Screens off 30 minutes before bed', 'Dim the lights in the evening', 'Write tomorrow’s top 3 tasks', 'Go to bed at the same time', 'Read a few pages'],
-      });
+      routines.push({ name: 'Wind-down', tasks: ['Screens off 30 minutes before bed', 'Dim the lights in the evening', 'Write tomorrow’s top 3 tasks', 'Go to bed at the same time', 'Read a few pages'] });
     }
     if (aim === 'stress' || issues.includes('mind')) {
-      routines.push({
-        name: 'Stress break',
-        tasks: ['Breathe slowly for 5 minutes', 'Take a short walk outside', 'Write down what is on your mind', 'Stretch your neck and shoulders', 'Do one thing just for fun'],
-      });
+      routines.push({ name: 'Stress break', tasks: ['Breathe slowly for 5 minutes', 'Take a short walk outside', 'Write down what is on your mind', 'Stretch your neck and shoulders', 'Do one thing just for fun'] });
     }
     if (aim === 'energy' || issues.includes('caffeine') || issues.includes('movement')) {
-      routines.push({
-        name: 'Energy boost',
-        tasks: ['Drink a glass of water first thing', 'No caffeine after lunch', 'Move for 10 minutes', 'Eat something with protein', 'Stand up every hour'],
-      });
+      routines.push({ name: 'Energy boost', tasks: ['Drink a glass of water first thing', 'No caffeine after lunch', 'Move for 10 minutes', 'Eat something with protein', 'Stand up every hour'] });
     }
-    routines.push({
-      name: 'Morning reset',
-      tasks: ['Get 10 minutes of daylight', 'Drink water', 'Stretch for 3 minutes', 'Pick one thing that matters today', 'No phone for the first 15 minutes'],
-    });
+    routines.push({ name: 'Morning reset', tasks: ['Get 10 minutes of daylight', 'Drink water', 'Stretch for 3 minutes', 'Pick one thing that matters today', 'No phone for the first 15 minutes'] });
 
-    const titles: Record<string, string> = { sleep: 'Sleep better, wake up rested', stress: 'Feel calmer day to day', energy: 'Have steady energy all day', habits: 'Build healthier daily habits' };
+    const titles: Record<string, string> = { sleep: 'Sleep better, wake up rested', stress: 'Feel calmer day to day', energy: 'Have steady energy all day' };
     return {
-      title: aim === 'other' ? or(r.text('aim', 70), 'Feel better every day') : titles[aim ?? 'habits'] ?? 'Feel better every day',
+      title: aim === 'other' ? or(r.other('aim', 70), 'Feel better every day') : titles[aim ?? 'energy'] ?? 'Feel better every day',
       description: 'Gentle daily routines for rest and energy. Keep what helps and drop the rest.',
       routines: ensure(routines, [
         { name: 'Wind-down', tasks: ['Screens off before bed', 'Dim the lights', 'Plan tomorrow', 'Same bedtime', 'Read a little'] },
@@ -447,15 +465,13 @@ const fitness: Niche = {
       kind: 'single',
       options: [opt('beginner', 'Beginner', 'New or coming back'), opt('some', 'Some experience'), opt('experienced', 'Experienced')],
     },
-    { id: 'note', title: 'Injuries or things to avoid?', hint: 'Optional. We add it as a reminder.', kind: 'text', optional: true, placeholder: 'e.g. sore left knee' },
   ],
   plan: (r) => {
     const aim = r.one('aim');
     const where = r.one('where') ?? 'gym';
     const level = r.one('level') ?? 'beginner';
-    const note = r.text('note');
     const sets = level === 'beginner' ? '3 sets of 8' : level === 'some' ? '4 sets of 8' : '4 sets of 6 to 10';
-    const warm = note ? `Warm up for 5 minutes (go easy: ${note})` : 'Warm up for 5 minutes';
+    const warm = 'Warm up for 5 minutes';
 
     const lifts: Record<string, { push: string[]; pull: string[]; legs: string[] }> = {
       gym: {
@@ -492,83 +508,9 @@ const fitness: Niche = {
 
     const titles: Record<string, string> = { muscle: 'Build strength and muscle', fat: 'Lose fat and feel strong', stamina: 'Get fitter and faster', active: 'Stay active and healthy' };
     return {
-      title: aim === 'other' ? or(r.text('aim', 70), 'Get stronger and fitter') : titles[aim ?? 'active'] ?? 'Get stronger and fitter',
+      title: aim === 'other' ? or(r.other('aim', 70), 'Get stronger and fitter') : titles[aim ?? 'active'] ?? 'Get stronger and fitter',
       description: 'A weekly training split you can keep up. Swap exercises freely.',
       routines: ensure(routines, [mobility]),
-    };
-  },
-};
-
-/* ------------------------------------------------------------------ diet */
-
-const diet: Niche = {
-  key: 'diet',
-  label: 'Eating better',
-  tagline: 'Meals and habits that fit your life',
-  category: 'Health',
-  questions: [
-    {
-      id: 'aim',
-      title: 'What do you want from your food?',
-      kind: 'single',
-      allowOther: true,
-      options: [opt('lose', 'Lose weight'), opt('healthy', 'Eat healthier'), opt('gain', 'Gain weight or muscle'), opt('energy', 'More steady energy')],
-    },
-    {
-      id: 'style',
-      title: 'Do you follow an eating style?',
-      kind: 'single',
-      options: [opt('any', 'No particular style'), opt('vegetarian', 'Vegetarian'), opt('vegan', 'Vegan'), opt('protein', 'High-protein'), opt('lowcarb', 'Low-carb')],
-    },
-    {
-      id: 'meals',
-      title: 'Where do most meals come from?',
-      kind: 'single',
-      options: [opt('home', 'I cook at home'), opt('mixed', 'A mix of both'), opt('out', 'Mostly eating out or ordering')],
-    },
-    { id: 'note', title: 'Allergies or foods to avoid?', hint: 'Optional. We add it as a reminder.', kind: 'text', optional: true, placeholder: 'e.g. no peanuts' },
-  ],
-  plan: (r) => {
-    const aim = r.one('aim');
-    const style = r.one('style') ?? 'any';
-    const meals = r.one('meals') ?? 'mixed';
-    const note = r.text('note');
-    const protein: Record<string, string> = {
-      any: 'Protein with every meal',
-      vegetarian: 'Protein with every meal (eggs, paneer, lentils)',
-      vegan: 'Protein with every meal (tofu, beans, lentils)',
-      protein: 'Aim for 30 g of protein at every meal',
-      lowcarb: 'Protein and vegetables at every meal',
-    };
-    const reminder = note ? [`Check labels and menus first (${note})`] : [];
-
-    const routines: RoutineDraft[] = [];
-    if (meals !== 'out') {
-      routines.push({
-        name: 'Plan and prep',
-        tasks: ['Plan the week’s meals', 'Grocery shop for fresh food', 'Batch-cook lunches for the week', ...reminder, 'Wash and chop vegetables', 'Portion out healthy snacks'].slice(0, 5),
-      });
-    }
-    routines.push({
-      name: 'High-protein day',
-      tasks: [protein[style] ?? protein.any, 'A protein-rich snack', 'Drink 2 to 3 litres of water', 'Log what you ate', 'Take a 10-minute walk after dinner'],
-    });
-    routines.push({
-      name: 'Veggie-forward day',
-      tasks: ['Half of every plate is vegetables', 'No sugary drinks', 'Try one new vegetable', 'Eat slowly, away from screens', 'Go for an evening walk'],
-    });
-    if (meals !== 'home') {
-      routines.unshift({
-        name: 'Eating out, smartly',
-        tasks: ['Check the menu before you go', 'Choose a protein and a vegetable', 'Skip the sugary drink', ...reminder, 'Stop when you feel 80% full'].slice(0, 5),
-      });
-    }
-
-    const titles: Record<string, string> = { lose: 'Lose weight, steadily', healthy: 'Eat well, feel great', gain: 'Gain weight and muscle', energy: 'Eat for steady energy' };
-    return {
-      title: aim === 'other' ? or(r.text('aim', 70), 'Eat well, feel great') : titles[aim ?? 'healthy'] ?? 'Eat well, feel great',
-      description: 'Simple weekly habits for steady, healthy eating.',
-      routines,
     };
   },
 };
@@ -577,7 +519,7 @@ const diet: Niche = {
 
 const money: Niche = {
   key: 'money',
-  label: 'Money',
+  label: 'Finance & Wealth',
   tagline: 'Save, pay off debt or start investing',
   category: 'Finance & Wealth',
   questions: [
@@ -597,15 +539,13 @@ const money: Niche = {
     {
       id: 'focus',
       title: 'What do you want to work on?',
-      hint: 'Pick as many as you like.',
+      hint: 'Pick as many as you like, or none.',
       kind: 'multi',
       options: [opt('budget', 'A simple budget'), opt('spending', 'Cutting spending'), opt('income', 'Earning more'), opt('learn', 'Learning the basics')],
     },
-    { id: 'target', title: 'Is there a number you are aiming for?', hint: 'Optional.', kind: 'text', optional: true, placeholder: 'e.g. save 5,000 by June' },
   ],
   plan: (r) => {
     const aim = r.one('aim');
-    const target = r.text('target');
     const focus = r.many('focus');
     const routines: RoutineDraft[] = [
       {
@@ -614,7 +554,7 @@ const money: Niche = {
       },
     ];
     if (aim === 'save' || focus.includes('budget')) {
-      routines.push({ name: 'Saving move', tasks: [`Move money to savings${target ? ` (${target})` : ''}`, 'Set aside next week’s spending', 'Cancel one unused subscription', 'Compare one bill for a better price', 'Note the total saved so far'] });
+      routines.push({ name: 'Saving move', tasks: ['Move money to savings', 'Set aside next week’s spending', 'Cancel one unused subscription', 'Compare one bill for a better price', 'Note the total saved so far'] });
     }
     if (aim === 'debt') {
       routines.push({ name: 'Debt plan', tasks: ['List every debt with its rate', 'Make the payment that is due', 'Put any extra money on the highest rate', 'Avoid new debt this week', 'Note the balance left'] });
@@ -622,21 +562,16 @@ const money: Niche = {
     if (aim === 'invest' || focus.includes('learn')) {
       routines.push({ name: 'Learn investing', tasks: ['Read or watch one beginner lesson', 'Write down one thing you learned', 'Check you have an emergency fund first', 'Compare one fund or option', 'Note one question to answer'] });
     }
-    if (aim === 'track' || focus.includes('spending')) {
+    if (aim === 'track' || focus.includes('spending') || r.has('now', 'none')) {
       routines.push({ name: 'Spending review', tasks: ['Record this week’s spending', 'Sort it into categories', 'Find the biggest category', 'Choose one thing to cut', 'Reward yourself with something small and free'] });
     }
     if (focus.includes('income')) {
       routines.push({ name: 'Earning more', tasks: ['Work on one way to earn more', 'Reach out to one possible client or employer', 'Update your rates or skills list', 'Track the hours you put in', 'Plan the next step'] });
     }
 
-    const titles: Record<string, string> = {
-      save: target ? `Save: ${target}` : 'Save more, steadily',
-      debt: 'Pay off my debt',
-      invest: 'Start investing with confidence',
-      track: 'Know where my money goes',
-    };
+    const titles: Record<string, string> = { save: 'Save more, steadily', debt: 'Pay off my debt', invest: 'Start investing with confidence', track: 'Know where my money goes' };
     return {
-      title: aim === 'other' ? or(r.text('aim', 70), 'Take control of my money') : titles[aim ?? 'save'] ?? 'Take control of my money',
+      title: aim === 'other' ? or(r.other('aim', 70), 'Take control of my money') : titles[aim ?? 'save'] ?? 'Take control of my money',
       description: 'A weekly money routine that is small enough to keep.',
       routines: ensure(routines, [
         { name: 'Spending review', tasks: ['Record spending', 'Sort into categories', 'Find the biggest one', 'Choose one thing to cut', 'Celebrate a small win'] },
@@ -650,17 +585,22 @@ const money: Niche = {
 
 const learning: Niche = {
   key: 'learning',
-  label: 'Learning a skill',
+  label: 'Learning & Skills',
   tagline: 'Pick up something new, step by step',
   category: 'Learning & Skills',
   questions: [
-    { id: 'what', title: 'What do you want to learn?', kind: 'text', placeholder: 'e.g. Spanish, guitar, Python' },
     {
-      id: 'why',
-      title: 'Why does it matter to you?',
+      id: 'what',
+      title: 'What do you want to learn?',
       kind: 'single',
       allowOther: true,
-      options: [opt('career', 'For my career'), opt('hobby', 'For fun'), opt('exam', 'For an exam or course'), opt('curious', 'I am just curious')],
+      options: [
+        opt('language', 'A language'),
+        opt('tech', 'Coding or a tech skill'),
+        opt('music', 'Music or an instrument'),
+        opt('school', 'A school or exam subject'),
+        opt('work', 'A skill for work'),
+      ],
     },
     {
       id: 'level',
@@ -671,146 +611,149 @@ const learning: Niche = {
     {
       id: 'style',
       title: 'How do you like to learn?',
-      hint: 'Pick as many as you like.',
+      hint: 'Pick as many as you like, or none.',
       kind: 'multi',
       options: [opt('read', 'Reading'), opt('watch', 'Videos and courses'), opt('practice', 'Practising and projects'), opt('teach', 'Explaining it to others')],
     },
   ],
   plan: (r) => {
-    const what = r.text('what', 40) || 'a new skill';
+    const what = r.one('what');
+    const subject: Record<string, string> = {
+      language: 'a language',
+      tech: 'a tech skill',
+      music: 'music',
+      school: 'my subject',
+      work: 'a work skill',
+    };
+    const name = what === 'other' ? or(r.other('what', 40), 'something new') : subject[what ?? ''] ?? 'something new';
     const level = r.one('level') ?? 'none';
     const style = r.many('style');
-    const why = r.one('why');
     const start = level === 'none' ? 'the very basics' : level === 'basics' ? 'the next step up' : 'a harder topic';
 
     const routines: RoutineDraft[] = [];
     routines.push({
       name: 'Study session',
-      tasks: [`Learn ${start} of ${what}`, style.includes('watch') ? 'Watch one lesson or tutorial' : 'Read one chapter or article', 'Write notes in your own words', 'Note one question to look up', 'Review yesterday’s notes'],
+      tasks: [`Learn ${start} of ${name}`, style.includes('watch') ? 'Watch one lesson or tutorial' : 'Read one chapter or article', 'Write notes in your own words', 'Note one question to look up', 'Review yesterday’s notes'],
     });
     routines.push({
       name: 'Practice',
-      tasks: [`Practise ${what} for 20 minutes`, 'Repeat the part you found hardest', 'Try it without looking at notes', 'Record how it went', 'Do one extra exercise'],
+      tasks: [`Practise ${name} for 20 minutes`, 'Repeat the part you found hardest', 'Try it without looking at notes', 'Record how it went', 'Do one extra exercise'],
     });
     if (style.includes('practice') || style.length === 0) {
-      routines.push({ name: 'Mini project', tasks: [`Work on a small ${what} project`, 'Finish one small part', 'Write down what was hard', 'Ask for help on one thing', 'Share your progress'] });
+      routines.push({ name: 'Mini project', tasks: [`Work on a small project using ${name}`, 'Finish one small part', 'Write down what was hard', 'Ask for help on one thing', 'Share your progress'] });
     }
     if (style.includes('teach')) {
       routines.push({ name: 'Teach it back', tasks: ['Explain one idea out loud', 'Write a short summary', 'Teach a friend or post it', 'Fix what you could not explain', 'Make one flash card'] });
     }
-    routines.push({ name: 'Review and recall', tasks: ['Quiz yourself without notes', 'Re-read your notes once', 'Mark what to revisit', 'Plan next week’s topic', why === 'exam' ? 'Do one past paper question' : 'Note one thing you can now do'] });
+    routines.push({ name: 'Review and recall', tasks: ['Quiz yourself without notes', 'Re-read your notes once', 'Mark what to revisit', 'Plan next week’s topic', what === 'school' ? 'Do one past paper question' : 'Note one thing you can now do'] });
 
+    const titles: Record<string, string> = {
+      language: 'Learn a new language',
+      tech: 'Learn a tech skill',
+      music: 'Learn music',
+      school: 'Master my subject',
+      work: 'Learn a skill for work',
+    };
     return {
-      title: `Learn ${what}`,
+      title: what === 'other' ? `Learn ${name}` : titles[what ?? ''] ?? 'Learn something new',
       description: 'Short, regular sessions beat long, rare ones. Keep it light.',
       routines,
     };
   },
 };
 
-/* -------------------------------------------------------------- creative */
+/* ---------------------------------------------------------------- custom */
 
-const creative: Niche = {
-  key: 'creative',
-  label: 'Creative projects',
-  tagline: 'Write, draw, make music or build something',
-  category: 'Creative Writing',
+const custom: Niche = {
+  key: 'custom',
+  label: 'Something else',
+  tagline: 'Any goal that is not in the list',
+  category: 'General',
   questions: [
     {
-      id: 'craft',
-      title: 'What do you want to make?',
+      id: 'kind',
+      title: 'What kind of goal is it?',
       kind: 'single',
       allowOther: true,
-      options: [opt('writing', 'Writing'), opt('art', 'Drawing or painting'), opt('music', 'Music'), opt('making', 'Something I build or craft')],
+      options: [opt('habit', 'Build a habit'), opt('finish', 'Finish something'), opt('learn', 'Learn something'), opt('improve', 'Get better at something')],
     },
     {
-      id: 'aim',
-      title: 'What would make you proud?',
-      kind: 'single',
-      options: [opt('finish', 'Finishing a project'), opt('habit', 'A steady creative habit'), opt('share', 'Sharing my work'), opt('improve', 'Getting better at my craft')],
-    },
-    {
-      id: 'blockers',
-      title: 'What slows you down?',
-      hint: 'Pick as many as you like.',
+      id: 'help',
+      title: 'What would help you most?',
+      hint: 'Pick as many as you like, or none.',
       kind: 'multi',
-      options: [opt('ideas', 'Running out of ideas'), opt('time', 'Finding the time'), opt('confidence', 'Doubting myself'), opt('finishing', 'Finishing things')],
+      options: [opt('steps', 'Breaking it into small steps'), opt('checkin', 'A daily nudge to keep going'), opt('review', 'A weekly look at my progress')],
     },
-    { id: 'project', title: 'What is the project?', hint: 'Optional.', kind: 'text', optional: true, placeholder: 'e.g. a short story collection' },
   ],
   plan: (r) => {
-    const craft = r.one('craft');
-    const aim = r.one('aim');
-    const blockers = r.many('blockers');
-    const project = r.text('project');
-    const word = craft === 'writing' ? 'write' : craft === 'art' ? 'draw or paint' : craft === 'music' ? 'play or compose' : craft === 'making' ? 'build' : 'create';
-
+    const kind = r.one('kind');
+    const help = r.many('help');
     const routines: RoutineDraft[] = [
-      {
-        name: 'Make time',
-        tasks: [`Set a timer and ${word} for 25 minutes`, 'Keep going even if it is rough', 'Do not edit while you work', 'Write down where you stopped', 'Save or photograph what you made'],
-      },
+      { name: 'Focus time', tasks: ['Set a timer and work on it for 25 minutes', 'Start with the easiest part', 'Put your phone out of reach', 'Write down where you stopped', 'Take a short break'] },
     ];
-    if (aim === 'finish' || blockers.includes('finishing') || project) {
-      routines.push({ name: 'Finish line', tasks: [`Take one clear step on ${or(project, 'your project')}`, 'List what is left to finish', 'Pick the smallest piece and do it', 'Cross one thing off the list', 'Set a date for the next milestone'] });
+    if (help.includes('steps') || help.length === 0) {
+      routines.push({ name: 'Next step', tasks: ['Write the next small step', 'Do that step before anything else', 'Cross it off', 'Pick the step after it', 'Note anything that got in the way'] });
     }
-    if (blockers.includes('ideas') || aim === 'improve') {
-      routines.push({ name: 'Ideas and study', tasks: ['Collect 5 ideas in a notebook', 'Study one piece you admire', 'Copy a technique you liked', 'Try something unfamiliar', 'Note what you learned'] });
+    if (help.includes('checkin')) {
+      routines.push({ name: 'Daily check-in', tasks: ['Did you work on it today? Note yes or no', 'Write one line about how it went', 'Decide when you will do it tomorrow', 'Reward yourself for showing up', 'Remove one distraction'] });
     }
-    if (aim === 'share' || blockers.includes('confidence')) {
-      routines.push({ name: 'Share it', tasks: ['Show one piece to a friend', 'Ask for one honest comment', 'Post or submit something small', 'Thank anyone who replied', 'Note what to improve next'] });
+    if (help.includes('review') || help.length === 0) {
+      routines.push({ name: 'Weekly review', tasks: ['Look at what you did this week', 'Note one win', 'Note one thing to change', 'Pick next week’s top 3', 'Adjust the plan if it is too big'] });
     }
 
     const titles: Record<string, string> = {
-      finish: project ? `Finish ${project}` : 'Finish my creative project',
-      habit: 'Make creating a daily habit',
-      share: 'Share my work with the world',
-      improve: 'Get better at my craft',
+      habit: 'Build a new habit',
+      finish: 'Finish what I started',
+      learn: 'Learn something new',
+      improve: 'Get better at something',
     };
     return {
-      title: titles[aim ?? 'habit'] ?? 'Make my creative project',
-      description: 'Small, regular creative sessions add up. Be kind to yourself.',
+      title: kind === 'other' ? or(r.other('kind', 70), 'My goal') : titles[kind ?? ''] ?? 'My goal',
+      description: 'A simple weekly rhythm for any goal. Rename it and make it yours.',
       routines: ensure(routines, [
-        { name: 'Ideas and study', tasks: ['Collect 5 ideas', 'Study one piece you admire', 'Copy a technique', 'Try something unfamiliar', 'Note what you learned'] },
-        { name: 'Finish line', tasks: ['Take one clear step', 'List what is left', 'Do the smallest piece', 'Cross off one thing', 'Set the next milestone'] },
-        { name: 'Share it', tasks: ['Show one piece to a friend', 'Ask for a comment', 'Post something small', 'Thank anyone who replied', 'Note what to improve'] },
-      ]),
+        { name: 'Next step', tasks: ['Write the next small step', 'Do it first', 'Cross it off', 'Pick the next one', 'Note what got in the way'] },
+        { name: 'Weekly review', tasks: ['Look at your week', 'Note one win', 'Note one change', 'Pick next week’s top 3', 'Adjust the plan'] },
+        { name: 'Daily check-in', tasks: ['Note if you worked on it', 'Write one line', 'Plan tomorrow', 'Reward yourself', 'Remove a distraction'] },
+      ], 3),
     };
   },
 };
 
 /* ---------------------------------------------------------------- engine */
 
-/** The niches in the order they are offered. */
-export const NICHES: Niche[] = [career, business, health, fitness, diet, money, learning, creative];
+/** The niches in the order they are offered. They match the categories in the plain form. */
+export const NICHES: Niche[] = [career, business, health, fitness, money, learning, custom];
 
-export const nicheByKey = (key: Focus): Niche => NICHES.find((n) => n.key === key) ?? NICHES[0];
+export const nicheByKey = (key: NicheKey): Niche => NICHES.find((n) => n.key === key) ?? NICHES[0];
+
+/** The niche that goes with a category chosen in the plain form, so the questions can start where the person already is. */
+export const nicheForCategory = (category: string | null | undefined): NicheKey | undefined =>
+  NICHES.find((n) => n.key !== 'custom' && n.category === category)?.key;
+
+/** The questions that apply to these answers (some are only asked after an earlier answer). */
+export const visibleQuestions = (niche: Niche, answers: Answers): GuidedQuestion[] =>
+  niche.questions.filter((q) => !q.showIf || q.showIf(answers));
 
 /** The most routines a single goal starts with: enough to cover the week, not so many it overwhelms. */
 const MAX_ROUTINES = 4;
 
-/** Whether a question has been answered well enough to move on. */
+/** Whether a question has been answered well enough to move on. Typing is never needed. */
 export const isAnswered = (question: GuidedQuestion, answers: Answers): boolean => {
-  const a = answers[question.id];
-  if (question.kind === 'text') return question.optional || (typeof a === 'string' && cleanText(a).length > 0);
   if (question.kind === 'multi') return true; // picking none is fine: the plan falls back to sensible defaults
-  if (typeof a !== 'string' || !a) return false;
-  if (a === 'other') {
-    const typed = answers[`${question.id}_other`];
-    return typeof typed === 'string' && cleanText(typed).length > 0;
-  }
-  return true;
+  const a = answers[question.id];
+  return typeof a === 'string' && a.length > 0;
 };
 
-export const COMMON_TIME_OPTIONS = TIME_OPTIONS;
-export const COMMON_LENGTH_OPTIONS = LENGTH_OPTIONS;
+/** The choices offered for how long each session is and how long the goal runs. */
+export const MINUTE_CHOICES = [15, 30, 45, 60];
+export const MONTH_CHOICES = [1, 3, 6, 12];
 
 /**
  * Builds the starter plan from a niche, its answers and the common answers.
  * Pure and instant. Routines are spread over the chosen days, and each carries
  * as many tasks as the time available allows.
  */
-export const buildGuidedPlan = (key: Focus, answers: Answers, common: CommonAnswers): StarterPlan => {
+export const buildGuidedPlan = (key: NicheKey, answers: Answers, common: CommonAnswers): StarterPlan => {
   const niche = nicheByKey(key);
   const drafted = niche.plan(new AnswerReader(niche.questions, answers));
   const days = common.days.length > 0 ? common.days : [1, 3, 5];
@@ -820,7 +763,7 @@ export const buildGuidedPlan = (key: Focus, answers: Answers, common: CommonAnsw
   const perRoutine = tasksForMinutes(common.minutes);
 
   return {
-    focus: niche.key,
+    focus: niche.key === 'custom' ? 'custom' : niche.key,
     title: cleanText(drafted.title, 100) || niche.label,
     category: niche.category,
     description: drafted.description,
@@ -837,6 +780,6 @@ export const buildGuidedPlan = (key: Focus, answers: Answers, common: CommonAnsw
  * Something that turns answers into a plan. The rules above are one; an AI
  * could be another. The screens only ever call this, so switching changes no screen.
  */
-export type PlanMaker = (key: Focus, answers: Answers, common: CommonAnswers) => Promise<StarterPlan>;
+export type PlanMaker = (key: NicheKey, answers: Answers, common: CommonAnswers) => Promise<StarterPlan>;
 
 export const makePlanWithRules: PlanMaker = async (key, answers, common) => buildGuidedPlan(key, answers, common);

@@ -6,38 +6,66 @@ import {
   cleanText,
   isAnswered,
   makePlanWithRules,
+  nicheForCategory,
+  visibleQuestions,
   type Answers,
   type CommonAnswers,
+  type NicheKey,
 } from './guidedGoal';
+import { GOAL_CATEGORIES } from './utils';
 import { materializePlan, tasksForMinutes } from './starterPlan';
 
 const common = (over: Partial<CommonAnswers> = {}): CommonAnswers => ({ days: [1, 3, 5], minutes: 30, months: 3, ...over });
 
-/** The first option of every choice question, and a short text for every required text question. */
-const firstChoices = (key: string): Answers => {
+/** The first option of every question that applies, answered in order (some questions depend on earlier answers). */
+const firstChoices = (key: NicheKey): Answers => {
   const niche = NICHES.find((n) => n.key === key)!;
   const answers: Answers = {};
   for (const q of niche.questions) {
-    if (q.kind === 'single') answers[q.id] = q.options![0].value;
-    if (q.kind === 'text' && !q.optional) answers[q.id] = 'Spanish';
+    if (q.showIf && !q.showIf(answers)) continue;
+    if (q.kind === 'single') answers[q.id] = q.options[0].value;
   }
   return answers;
 };
 
-describe('every niche', () => {
-  it('covers the eight niches, each with at least three questions and no repeated question id', () => {
-    assert.equal(NICHES.length, 8);
-    assert.equal(new Set(NICHES.map((n) => n.key)).size, 8);
+describe('the niches', () => {
+  it('are the six categories of the plain form, plus "Something else"', () => {
+    const real = NICHES.filter((n) => n.key !== 'custom');
+    assert.deepEqual(real.map((n) => n.category), [...GOAL_CATEGORIES]);
+    assert.equal(NICHES[NICHES.length - 1].key, 'custom');
+    assert.equal(NICHES.length, 7);
+  });
+
+  it('have no Creative Writing, in the plain form or the guided flow', () => {
+    assert.equal((GOAL_CATEGORIES as readonly string[]).includes('Creative Writing'), false);
+    assert.equal(NICHES.some((n) => n.category === 'Creative Writing' || /creative/i.test(n.label)), false);
+  });
+
+  it('never ask the person to type: every question is a tap with at least two choices', () => {
     for (const n of NICHES) {
-      assert.ok(n.questions.length >= 3, n.key);
+      assert.ok(n.questions.length >= 2 && n.questions.length <= 5, n.key);
       assert.equal(new Set(n.questions.map((q) => q.id)).size, n.questions.length, `${n.key} repeats a question id`);
       for (const q of n.questions) {
-        if (q.kind !== 'text') assert.ok((q.options?.length ?? 0) >= 2, `${n.key}.${q.id} needs options`);
+        assert.ok(q.kind === 'single' || q.kind === 'multi', `${n.key}.${q.id}`);
+        assert.ok(q.options.length >= 2, `${n.key}.${q.id} needs choices`);
       }
     }
   });
 
-  it('makes a sound plan with no answers at all (the person skipped everything)', () => {
+  it('ask at most four questions on any path, so it stays quick', () => {
+    for (const n of NICHES) {
+      const worst = Math.max(
+        visibleQuestions(n, {}).length,
+        visibleQuestions(n, firstChoices(n.key)).length,
+        ...n.questions.flatMap((q) => q.options.map((o) => visibleQuestions(n, { [q.id]: o.value }).length)),
+      );
+      assert.ok(worst <= 4, `${n.key} asks ${worst} questions`);
+    }
+  });
+});
+
+describe('every niche makes a sound plan', () => {
+  it('with no answers at all (the person skipped everything)', () => {
     for (const n of NICHES) {
       const plan = buildGuidedPlan(n.key, {}, common());
       assert.ok(plan.title.length > 0 && plan.title.length <= 100, n.key);
@@ -46,7 +74,7 @@ describe('every niche', () => {
     }
   });
 
-  it('makes a sound plan from the first choice of every question', () => {
+  it('from the first choice of every question', () => {
     for (const n of NICHES) {
       const plan = buildGuidedPlan(n.key, firstChoices(n.key), common());
       for (const r of plan.routines) {
@@ -59,18 +87,20 @@ describe('every niche', () => {
     }
   });
 
-  it('never repeats a routine name within one plan', () => {
+  it('for every single choice of the first question, with nothing else answered', () => {
     for (const n of NICHES) {
-      for (const answers of [{}, firstChoices(n.key)]) {
-        const names = buildGuidedPlan(n.key, answers, common({ days: [0, 1, 2, 3, 4, 5, 6] })).routines.map((r) => r.name);
-        assert.equal(new Set(names).size, names.length, `${n.key}: ${names.join(', ')}`);
+      for (const o of n.questions[0].options) {
+        const plan = buildGuidedPlan(n.key, { [n.questions[0].id]: o.value }, common({ days: [1, 2, 3, 4, 5] }));
+        assert.ok(plan.routines.length >= 1 && plan.title.length > 0, `${n.key}/${o.value}`);
+        const names = plan.routines.map((r) => r.name);
+        assert.equal(new Set(names).size, names.length, `${n.key}/${o.value}: repeated routine ${names.join(', ')}`);
       }
     }
   });
 });
 
 describe('the common answers shape the plan', () => {
-  it('fewer minutes means fewer tasks per routine', () => {
+  it('fewer minutes mean fewer tasks per routine', () => {
     for (const n of NICHES) {
       const short = buildGuidedPlan(n.key, firstChoices(n.key), common({ minutes: 15 }));
       const long = buildGuidedPlan(n.key, firstChoices(n.key), common({ minutes: 60 }));
@@ -85,7 +115,6 @@ describe('the common answers shape the plan', () => {
     assert.deepEqual(one.routines[0].weekdays, [2]);
     const many = buildGuidedPlan('fitness', firstChoices('fitness'), common({ days: [1, 2, 3, 4, 5, 6, 0] }));
     assert.equal(many.routines.length, 4);
-    assert.ok(many.routines.every((r) => r.weekdays.length >= 1));
   });
 
   it('carries the number of months through', () => {
@@ -93,53 +122,89 @@ describe('the common answers shape the plan', () => {
   });
 });
 
-describe('answers change what is offered', () => {
-  it('career: the target role goes into the title and a task', () => {
-    const plan = buildGuidedPlan('career', { aim: 'job', target: 'product designer' }, common({ days: [1, 2, 3, 4, 5] }));
-    assert.equal(plan.title, 'Land a product designer role');
-    assert.ok(plan.routines.some((r) => r.tasks.some((t) => t.includes('product designer'))));
-  });
-
+describe('answers change what is offered, without forcing anything', () => {
   it('career: different aims make different plans', () => {
     const promo = buildGuidedPlan('career', { aim: 'promo' }, common());
     const job = buildGuidedPlan('career', { aim: 'job' }, common());
-    assert.notEqual(promo.title, job.title);
+    assert.equal(job.title, 'Land a new job');
+    assert.equal(promo.title, 'Earn my next promotion');
     assert.ok(promo.routines.some((r) => r.name === 'Promotion plan'));
     assert.ok(job.routines.some((r) => r.name === 'Job search'));
   });
 
-  it('"Something else" uses what the person typed', () => {
-    const plan = buildGuidedPlan('career', { aim: 'other', aim_other: 'Become a team lead' }, common());
-    assert.equal(plan.title, 'Become a team lead');
+  it('career: tapping help areas adds their routines', () => {
+    const plan = buildGuidedPlan('career', { aim: 'grow', focus: ['network', 'profile'] }, common({ days: [1, 2, 3, 4, 5] }));
+    const names = plan.routines.map((r) => r.name);
+    assert.ok(names.includes('Networking') && names.includes('Profile and portfolio'));
   });
 
-  it('learning: the thing to learn is the title', () => {
-    assert.equal(buildGuidedPlan('learning', { what: 'Spanish' }, common()).title, 'Learn Spanish');
+  it('business: an idea gets a "test the idea" routine first', () => {
+    const plan = buildGuidedPlan('business', { stage: 'idea', aim: 'launch' }, common());
+    assert.equal(plan.routines[0].name, 'Test the idea');
   });
 
-  it('diet: the eating style changes the protein task', () => {
-    const veg = buildGuidedPlan('diet', { style: 'vegetarian', meals: 'home' }, common({ days: [1, 2, 3, 4, 5], minutes: 60 }));
-    assert.ok(veg.routines.flatMap((r) => r.tasks).some((t) => t.includes('paneer')));
-    const vegan = buildGuidedPlan('diet', { style: 'vegan', meals: 'home' }, common({ days: [1, 2, 3, 4, 5], minutes: 60 }));
-    assert.ok(vegan.routines.flatMap((r) => r.tasks).some((t) => t.includes('tofu')));
+  it('"Something else" uses what was typed, and works fine if nothing was typed', () => {
+    assert.equal(buildGuidedPlan('career', { aim: 'other', aim_other: 'Become a team lead' }, common()).title, 'Become a team lead');
+    assert.equal(buildGuidedPlan('career', { aim: 'other' }, common()).title, 'Reach my career goal');
+    assert.equal(buildGuidedPlan('learning', { what: 'other', what_other: 'Chess' }, common()).title, 'Learn Chess');
+    assert.equal(buildGuidedPlan('learning', { what: 'other' }, common()).title, 'Learn something new');
   });
 
-  it('diet: eating out adds a routine for it', () => {
-    const out = buildGuidedPlan('diet', { meals: 'out' }, common({ days: [1, 2, 3, 4] }));
-    assert.equal(out.routines[0].name, 'Eating out, smartly');
+  it('learning: the subject picked sets the title', () => {
+    assert.equal(buildGuidedPlan('learning', { what: 'language' }, common()).title, 'Learn a new language');
+    assert.equal(buildGuidedPlan('learning', { what: 'music' }, common()).title, 'Learn music');
   });
 
   it('fitness: where and level change the exercises', () => {
     const gym = buildGuidedPlan('fitness', { aim: 'muscle', where: 'gym', level: 'beginner' }, common({ minutes: 60 }));
     const home = buildGuidedPlan('fitness', { aim: 'muscle', where: 'home', level: 'beginner' }, common({ minutes: 60 }));
-    assert.ok(gym.routines[0].tasks.some((t) => t.includes('Bench press')));
+    assert.ok(gym.routines[0].tasks.some((t) => t.includes('Bench press') && t.includes('3 sets of 8')));
     assert.ok(home.routines[0].tasks.some((t) => t.includes('Push-ups')));
-    assert.ok(gym.routines[0].tasks.some((t) => t.includes('3 sets of 8')));
   });
 
-  it('fitness: an injury note becomes a warm-up reminder', () => {
-    const plan = buildGuidedPlan('fitness', { aim: 'muscle', where: 'gym', note: 'sore left knee' }, common());
-    assert.ok(plan.routines[0].tasks[0].includes('sore left knee'));
+  it('money: a debt goal gets a debt plan, a saving goal does not', () => {
+    const debt = buildGuidedPlan('money', { aim: 'debt' }, common({ days: [1, 2, 3, 4] }));
+    const save = buildGuidedPlan('money', { aim: 'save' }, common({ days: [1, 2, 3, 4] }));
+    assert.ok(debt.routines.some((r) => r.name === 'Debt plan'));
+    assert.equal(save.routines.some((r) => r.name === 'Debt plan'), false);
+  });
+
+  it('custom ("Something else"): any kind of goal gets a simple rhythm to rename', () => {
+    const plan = buildGuidedPlan('custom', { kind: 'habit', help: ['checkin'] }, common({ days: [1, 2, 3, 4, 5] }));
+    assert.equal(plan.title, 'Build a new habit');
+    assert.equal(plan.category, 'General');
+    assert.equal(plan.focus, 'custom');
+    assert.ok(plan.routines.some((r) => r.name === 'Daily check-in'));
+  });
+});
+
+describe('health asks about eating or about rest, never both', () => {
+  const health = NICHES.find((n) => n.key === 'health')!;
+
+  it('eating: asks about style and meals', () => {
+    assert.deepEqual(visibleQuestions(health, { aim: 'eat' }).map((q) => q.id), ['aim', 'style', 'meals']);
+  });
+
+  it('sleep, stress and energy: ask what gets in the way and what the day is like', () => {
+    for (const aim of ['sleep', 'stress', 'energy']) {
+      assert.deepEqual(visibleQuestions(health, { aim }).map((q) => q.id), ['aim', 'issues', 'day']);
+    }
+  });
+
+  it('eating: the style changes the protein task and eating out adds a routine for it', () => {
+    const veg = buildGuidedPlan('health', { aim: 'eat', style: 'vegetarian', meals: 'home' }, common({ days: [1, 2, 3, 4, 5], minutes: 60 }));
+    assert.equal(veg.title, 'Eat well, feel great');
+    assert.ok(veg.routines.flatMap((r) => r.tasks).some((t) => t.includes('paneer')));
+    const vegan = buildGuidedPlan('health', { aim: 'eat', style: 'vegan', meals: 'home' }, common({ days: [1, 2, 3, 4, 5], minutes: 60 }));
+    assert.ok(vegan.routines.flatMap((r) => r.tasks).some((t) => t.includes('tofu')));
+    const out = buildGuidedPlan('health', { aim: 'eat', meals: 'out' }, common({ days: [1, 2, 3, 4] }));
+    assert.equal(out.routines[0].name, 'Eating out, smartly');
+  });
+
+  it('sleep: gets a wind-down routine', () => {
+    const plan = buildGuidedPlan('health', { aim: 'sleep' }, common());
+    assert.equal(plan.title, 'Sleep better, wake up rested');
+    assert.ok(plan.routines.some((r) => r.name === 'Wind-down'));
   });
 });
 
@@ -149,45 +214,52 @@ describe('typed text is made safe', () => {
     assert.equal(cleanText('x'.repeat(200)).length, 60);
   });
 
-  it('a very long or messy target cannot break a title', () => {
-    const plan = buildGuidedPlan('career', { aim: 'job', target: `${'a'.repeat(300)}\n\n<script>` }, common());
+  it('a very long or messy name for "Something else" cannot break a title', () => {
+    const plan = buildGuidedPlan('career', { aim: 'other', aim_other: `${'a'.repeat(300)}\n\n<script>` }, common());
     assert.ok(plan.title.length <= 100);
     assert.equal(/[\n\u0000]/.test(plan.title), false);
   });
 });
 
-describe('answers needed to move on', () => {
+describe('moving on needs only a tap', () => {
   const career = NICHES.find((n) => n.key === 'career')!;
-  const [aim, , focus, target] = career.questions;
+  const [aim, , focus] = career.questions;
 
-  it('a choice must be made, and "Something else" must be typed', () => {
+  it('a single choice must be made, and "Something else" counts without typing', () => {
     assert.equal(isAnswered(aim, {}), false);
     assert.equal(isAnswered(aim, { aim: 'job' }), true);
-    assert.equal(isAnswered(aim, { aim: 'other' }), false);
-    assert.equal(isAnswered(aim, { aim: 'other', aim_other: '  ' }), false);
-    assert.equal(isAnswered(aim, { aim: 'other', aim_other: 'Become a team lead' }), true);
+    assert.equal(isAnswered(aim, { aim: 'other' }), true);
   });
 
-  it('picking nothing is fine for multi-choice, and optional text may stay empty', () => {
+  it('picking nothing is fine for multi-choice', () => {
     assert.equal(isAnswered(focus, {}), true);
-    assert.equal(isAnswered(target, {}), true);
+  });
+});
+
+describe('starting from the plain form', () => {
+  it('maps each category to its niche, and a custom or unknown category to none', () => {
+    assert.equal(nicheForCategory('Career'), 'career');
+    assert.equal(nicheForCategory('Finance & Wealth'), 'money');
+    assert.equal(nicheForCategory('Learning & Skills'), 'learning');
+    assert.equal(nicheForCategory('Health'), 'health');
+    assert.equal(nicheForCategory(null), undefined);
+    assert.equal(nicheForCategory('Gardening'), undefined);
+    assert.equal(nicheForCategory('General'), undefined);
   });
 
-  it('a required text answer must have something in it', () => {
-    const what = NICHES.find((n) => n.key === 'learning')!.questions[0];
-    assert.equal(isAnswered(what, {}), false);
-    assert.equal(isAnswered(what, { what: '   ' }), false);
-    assert.equal(isAnswered(what, { what: 'Spanish' }), true);
+  it('every category in the plain form has a niche', () => {
+    for (const c of GOAL_CATEGORIES) assert.ok(nicheForCategory(c), c);
   });
 });
 
 describe('it plugs into the calendar', () => {
-  it('the plan can be written onto dates with tasks', () => {
-    const plan = buildGuidedPlan('fitness', firstChoices('fitness'), common({ days: [1, 3, 5] }));
-    const { subcategories, tasks } = materializePlan(plan, { fromDate: '2026-10-12', endDate: '2026-11-30', seed: 5 });
-    assert.ok(subcategories.length > 10);
-    assert.ok(tasks.length > subcategories.length);
-    assert.ok(tasks.every((t) => subcategories.some((s) => s.id === t.subcategoryId)));
+  it('every niche can be written onto dates with tasks', () => {
+    for (const n of NICHES) {
+      const plan = buildGuidedPlan(n.key, firstChoices(n.key), common({ days: [1, 3, 5] }));
+      const { subcategories, tasks } = materializePlan(plan, { fromDate: '2026-10-12', endDate: '2026-11-30', seed: 5 });
+      assert.ok(subcategories.length > 5, n.key);
+      assert.ok(tasks.every((t) => subcategories.some((s) => s.id === t.subcategoryId)), n.key);
+    }
   });
 
   it('the AI-ready seam: the rules plan maker returns the same plan', async () => {

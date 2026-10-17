@@ -7,35 +7,35 @@ import {
   Coins,
   Dumbbell,
   GraduationCap,
-  Moon,
-  PenTool,
+  Sparkles,
   X,
 } from 'lucide-react';
 import { AskBubble, OptionRow } from './Onboarding';
 import {
-  COMMON_LENGTH_OPTIONS,
-  COMMON_TIME_OPTIONS,
+  MINUTE_CHOICES,
+  MONTH_CHOICES,
   NICHES,
   cleanText,
   isAnswered,
   makePlanWithRules,
   nicheByKey,
+  visibleQuestions,
   type Answers,
   type GuidedQuestion,
+  type NicheKey,
   type PlanMaker,
 } from '../guidedGoal';
-import type { Focus, StarterPlan } from '../starterPlan';
+import type { StarterPlan } from '../starterPlan';
 import { WEEKDAY_LETTER, WEEKDAY_LONG, WEEK_ORDER, describeDays } from '../recurrence';
 
-const NICHE_ICONS: Record<Focus, React.ElementType> = {
+const NICHE_ICONS: Record<NicheKey, React.ElementType> = {
   career: Briefcase,
   business: Building2,
-  health: Moon,
+  health: Apple,
   fitness: Dumbbell,
-  diet: Apple,
   money: Coins,
   learning: GraduationCap,
-  creative: PenTool,
+  custom: Sparkles,
 };
 
 interface GuidedGoalProps {
@@ -43,24 +43,25 @@ interface GuidedGoalProps {
   onClose: (goalId?: string) => void;
   /** Saves the goal and its routines. Returns the new goal's id, or null when it could not be saved. */
   onCreate: (plan: StarterPlan) => Promise<string | null>;
-  /** The person would rather fill in the plain form. */
-  onManual: () => void;
+  /** Start at this niche's first question (the person already chose a category). */
+  initialNiche?: NicheKey;
   /** Turns answers into a plan. Defaults to the built-in rules; an AI can be supplied later. */
   makePlan?: PlanMaker;
 }
 
 /**
- * Create a goal by answering a few questions about it.
+ * An optional helper for someone who is not sure how to set up a goal.
  *
- * Pick a niche, answer its questions, say when and for how long, then check a
- * sample plan and change it before saving. The plan is only a starting point:
- * every routine and task can be edited on the goal's page afterwards.
+ * A few taps, never typing: pick a niche, answer its questions, choose your week,
+ * then check a sample plan and change it before saving. The plan is only a base,
+ * and every routine and task can be edited on the goal's page afterwards.
  */
-export const GuidedGoal: React.FC<GuidedGoalProps> = ({ onClose, onCreate, onManual, makePlan = makePlanWithRules }) => {
-  const [stepIndex, setStepIndex] = useState(0);
+export const GuidedGoal: React.FC<GuidedGoalProps> = ({ onClose, onCreate, initialNiche, makePlan = makePlanWithRules }) => {
+  const [nicheKey, setNicheKey] = useState<NicheKey | null>(initialNiche ?? null);
+  // Starting from a niche skips the first screen (which is just "pick a niche").
+  const [stepIndex, setStepIndex] = useState(initialNiche ? 1 : 0);
   const [direction, setDirection] = useState<1 | -1>(1);
 
-  const [nicheKey, setNicheKey] = useState<Focus | null>(null);
   const [answers, setAnswers] = useState<Answers>({});
   const [days, setDays] = useState<number[]>([1, 3, 5]);
   const [minutes, setMinutes] = useState(30);
@@ -73,14 +74,12 @@ export const GuidedGoal: React.FC<GuidedGoalProps> = ({ onClose, onCreate, onMan
   const [error, setError] = useState<string | null>(null);
 
   const niche = nicheKey ? nicheByKey(nicheKey) : null;
+  const questions = useMemo(() => (niche ? visibleQuestions(niche, answers) : []), [niche, answers]);
 
-  // niche, its questions, then when / how long / how many months, then the plan to check
-  const flow: string[] = useMemo(
-    () => ['niche', ...(niche ? niche.questions.map((q) => `q:${q.id}`) : []), 'days', 'time', 'length', 'preview'],
-    [niche]
-  );
+  // niche, then its questions, then the week, then the plan to check
+  const flow: string[] = useMemo(() => ['niche', ...questions.map((q) => `q:${q.id}`), 'week', 'preview'], [questions]);
   const step = flow[Math.min(stepIndex, flow.length - 1)];
-  const question: GuidedQuestion | undefined = step.startsWith('q:') ? niche?.questions.find((q) => `q:${q.id}` === step) : undefined;
+  const question: GuidedQuestion | undefined = step.startsWith('q:') ? questions.find((q) => `q:${q.id}` === step) : undefined;
   const progress = Math.round((stepIndex / (flow.length - 1)) * 100);
 
   const go = (delta: 1 | -1) => {
@@ -88,7 +87,7 @@ export const GuidedGoal: React.FC<GuidedGoalProps> = ({ onClose, onCreate, onMan
     setStepIndex((i) => Math.max(0, Math.min(flow.length - 1, i + delta)));
   };
 
-  const chooseNiche = (key: Focus) => {
+  const chooseNiche = (key: NicheKey) => {
     if (key !== nicheKey) {
       setNicheKey(key);
       setAnswers({}); // answers belong to one niche, so a different niche starts clean
@@ -130,7 +129,7 @@ export const GuidedGoal: React.FC<GuidedGoalProps> = ({ onClose, onCreate, onMan
   const canNext = (): boolean => {
     if (step === 'niche') return !!nicheKey;
     if (question) return isAnswered(question, answers);
-    if (step === 'days') return days.length > 0;
+    if (step === 'week') return days.length > 0;
     if (step === 'preview') return !!plan && chosenRoutines.length > 0 && cleanText(titleDraft, 100).length > 0 && !creating;
     return true;
   };
@@ -154,15 +153,12 @@ export const GuidedGoal: React.FC<GuidedGoalProps> = ({ onClose, onCreate, onMan
     if (step === 'niche') {
       return (
         <>
-          <AskBubble title="What do you want to work on?" sub="Pick one. We’ll ask a few questions about it, then suggest a plan." />
+          <AskBubble title="What do you want to work on?" sub="Pick one. A few quick taps, then we suggest a starting plan." />
           <div className="mt-6 space-y-3">
             {NICHES.map((n) => (
               <OptionRow key={n.key} icon={NICHE_ICONS[n.key]} label={n.label} hint={n.tagline} selected={nicheKey === n.key} onClick={() => chooseNiche(n.key)} />
             ))}
           </div>
-          <button type="button" className="mt-5 self-center text-sm font-semibold text-slate-500 underline underline-offset-4 cursor-pointer" onClick={onManual}>
-            I’d rather fill in the form myself
-          </button>
         </>
       );
     }
@@ -174,67 +170,49 @@ export const GuidedGoal: React.FC<GuidedGoalProps> = ({ onClose, onCreate, onMan
       return (
         <>
           <AskBubble title={question.title} sub={question.hint} />
-          {question.kind === 'text' ? (
-            <div className="mt-6">
-              <input
-                type="text"
-                autoFocus
-                maxLength={80}
-                value={picked}
-                onChange={(e) => setAnswer(question.id, e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && canNext()) go(1);
-                }}
-                placeholder={question.placeholder}
-                aria-label={question.title}
-                className="w-full text-base rounded-2xl px-4 py-3.5"
+          <div className="mt-6 space-y-3">
+            {question.options.map((o) => (
+              <OptionRow
+                key={o.value}
+                label={o.label}
+                hint={o.hint}
+                selected={question.kind === 'multi' ? many.includes(o.value) : picked === o.value}
+                onClick={() => (question.kind === 'multi' ? toggleMulti(question.id, o.value) : setAnswer(question.id, o.value))}
               />
-              {question.optional && <p className="mt-2 text-xs text-slate-400">You can leave this empty.</p>}
-            </div>
-          ) : (
-            <div className="mt-6 space-y-3">
-              {(question.options ?? []).map((o) => (
-                <OptionRow
-                  key={o.value}
-                  label={o.label}
-                  hint={o.hint}
-                  selected={question.kind === 'multi' ? many.includes(o.value) : picked === o.value}
-                  onClick={() => (question.kind === 'multi' ? toggleMulti(question.id, o.value) : setAnswer(question.id, o.value))}
-                />
-              ))}
-              {question.allowOther && (
-                <>
-                  <OptionRow label="Something else" selected={picked === 'other'} onClick={() => setAnswer(question.id, 'other')} />
-                  {picked === 'other' && (
-                    <input
-                      type="text"
-                      autoFocus
-                      maxLength={70}
-                      value={typeof answers[`${question.id}_other`] === 'string' ? (answers[`${question.id}_other`] as string) : ''}
-                      onChange={(e) => setAnswer(`${question.id}_other`, e.target.value)}
-                      placeholder="Type it here"
-                      aria-label="Type your own answer"
-                      className="w-full text-base rounded-2xl px-4 py-3.5"
-                    />
-                  )}
-                </>
-              )}
-            </div>
-          )}
+            ))}
+            {question.allowOther && (
+              <>
+                <OptionRow label="Something else" selected={picked === 'other'} onClick={() => setAnswer(question.id, 'other')} />
+                {picked === 'other' && (
+                  <input
+                    type="text"
+                    maxLength={70}
+                    value={typeof answers[`${question.id}_other`] === 'string' ? (answers[`${question.id}_other`] as string) : ''}
+                    onChange={(e) => setAnswer(`${question.id}_other`, e.target.value)}
+                    placeholder="Type it if you like (optional)"
+                    aria-label="Name your own (optional)"
+                    className="w-full text-base rounded-2xl px-4 py-3.5"
+                  />
+                )}
+              </>
+            )}
+          </div>
         </>
       );
     }
 
-    if (step === 'days') {
+    if (step === 'week') {
       return (
         <>
-          <AskBubble title="Which days work best?" sub="Your routines go on these days every week." />
-          <div className="mt-8 grid grid-cols-7 gap-2" role="group" aria-label="Days of the week">
+          <AskBubble title="Plan your week" sub="Three quick choices. You can change all of it later." />
+
+          <p className="section-label mt-6 mb-2">Which days?</p>
+          <div className="grid grid-cols-7 gap-2" role="group" aria-label="Days of the week">
             {WEEK_ORDER.map((day) => (
               <button
                 key={day}
                 type="button"
-                className="chip aspect-square grid place-items-center text-lg"
+                className="chip aspect-square grid place-items-center text-base"
                 data-active={days.includes(day)}
                 aria-pressed={days.includes(day)}
                 aria-label={WEEKDAY_LONG[day]}
@@ -244,31 +222,23 @@ export const GuidedGoal: React.FC<GuidedGoalProps> = ({ onClose, onCreate, onMan
               </button>
             ))}
           </div>
-          <p className="mt-6 text-center text-sm font-medium text-slate-500">{days.length === 0 ? 'Pick at least one day' : `Every ${describeDays(days)}`}</p>
-        </>
-      );
-    }
+          <p className="mt-2 text-xs font-medium text-slate-500">{days.length === 0 ? 'Pick at least one day' : `Every ${describeDays(days)}`}</p>
 
-    if (step === 'time') {
-      return (
-        <>
-          <AskBubble title="How much time each day?" sub="Shorter sessions mean fewer tasks, so it stays realistic." />
-          <div className="mt-6 space-y-3">
-            {COMMON_TIME_OPTIONS.map((o) => (
-              <OptionRow key={o.minutes} label={o.label} hint={o.hint} selected={minutes === o.minutes} onClick={() => setMinutes(o.minutes)} />
+          <p className="section-label mt-6 mb-2">How long each time?</p>
+          <div className="grid grid-cols-4 gap-2" role="group" aria-label="Minutes each day">
+            {MINUTE_CHOICES.map((m) => (
+              <button key={m} type="button" className="chip py-3 text-sm" data-active={minutes === m} aria-pressed={minutes === m} onClick={() => setMinutes(m)}>
+                {m === 60 ? '1 hour' : `${m} min`}
+              </button>
             ))}
           </div>
-        </>
-      );
-    }
 
-    if (step === 'length') {
-      return (
-        <>
-          <AskBubble title="How long is this goal?" sub="You can extend it later." />
-          <div className="mt-6 space-y-3">
-            {COMMON_LENGTH_OPTIONS.map((o) => (
-              <OptionRow key={o.months} label={o.label} selected={months === o.months} onClick={() => setMonths(o.months)} />
+          <p className="section-label mt-6 mb-2">For how long?</p>
+          <div className="grid grid-cols-4 gap-2" role="group" aria-label="Months">
+            {MONTH_CHOICES.map((m) => (
+              <button key={m} type="button" className="chip py-3 text-sm" data-active={months === m} aria-pressed={months === m} onClick={() => setMonths(m)}>
+                {m === 1 ? '1 month' : `${m} months`}
+              </button>
             ))}
           </div>
         </>
@@ -278,7 +248,7 @@ export const GuidedGoal: React.FC<GuidedGoalProps> = ({ onClose, onCreate, onMan
     // preview
     return (
       <>
-        <AskBubble title="Here is a starting point" sub="Change the name, switch routines off, then create it. You can edit everything later." />
+        <AskBubble title="Here is a starting point" sub="Rename it, switch routines off, then create it. You can edit everything later." />
         {!plan && !error && <p className="mt-8 text-center text-sm text-slate-500">Putting your plan together…</p>}
         {plan && (
           <div className="mt-6 space-y-4">
@@ -347,7 +317,7 @@ export const GuidedGoal: React.FC<GuidedGoalProps> = ({ onClose, onCreate, onMan
       }}
       role="dialog"
       aria-modal="true"
-      aria-label="Create a goal"
+      aria-label="Help me plan my goal"
     >
       <div className="mx-auto flex h-full w-full max-w-md flex-col px-6 safe-top">
         <div className="flex h-11 items-center gap-3">

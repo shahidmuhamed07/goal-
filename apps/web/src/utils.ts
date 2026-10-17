@@ -161,7 +161,6 @@ export const GOAL_CATEGORIES = [
   'Fitness',
   'Finance & Wealth',
   'Learning & Skills',
-  'Creative Writing',
 ] as const;
 
 export type GoalCategory = (typeof GOAL_CATEGORIES)[number];

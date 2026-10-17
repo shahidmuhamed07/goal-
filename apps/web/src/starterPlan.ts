@@ -99,7 +99,8 @@ export interface StarterRoutine {
 }
 
 export interface StarterPlan {
-  focus: Focus;
+  /** What the plan is about. `custom` is a goal that fits none of the listed niches. */
+  focus: Focus | 'custom';
   title: string;
   category: string;
   description: string;

@@ -6,7 +6,6 @@ import {
   Dumbbell,
   Coins,
   GraduationCap,
-  PenTool,
   Calendar,
   Sparkles,
   X,
@@ -27,6 +26,11 @@ interface CreateGoalModalProps {
   isOpen: boolean;
   onClose: () => void;
   collaborators?: Collaborator[];
+  /**
+   * Shows an optional "Help me plan" button for people who are not sure how to set the goal up.
+   * It gets the category picked so far (null for a custom one), so the questions can start there.
+   */
+  onHelpMeChoose?: (category: string | null) => void;
   onSave: (data: {
     title: string;
     category: string;
@@ -43,7 +47,6 @@ const CATEGORY_ICONS: Record<string, React.FC<{ className?: string }>> = {
   'Fitness': Dumbbell,
   'Finance & Wealth': Coins,
   'Learning & Skills': GraduationCap,
-  'Creative Writing': PenTool,
 };
 
 const MIN_MONTHS = 1;
@@ -53,6 +56,7 @@ export const CreateGoalModal: React.FC<CreateGoalModalProps> = ({
   isOpen,
   onClose,
   collaborators = [],
+  onHelpMeChoose,
   onSave,
 }) => {
   const currentMonthKey = getCurrentMonthKey();
@@ -152,6 +156,23 @@ export const CreateGoalModal: React.FC<CreateGoalModalProps> = ({
             <X className="w-4 h-4" />
           </button>
         </div>
+
+        {onHelpMeChoose && (
+          <div className="neu-inset-sm flex items-center justify-between gap-3 px-3.5 py-2.5">
+            <div className="min-w-0">
+              <p className="text-xs font-bold text-slate-800">Not sure where to start?</p>
+              <p className="text-[11px] text-slate-500">A few quick taps and we suggest a plan. Totally optional.</p>
+            </div>
+            <button
+              type="button"
+              className="chip inline-flex items-center gap-1.5 px-3 py-1.5 text-xs shrink-0"
+              onClick={() => onHelpMeChoose(isCustomCategory ? null : category)}
+            >
+              <Sparkles className="w-3.5 h-3.5" />
+              Help me plan
+            </button>
+          </div>
+        )}
 
         <form onSubmit={handleSubmit} className="space-y-5">
           {/* Goal Title */}

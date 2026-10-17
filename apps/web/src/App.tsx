@@ -118,6 +118,7 @@ import { ProfessionalProfilePanel } from './components/ProfessionalProfilePanel'
 import { AccountProfilePanel } from './components/AccountProfilePanel';
 import { Onboarding } from './components/Onboarding';
 import { GuidedGoal } from './components/GuidedGoal';
+import { nicheForCategory, type NicheKey } from './guidedGoal';
 import { ChatPanel } from './components/ChatPanel';
 import { threadHasUnread } from './chat';
 
@@ -251,8 +252,9 @@ export default function App() {
   const [personaPickerOpen, setPersonaPickerOpen] = useState(false);
   const [selectedGoalId, setSelectedGoalId] = useState<string | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
-  // The guided "create a goal" questions. The plain form stays one tap away from inside it.
+  // The optional "Help me plan" questions, opened from inside the create-goal form.
   const [guidedOpen, setGuidedOpen] = useState(false);
+  const [guidedNiche, setGuidedNiche] = useState<NicheKey | undefined>(undefined);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('all');
   const [dailyMasterDate, setDailyMasterDate] = useState<string>(getTodayDateString());
@@ -2435,7 +2437,7 @@ export default function App() {
             {isOwner && (
               <button
                 type="button"
-                onClick={() => setGuidedOpen(true)}
+                onClick={() => setIsModalOpen(true)}
                 aria-label="New Goal"
                 data-plain
                 className="btn-tone hidden sm:flex text-xs sm:text-sm px-2.5 sm:px-4 py-1.5 sm:py-2 items-center gap-1.5 shrink-0"
@@ -2850,7 +2852,7 @@ export default function App() {
                     </p>
                     {isOwner && (
                       <button
-                        onClick={() => setGuidedOpen(true)}
+                        onClick={() => setIsModalOpen(true)}
                         data-plain
                         className="btn-tone text-sm px-5 py-2.5 flex items-center gap-2 mx-auto"
                       >
@@ -3409,18 +3411,18 @@ export default function App() {
       {/* The screens below are mounted only while open, so each opening starts clean.
           Left mounted, they kept the last step, answers or half-typed text after closing. */}
 
-      {/* GUIDED CREATE-A-GOAL QUESTIONS */}
+      {/* OPTIONAL "HELP ME PLAN" QUESTIONS. Opens over the form, so closing it returns to the form as it was. */}
       {guidedOpen && (
         <GuidedGoal
+          initialNiche={guidedNiche}
           onClose={(goalId) => {
             setGuidedOpen(false);
-            if (goalId) openGoal(goalId);
+            if (goalId) {
+              setIsModalOpen(false);
+              openGoal(goalId);
+            }
           }}
           onCreate={handleCreateGuidedGoal}
-          onManual={() => {
-            setGuidedOpen(false);
-            setIsModalOpen(true);
-          }}
         />
       )}
 
@@ -3428,6 +3430,10 @@ export default function App() {
       {isModalOpen && (
         <CreateGoalModal
           isOpen
+          onHelpMeChoose={(category) => {
+            setGuidedNiche(nicheForCategory(category));
+            setGuidedOpen(true);
+          }}
           onClose={() => setIsModalOpen(false)}
           collaborators={profile?.collaborators || []}
           onSave={handleCreateGoal}
@@ -3505,7 +3511,7 @@ export default function App() {
 
               <button
                 type="button"
-                onClick={() => setGuidedOpen(true)}
+                onClick={() => setIsModalOpen(true)}
                 aria-label="New Goal"
                 title="New Goal"
                 data-plain
