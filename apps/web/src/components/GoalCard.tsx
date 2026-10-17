@@ -135,10 +135,10 @@ export const GoalCard: React.FC<GoalCardProps> = ({
         className={`absolute inset-x-0 top-0 h-1 bg-gradient-to-r ${categoryAccent(goal.category)}`}
       />
 
-      <div className="flex-1 flex flex-col gap-4 p-4 sm:p-5 pt-5">
+      <div className="flex-1 flex flex-col gap-2.5 sm:gap-4 p-3.5 sm:p-5 pt-4 sm:pt-5">
         <div className="min-w-0 space-y-1.5">
           <span className="badge">{goal.category || 'General'}</span>
-          <h3 className="text-lg font-extrabold leading-snug text-slate-900">
+          <h3 className="text-base sm:text-lg font-extrabold leading-snug text-slate-900">
             <button
               type="button"
               data-plain
@@ -152,12 +152,38 @@ export const GoalCard: React.FC<GoalCardProps> = ({
             </button>
           </h3>
           {goal.description && (
-            <p className="text-xs leading-relaxed text-slate-600 line-clamp-2">{goal.description}</p>
+            <p className="hidden sm:block text-xs leading-relaxed text-slate-600 line-clamp-2">{goal.description}</p>
           )}
         </div>
 
+        {/* Phone: one line and seven dots instead of the full week */}
+        {hasAnything && (
+          <div className="sm:hidden flex items-center justify-between gap-3">
+            <p className="min-w-0 truncate text-xs text-slate-600">
+              {rows.length > 0
+                ? `${rows
+                    .slice(0, 2)
+                    .map((r) => r.name)
+                    .join(' · ')}${rows.length > 2 ? ` +${rows.length - 2}` : ''}`
+                : next
+                ? `Next up: ${next.name}`
+                : 'Nothing planned this week'}
+            </p>
+            <span aria-hidden="true" className="flex shrink-0 items-center gap-1">
+              {days.map((date) => (
+                <span
+                  key={date}
+                  className={`block w-1.5 h-1.5 rounded-full ${
+                    plannedDates.has(date) ? 'bg-[color:var(--tone-700)]' : 'bg-slate-300'
+                  } ${date === today ? 'ring-2 ring-[color:var(--tone-300)]' : ''}`}
+                />
+              ))}
+            </span>
+          </div>
+        )}
+
         {hasAnything ? (
-          <div className="space-y-3">
+          <div className="hidden sm:block space-y-3">
             <div className="flex items-center justify-between gap-2">
               <span className="section-label">Next 7 days</span>
             </div>
@@ -230,15 +256,15 @@ export const GoalCard: React.FC<GoalCardProps> = ({
           </div>
         ) : (
           /* Nothing planned yet: say so, and show where to start */
-          <div className="neu-inset-sm px-4 py-5 text-center space-y-2">
-            <span className="mx-auto neu-sm w-9 h-9 grid place-items-center text-[color:var(--tone-700)]">
+          <div className="neu-inset-sm px-3 py-2.5 sm:px-4 sm:py-5 text-center space-y-2">
+            <span className="mx-auto neu-sm w-9 h-9 hidden sm:grid place-items-center text-[color:var(--tone-700)]">
               <Plus className="w-4 h-4 stroke-[2.5]" />
             </span>
             <p className="text-sm font-bold text-slate-800">
               {canPlan ? 'Plan your first routine' : 'Nothing planned yet'}
             </p>
             {canPlan && (
-              <p className="text-xs text-slate-500 leading-relaxed">
+              <p className="hidden sm:block text-xs text-slate-500 leading-relaxed">
                 Add a subcategory like “Chest day”, choose the weekdays, and it shows up here.
               </p>
             )}
@@ -246,7 +272,12 @@ export const GoalCard: React.FC<GoalCardProps> = ({
         )}
 
         {/* Who can see it, and the way in */}
-        <div className="mt-auto flex items-center justify-between gap-2 flex-wrap">
+        <div
+          className={`mt-auto items-center justify-between gap-2 flex-wrap ${
+            // On a phone the whole card is the way in, so a bare "Open" row is dropped
+            hasAnything && isOwner && collaborators.length === 0 ? 'hidden sm:flex' : 'flex'
+          }`}
+        >
           {isOwner ? (
             collaborators.length > 0 ? (
               <div className="flex items-center gap-2">

@@ -120,6 +120,7 @@ import { Onboarding } from './components/Onboarding';
 import { GuidedGoal } from './components/GuidedGoal';
 import { BackButton } from './components/BackButton';
 import { nicheForCategory, type NicheKey } from './guidedGoal';
+import { HOME_TAB, backTarget, tabOrder, type TabKey } from './navigation';
 import { ChatPanel } from './components/ChatPanel';
 import { threadHasUnread } from './chat';
 
@@ -244,7 +245,7 @@ export default function App() {
   const [giveUpTargetGoal, setGiveUpTargetGoal] = useState<Goal | null>(null);
 
   // UI View State
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'today' | 'detail' | 'connect' | 'professional'>('dashboard');
+  const [activeTab, setActiveTab] = useState<TabKey>(HOME_TAB);
   // Which side the next view slides in from: 1 = from the right, -1 = from the left.
   const [tabDirection, setTabDirection] = useState<1 | -1>(1);
   const [savingPersona, setSavingPersona] = useState(false);
@@ -257,6 +258,7 @@ export default function App() {
   const [guidedOpen, setGuidedOpen] = useState(false);
   const [guidedNiche, setGuidedNiche] = useState<NicheKey | undefined>(undefined);
   const [searchQuery, setSearchQuery] = useState('');
+  const [searchOpen, setSearchOpen] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState('all');
   const [dailyMasterDate, setDailyMasterDate] = useState<string>(getTodayDateString());
   const [selectedGoalMonth, setSelectedGoalMonth] = useState<string>(getCurrentMonthKey());
@@ -514,7 +516,7 @@ export default function App() {
     if (!clientsReady) return;
     if (!visibleClients.some((c) => c.id === workspaceUid) && !activeClientProfile) {
       setWorkspaceUid(user.uid);
-      setActiveTab('dashboard');
+      setActiveTab(HOME_TAB);
       setSelectedGoalId(null);
     }
   }, [user, workspaceUid, visibleClients, activeClientProfile, clientsReady]);
@@ -624,15 +626,7 @@ export default function App() {
 
   // --------------------------------------------------------------- swipe nav
   /** The tabs a swipe moves between, in the order they appear in the bar. */
-  const swipeTabs = useMemo(() => {
-    const tabs: Array<'dashboard' | 'today' | 'connect' | 'professional'> = [
-      'dashboard',
-      'today',
-      'connect',
-    ];
-    if (isOwner) tabs.push('professional');
-    return tabs;
-  }, [isOwner]);
+  const swipeTabs = useMemo(() => tabOrder(isOwner), [isOwner]);
 
   const contentRef = useRef<HTMLElement | null>(null);
   const swipe = useRef<{
@@ -904,8 +898,8 @@ export default function App() {
 
   const navTabs = useMemo<NavTab[]>(() => {
     const tabs: NavTab[] = [
-      { key: 'dashboard', label: 'Goals', longLabel: 'All Goals', Icon: ListChecks, badge: 0, count: goals.length },
       { key: 'today', label: 'Today', longLabel: "Today's Focus", Icon: CalendarCheck, badge: openTaskCount },
+      { key: 'dashboard', label: 'Goals', longLabel: 'All Goals', Icon: ListChecks, badge: 0, count: goals.length },
       { key: 'connect', label: 'Connect', longLabel: 'Collaborate', Icon: UsersRound, badge: pendingIncoming.length + unreadChatUids.size },
     ];
     if (isOwner) {
@@ -943,8 +937,8 @@ export default function App() {
   // ------------------------------------------------- back-button nav
   /**
    * Browser / phone back button should walk inside the app first:
-   *   detail -> Goals, Today/Connect/Profile -> Goals,
-   *   Goals (1st back) -> "press back again" toast, Goals (2nd back) -> leave.
+   *   goal page -> Goals, Goals/Connect/Profile -> Today,
+   *   Today (1st back) -> "press back again" toast, Today (2nd back) -> leave.
    * Modals and menus close first. One history trap keeps the first back
    * interceptable on laptop and phone instead of exiting / getting stuck.
    */
@@ -992,7 +986,7 @@ export default function App() {
     const goHome = () => {
       setTabDirection(-1);
       setSelectedGoalId(null);
-      setActiveTab('dashboard');
+      setActiveTab(HOME_TAB);
       window.scrollTo({ top: 0, behavior: 'auto' });
     };
 
@@ -1031,21 +1025,22 @@ export default function App() {
         return;
       }
 
-      // 2. Goal detail -> Goals home.
-      if (s.activeTab === 'detail' || s.selectedGoalId) {
-        goHome();
+      // 2. Goal page -> Goals list, Goals / Connect / Profile -> Today.
+      const target = backTarget(s.activeTab, Boolean(s.selectedGoalId));
+      if (target) {
+        if (target === 'dashboard') {
+          setTabDirection(-1);
+          setSelectedGoalId(null);
+          setActiveTab('dashboard');
+          window.scrollTo({ top: 0, behavior: 'auto' });
+        } else {
+          goHome();
+        }
         reTrap();
         return;
       }
 
-      // 3. Any other tab (Today / Connect / Profile) -> Goals home.
-      if (s.activeTab !== 'dashboard') {
-        goHome();
-        reTrap();
-        return;
-      }
-
-      // 4. Already on Goals: ask for a second back within 2s to leave.
+      // 3. Already on Today: ask for a second back within 2s to leave.
       const now = Date.now();
       if (now - lastBackPressRef.current < 2000) {
         setExitPromptVisible(false);
@@ -1088,7 +1083,7 @@ export default function App() {
         aria-current={active ? 'page' : undefined}
         data-active={active}
         style={{ gap: '2px' }}
-        className="segmented-tab flex-1 min-w-0 flex-col py-2 cursor-pointer"
+        className="segmented-tab flex-1 min-w-0 flex-col py-1.5 cursor-pointer"
       >
         <Icon
           className={`w-5 h-5 transition-transform duration-300 ${active ? 'scale-110' : ''}`}
@@ -1220,7 +1215,7 @@ export default function App() {
       await signOut(auth);
       setUser(null);
       setSelectedGoalId(null);
-      setActiveTab('dashboard');
+      setActiveTab(HOME_TAB);
       setWorkspaceUid(null);
     } catch (err) {
       console.error('Sign Out Error:', err);
@@ -2178,7 +2173,7 @@ export default function App() {
   const handleSwitchWorkspace = (uid: string) => {
     setWorkspaceUid(uid);
     setSelectedGoalId(null);
-    setActiveTab('dashboard');
+    setActiveTab(HOME_TAB);
   };
 
   /** Undoes an earlier removal when the professional asks for that client again. */
@@ -2206,7 +2201,7 @@ export default function App() {
       if (workspaceUid === clientId) {
         setWorkspaceUid(user.uid);
         setSelectedGoalId(null);
-        setActiveTab('dashboard');
+        setActiveTab(HOME_TAB);
       }
 
       await updateDoc(doc(db, 'users', user.uid), { withdrawnClients: nextWithdrawn });
@@ -2600,7 +2595,7 @@ export default function App() {
         <div key={activeTab} className="tab-panel" data-dir={tabDirection}>
             {/* VIEW 1: ALL GOALS DASHBOARD */}
             {activeTab === 'dashboard' && (
-              <div className="space-y-6">
+              <div className="space-y-4 sm:space-y-6">
                 {/* Inside a client's workspace the big hero is replaced by a single
                     compact line, so the client's goals are what you see first. */}
                 {!isOwner && workspaceProfile ? (
@@ -2636,7 +2631,16 @@ export default function App() {
                   <>
                 {/* Dashboard hero: a raised panel, not a picture. In this style the
                     depth is the decoration, so the numbers carry the colour. */}
-                <div className="rise neu-lg relative overflow-hidden p-4 sm:p-5">
+                <div className="sm:hidden rise flex items-center justify-between gap-3">
+                  <div className="min-w-0">
+                    <h1 className="page-title">Goals</h1>
+                    <p className="meta truncate">
+                      {goals.length} {goals.length === 1 ? 'goal' : 'goals'} · {allTodayTasks.filter((t) => t.completed).length}/
+                      {allTodayTasks.length} today · {overallProgress}% done
+                    </p>
+                  </div>
+                </div>
+                <div className="hidden sm:block rise neu-lg relative overflow-hidden p-4 sm:p-5">
                   <div className="relative z-10 flex items-center justify-between gap-4 flex-wrap">
                     <div className="flex items-center gap-3 min-w-0">
                       <Orb size={52} float className="shrink-0" />
@@ -2797,37 +2801,54 @@ export default function App() {
                   </section>
                 )}
 
-                {/* Filter and Search Bar */}
-                <div id="goals-grid" className="flex flex-col sm:flex-row items-center justify-between gap-3 scroll-mt-24">
-                  <div className="relative w-full sm:w-72">
-                    <Search className="absolute left-2.5 top-2.5 text-slate-600 w-3.5 h-3.5" />
-                    <input
-                      type="text"
-                      placeholder="Search goals or descriptions..."
-                      value={searchQuery}
-                      onChange={(e) => setSearchQuery(e.target.value)}
-                      className={`w-full text-xs bg-white border rounded-xl pl-8 pr-3 py-2 text-slate-800 placeholder-slate-500 focus:outline-none ${
-                        !isOwner
-                          ? 'border-violet-200 focus:ring-2 focus:ring-violet-600/20 focus:border-violet-700'
-                          : 'border-slate-200 focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600'
-                      }`}
-                    />
-                  </div>
+                {/* Filter and Search Bar. On a phone the search is an icon that opens
+                    the box, and the categories scroll along one row. */}
+                <div id="goals-grid" className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2 sm:gap-3 scroll-mt-24">
+                  <div className="flex items-center gap-2 sm:contents">
+                    <div className={`relative sm:w-72 ${searchOpen ? 'flex-1' : 'hidden sm:block'}`}>
+                      <Search className="absolute left-2.5 top-2.5 text-slate-600 w-3.5 h-3.5" />
+                      <input
+                        type="text"
+                        placeholder="Search goals or descriptions..."
+                        aria-label="Search goals"
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        className={`w-full text-xs bg-white border rounded-xl pl-8 pr-3 py-2 text-slate-800 placeholder-slate-500 focus:outline-none ${
+                          !isOwner
+                            ? 'border-violet-200 focus:ring-2 focus:ring-violet-600/20 focus:border-violet-700'
+                            : 'border-slate-200 focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600'
+                        }`}
+                      />
+                    </div>
 
-                  <div className="flex items-center gap-2 w-full sm:w-auto overflow-x-auto pb-1">
-                    <span className="text-xs text-slate-700 font-bold flex-shrink-0">Category:</span>
-                    {categories.map((cat) => (
-                      <button
-                        key={cat}
-                        type="button"
-                        onClick={() => setSelectedCategory(cat)}
-                        data-active={selectedCategory === cat}
-                        aria-pressed={selectedCategory === cat}
-                        className="chip px-3 py-1.5 text-xs capitalize rounded-full!"
-                      >
-                        {cat}
-                      </button>
-                    ))}
+                    <div className={`items-center gap-2 flex-1 min-w-0 sm:flex sm:flex-none sm:w-auto overflow-x-auto no-scrollbar pb-1 sm:pb-0 ${searchOpen ? 'hidden' : 'flex'}`}>
+                      <span className="hidden sm:inline text-xs text-slate-700 font-bold flex-shrink-0">Category:</span>
+                      {categories.map((cat) => (
+                        <button
+                          key={cat}
+                          type="button"
+                          onClick={() => setSelectedCategory(cat)}
+                          data-active={selectedCategory === cat}
+                          aria-pressed={selectedCategory === cat}
+                          className="chip shrink-0 px-3 py-1.5 text-xs capitalize rounded-full!"
+                        >
+                          {cat}
+                        </button>
+                      ))}
+                    </div>
+
+                    <button
+                      type="button"
+                      className="chip sm:hidden shrink-0 w-9 h-9 grid place-items-center"
+                      aria-label={searchOpen ? 'Close search' : 'Search goals'}
+                      aria-pressed={searchOpen}
+                      onClick={() => {
+                        if (searchOpen) setSearchQuery('');
+                        setSearchOpen(!searchOpen);
+                      }}
+                    >
+                      {searchOpen ? <X className="w-4 h-4" /> : <Search className="w-4 h-4" />}
+                    </button>
                   </div>
                 </div>
 
@@ -2863,7 +2884,7 @@ export default function App() {
                     )}
                   </div>
                 ) : (
-                  <div className="grid grid-cols-[repeat(auto-fill,minmax(20rem,1fr))] gap-5">
+                  <div className="grid grid-cols-[repeat(auto-fill,minmax(20rem,1fr))] gap-3 sm:gap-5">
                     {filteredGoals.map((goal) => (
                       <GoalCard
                         key={goal.id}
@@ -2884,10 +2905,10 @@ export default function App() {
 
             {/* VIEW 2: TODAY'S MASTER FOCUS */}
             {activeTab === 'today' && (
-              <div className="space-y-6">
+              <div className="space-y-4 sm:space-y-6">
                 {/* Header: the mascot, the date and one calm progress line */}
-                <div className="rise flex items-center gap-4">
-                  <Orb size={64} float className="shrink-0" />
+                <div className="rise flex items-center gap-3 sm:gap-4">
+                  <Orb size={64} float className="shrink-0 hidden sm:block" />
                   <div className="min-w-0 flex-1">
                     <span className="section-label">{formatFullMonth(curMonthKey)}</span>
                     <h1 className="page-title">{formatDisplayDate(todayDate)}</h1>
@@ -2899,13 +2920,16 @@ export default function App() {
                         : `${allTodayTasks.filter((t) => t.completed).length} of ${allTodayTasks.length} done. Keep going.`}
                     </p>
                   </div>
+                  <div className="sm:hidden shrink-0">
+                    <StreakBadge stats={streakStats} />
+                  </div>
                 </div>
                 {allTodayTasks.length > 0 && (
                   <ProgressBar
                     value={Math.round(
                       (allTodayTasks.filter((t) => t.completed).length / allTodayTasks.length) * 100
                     )}
-                    height="h-2.5"
+                    height="h-2"
                   />
                 )}
 
@@ -2914,11 +2938,34 @@ export default function App() {
 
                 {/* Goals Work Breakdown for Today */}
                 {goals.length === 0 ? (
-                  <div className="rise neu rounded-3xl p-12 text-center font-medium text-slate-600 text-sm">
-                    No active goals yet. Create a goal to start planning your daily tasks.
+                  <div className="rise neu rounded-3xl p-6 sm:p-12 text-center space-y-3">
+                    <span className="mx-auto neu-sm w-12 h-12 grid place-items-center text-[color:var(--tone-700)]">
+                      <Target className="w-6 h-6" />
+                    </span>
+                    <div>
+                      <h2 className="text-base font-bold text-slate-800">
+                        {isOwner ? 'Start with your first goal' : 'No goals in this workspace yet'}
+                      </h2>
+                      <p className="text-sm text-slate-600 max-w-sm mx-auto mt-1">
+                        {isOwner
+                          ? 'Pick what you want to work on. Your tasks for each day show up here.'
+                          : 'Goals planned for this client will show up here.'}
+                      </p>
+                    </div>
+                    {isOwner && (
+                      <button
+                        type="button"
+                        onClick={() => setIsModalOpen(true)}
+                        data-plain
+                        className="btn-tone text-sm px-5 py-2.5 inline-flex items-center gap-2"
+                      >
+                        <Plus className="w-4 h-4 stroke-[2.5]" />
+                        <span>Create your first goal</span>
+                      </button>
+                    )}
                   </div>
                 ) : allTodayTasks.length === 0 ? (
-                  <div className="rise neu rounded-3xl p-10 text-center space-y-4">
+                  <div className="rise neu rounded-3xl p-5 sm:p-10 text-center space-y-3 sm:space-y-4">
                     <div className="w-12 h-12 rounded-2xl bg-emerald-50 text-emerald-600 border border-emerald-200 flex items-center justify-center mx-auto shadow-2xs">
                       <CheckCircle2 className="w-6 h-6" />
                     </div>
@@ -2945,7 +2992,7 @@ export default function App() {
                     </div>
                   </div>
                 ) : (
-                  <div className="space-y-5">
+                  <div className="space-y-3 sm:space-y-5">
                     {goals.map((g) => {
                       const goalTodayTasks = (g.tasks || []).filter((t) => t.date === todayDate);
                       const canManageGoal = canEditGoal(g.id);
@@ -2965,22 +3012,22 @@ export default function App() {
                       return (
                         <div
                           key={g.id}
-                          className="rise neu rounded-2xl p-4 sm:p-5 space-y-4"
+                          className="rise neu rounded-2xl p-3 sm:p-5 space-y-3 sm:space-y-4"
                         >
                           {/* Goal Header */}
-                          <div className="flex items-center justify-between gap-3 pb-3 border-b border-slate-100 flex-wrap">
+                          <div className="flex items-center justify-between gap-2 sm:gap-3 pb-2.5 sm:pb-3 border-b border-slate-100 sm:flex-wrap">
                             <div className="flex items-center gap-2.5 min-w-0 flex-1">
-                              <span className="badge shrink-0">
+                              <span className="badge shrink-0 hidden sm:inline-flex">
                                 {g.category || 'General'}
                               </span>
-                              <h2 className="text-base sm:text-lg font-bold text-slate-900 leading-tight break-words">
+                              <h2 className="text-[15px] sm:text-lg font-bold text-slate-900 leading-tight break-words">
                                 {g.title}
                               </h2>
                             </div>
 
-                            <div className="flex items-center gap-3 flex-shrink-0">
+                            <div className="flex items-center gap-2 sm:gap-3 flex-shrink-0">
                               <span className="text-xs font-bold text-slate-600 tabular-nums">
-                                {completedCount}/{goalTodayTasks.length} Done
+                                {completedCount}/{goalTodayTasks.length}<span className="hidden sm:inline"> Done</span>
                               </span>
                               <button
                                 onClick={() => {
@@ -2989,7 +3036,8 @@ export default function App() {
                                 }}
                                 className="neu-sm press flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-bold text-emerald-800 cursor-pointer"
                               >
-                                <span>View Roadmap</span>
+                                <span className="hidden sm:inline">View Roadmap</span>
+                                <span className="sm:hidden">Open</span>
                                 <ArrowRight className="w-3 h-3" />
                               </button>
                             </div>
@@ -3514,7 +3562,7 @@ export default function App() {
                 aria-label="New Goal"
                 title="New Goal"
                 data-plain
-                className="btn-tone press relative z-20 -mt-6 w-12 h-12 shrink-0 ring-4 ring-white flex items-center justify-center"
+                className="btn-tone press relative z-20 -mt-5 w-11 h-11 shrink-0 ring-4 ring-white flex items-center justify-center"
               >
                 <Plus className="w-5 h-5 stroke-[2.5]" />
               </button>
