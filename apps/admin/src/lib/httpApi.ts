@@ -11,7 +11,11 @@ export type MeResult = { status: 'allowed'; email: string | null; role: AdminRol
  * developer's machine the API answers yes with no email, so the admin opens directly.
  */
 export async function checkAccess(baseUrl: string, token: string | null): Promise<MeResult> {
-  const res = await fetch(`${baseUrl}/api/admin/me`, { headers: token ? { authorization: `Bearer ${token}` } : {} });
+  // A sleeping free server needs up to about a minute to wake, so wait longer than that, but not forever.
+  const res = await fetch(`${baseUrl}/api/admin/me`, {
+    headers: token ? { authorization: `Bearer ${token}` } : {},
+    signal: AbortSignal.timeout(90_000),
+  });
   if (res.status === 200) {
     const me = (await res.json()) as { email: string | null; role: AdminRole };
     return { status: 'allowed', email: me.email, role: me.role };
