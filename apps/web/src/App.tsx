@@ -2623,16 +2623,7 @@ export default function App() {
                   <>
                 {/* Dashboard hero: a raised panel, not a picture. In this style the
                     depth is the decoration, so the numbers carry the colour. */}
-                <div className="sm:hidden rise flex items-center justify-between gap-3">
-                  <div className="min-w-0">
-                    <h1 className="page-title">Goals</h1>
-                    <p className="meta truncate">
-                      {goals.length} {goals.length === 1 ? 'goal' : 'goals'} · {allTodayTasks.filter((t) => t.completed).length}/
-                      {allTodayTasks.length} today · {overallProgress}% done
-                    </p>
-                  </div>
-                </div>
-                <div className="hidden sm:block rise neu-lg relative overflow-hidden p-4 sm:p-5">
+                <div className="rise neu-lg relative overflow-hidden p-4 sm:p-5">
                   <div className="relative z-10 flex items-center justify-between gap-4 flex-wrap">
                     <div className="flex items-center gap-3 min-w-0">
                       <Orb size={52} float className="shrink-0" />
