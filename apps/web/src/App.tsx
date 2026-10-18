@@ -898,8 +898,8 @@ export default function App() {
 
   const navTabs = useMemo<NavTab[]>(() => {
     const tabs: NavTab[] = [
-      { key: 'today', label: 'Today', longLabel: "Today's Focus", Icon: CalendarCheck, badge: openTaskCount },
       { key: 'dashboard', label: 'Goals', longLabel: 'All Goals', Icon: ListChecks, badge: 0, count: goals.length },
+      { key: 'today', label: 'Today', longLabel: "Today's Focus", Icon: CalendarCheck, badge: openTaskCount },
       { key: 'connect', label: 'Connect', longLabel: 'Collaborate', Icon: UsersRound, badge: pendingIncoming.length + unreadChatUids.size },
     ];
     if (isOwner) {
@@ -937,8 +937,8 @@ export default function App() {
   // ------------------------------------------------- back-button nav
   /**
    * Browser / phone back button should walk inside the app first:
-   *   goal page -> Goals, Goals/Connect/Profile -> Today,
-   *   Today (1st back) -> "press back again" toast, Today (2nd back) -> leave.
+   *   goal page / Today / Connect / Profile -> Goals,
+   *   Goals (1st back) -> "press back again" toast, Goals (2nd back) -> leave.
    * Modals and menus close first. One history trap keeps the first back
    * interceptable on laptop and phone instead of exiting / getting stuck.
    */
@@ -1025,22 +1025,14 @@ export default function App() {
         return;
       }
 
-      // 2. Goal page -> Goals list, Goals / Connect / Profile -> Today.
-      const target = backTarget(s.activeTab, Boolean(s.selectedGoalId));
-      if (target) {
-        if (target === 'dashboard') {
-          setTabDirection(-1);
-          setSelectedGoalId(null);
-          setActiveTab('dashboard');
-          window.scrollTo({ top: 0, behavior: 'auto' });
-        } else {
-          goHome();
-        }
+      // 2. Goal page / Today / Connect / Profile -> Goals (home).
+      if (backTarget(s.activeTab, Boolean(s.selectedGoalId))) {
+        goHome();
         reTrap();
         return;
       }
 
-      // 3. Already on Today: ask for a second back within 2s to leave.
+      // 3. Already on Goals: ask for a second back within 2s to leave.
       const now = Date.now();
       if (now - lastBackPressRef.current < 2000) {
         setExitPromptVisible(false);
@@ -2854,7 +2846,7 @@ export default function App() {
 
                 {/* Goals Grid */}
                 {filteredGoals.length === 0 ? (
-                  <div className="rise rise-3 neu text-center rounded-2xl p-12">
+                  <div className="rise rise-3 neu text-center rounded-2xl p-6 sm:p-12">
                     <div
                       className={`w-14 h-14 rounded-2xl flex items-center justify-center mx-auto mb-3 shadow-2xs ${
                         !isOwner
