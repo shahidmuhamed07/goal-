@@ -2634,7 +2634,7 @@ export default function App() {
                     </div>
 
                     {/* Three tappable stats */}
-                    <div className="grid grid-cols-3 gap-2.5 sm:gap-3 flex-shrink-0">
+                    <div className="grid grid-cols-3 gap-2 sm:gap-3 w-full sm:w-auto sm:flex-shrink-0">
                       {/* Stat 1: Goals */}
                       <button
                         type="button"
@@ -2649,7 +2649,7 @@ export default function App() {
                         <div className="text-[10px] font-semibold text-slate-600">
                           {!isOwner ? 'Client Goals' : 'Active Goals'}
                         </div>
-                        <div className="text-[9px] font-bold text-slate-600 group-hover/card:text-violet-800 flex items-center justify-center sm:justify-start gap-0.5 mt-0.5 transition">
+                        <div className="text-[9px] font-bold text-slate-600 group-hover/card:text-violet-800 hidden sm:flex items-center justify-center sm:justify-start gap-0.5 mt-0.5 transition">
                           <span>View Grid</span>
                           <ArrowRight className="w-2.5 h-2.5 group-hover/card:translate-x-0.5 transition-transform" />
                         </div>
@@ -2668,7 +2668,7 @@ export default function App() {
                         <div className="text-[10px] font-semibold text-slate-600">
                           Tasks Today
                         </div>
-                        <div className="text-[9px] font-bold text-slate-600 group-hover/card:text-violet-800 flex items-center justify-center sm:justify-start gap-0.5 mt-0.5 transition">
+                        <div className="text-[9px] font-bold text-slate-600 group-hover/card:text-violet-800 hidden sm:flex items-center justify-center sm:justify-start gap-0.5 mt-0.5 transition">
                           <span>Focus Mode</span>
                           <ArrowRight className="w-2.5 h-2.5 group-hover/card:translate-x-0.5 transition-transform" />
                         </div>
@@ -2690,7 +2690,7 @@ export default function App() {
                         <div className="text-[10px] font-semibold text-slate-600">
                           Progress
                         </div>
-                        <div className="text-[9px] font-bold text-slate-600 group-hover/card:text-violet-800 flex items-center justify-center sm:justify-start gap-0.5 mt-0.5 transition">
+                        <div className="text-[9px] font-bold text-slate-600 group-hover/card:text-violet-800 hidden sm:flex items-center justify-center sm:justify-start gap-0.5 mt-0.5 transition">
                           <span>Roadmap</span>
                           <ArrowRight className="w-2.5 h-2.5 group-hover/card:translate-x-0.5 transition-transform" />
                         </div>
@@ -2891,10 +2891,22 @@ export default function App() {
               <div className="space-y-4 sm:space-y-6">
                 {/* Header: the mascot, the date and one calm progress line */}
                 <div className="rise flex items-center gap-3 sm:gap-4">
-                  <Orb size={64} float className="shrink-0 hidden sm:block" />
+                  <span className="hidden sm:block shrink-0">
+                    <Orb size={64} float />
+                  </span>
                   <div className="min-w-0 flex-1">
-                    <span className="section-label">{formatFullMonth(curMonthKey)}</span>
-                    <h1 className="page-title">{formatDisplayDate(todayDate)}</h1>
+                    <span className="section-label hidden sm:inline">{formatFullMonth(curMonthKey)}</span>
+                    <span className="section-label sm:hidden">
+                      {new Date(`${todayDate}T12:00:00`).toLocaleDateString('en-US', {
+                        weekday: 'long',
+                        month: 'long',
+                        day: 'numeric',
+                      })}
+                    </span>
+                    <h1 className="page-title">
+                      <span className="sm:hidden">Today</span>
+                      <span className="hidden sm:inline">{formatDisplayDate(todayDate)}</span>
+                    </h1>
                     <p className="page-lede">
                       {allTodayTasks.length === 0
                         ? 'Nothing planned yet. A calm day.'
@@ -2903,8 +2915,8 @@ export default function App() {
                         : `${allTodayTasks.filter((t) => t.completed).length} of ${allTodayTasks.length} done. Keep going.`}
                     </p>
                   </div>
-                  <div className="sm:hidden shrink-0">
-                    <StreakBadge stats={streakStats} />
+                  <div className="sm:hidden shrink-0 self-start pt-1">
+                    <StreakBadge stats={streakStats} compact />
                   </div>
                 </div>
                 {allTodayTasks.length > 0 && (
@@ -2949,16 +2961,16 @@ export default function App() {
                   </div>
                 ) : allTodayTasks.length === 0 ? (
                   <div className="rise neu rounded-3xl p-5 sm:p-10 text-center space-y-3 sm:space-y-4">
-                    <div className="w-12 h-12 rounded-2xl bg-emerald-50 text-emerald-600 border border-emerald-200 flex items-center justify-center mx-auto shadow-2xs">
+                    <div className="hidden sm:flex w-12 h-12 rounded-2xl bg-emerald-50 text-emerald-600 border border-emerald-200 items-center justify-center mx-auto shadow-2xs">
                       <CheckCircle2 className="w-6 h-6" />
                     </div>
                     <div>
-                      <h3 className="text-base font-bold text-slate-800">No Tasks Scheduled for Today</h3>
-                      <p className="text-xs text-slate-500 max-w-md mx-auto mt-1">
-                        Select a goal below to jump in and plan your subcategories or tasks for today ({formatDisplayDate(todayDate)}).
+                      <h3 className="text-base font-bold text-slate-800">Nothing planned for today</h3>
+                      <p className="text-sm text-slate-600 max-w-md mx-auto mt-1">
+                        Open a goal to plan today&apos;s routines and tasks.
                       </p>
                     </div>
-                    <div className="flex flex-wrap items-center justify-center gap-2 pt-2">
+                    <div className="flex flex-col sm:flex-row sm:flex-wrap items-stretch sm:items-center justify-center gap-2 pt-1 sm:pt-2">
                       {goals.map((g) => (
                         <button
                           key={g.id}
@@ -2966,10 +2978,10 @@ export default function App() {
                             setSelectedGoalId(g.id);
                             setActiveTab('detail');
                           }}
-                          className="chip flex items-center gap-1.5 px-3.5 py-2 text-xs"
+                          className="chip flex items-center justify-between sm:justify-center gap-1.5 px-4 py-2.5 sm:px-3.5 sm:py-2 text-sm sm:text-xs text-left"
                         >
-                          <ArrowRight className="w-3 h-3 text-emerald-600" />
-                          <span>{g.title}</span>
+                          <span className="truncate">{g.title}</span>
+                          <ArrowRight className="w-3.5 h-3.5 shrink-0 text-[color:var(--tone-600)]" />
                         </button>
                       ))}
                     </div>
@@ -3000,7 +3012,7 @@ export default function App() {
                           {/* Goal Header */}
                           <div className="flex items-center justify-between gap-2 sm:gap-3 pb-2.5 sm:pb-3 border-b border-slate-100 sm:flex-wrap">
                             <div className="flex items-center gap-2.5 min-w-0 flex-1">
-                              <span className="badge shrink-0 hidden sm:inline-flex">
+                              <span className="badge shrink-0 max-sm:hidden!">
                                 {g.category || 'General'}
                               </span>
                               <h2 className="text-[15px] sm:text-lg font-bold text-slate-900 leading-tight break-words">
@@ -3406,7 +3418,7 @@ export default function App() {
       )}
 
       {/* FOOTER */}
-      <footer className="neu border-x-0 border-b-0 rounded-none py-3.5 sm:py-6 mt-6 sm:mt-12">
+      <footer className="hidden sm:block neu border-x-0 border-b-0 rounded-none py-3.5 sm:py-6 mt-6 sm:mt-12">
         <div className="max-w-6xl mx-auto px-3 sm:px-6 flex flex-col sm:flex-row items-center justify-between gap-1.5 sm:gap-4 text-[11px] sm:text-xs text-slate-500 text-center sm:text-left">
           <div className="flex items-center gap-2">
             <span>Goal Path App</span>

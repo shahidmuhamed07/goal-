@@ -120,6 +120,14 @@ Found by reading the code on 2026-10-11; none of these have been reproduced unle
 
 ## Changelog
 
+### 2026-10-18 — Fix: Today and Goals on phone still showed desktop pieces  (branch `feature/phone-compact`)
+- **Type:** fix + ui
+- **What & why:** The user's phone screenshot of Today still showed the big mascot, a date title that wrapped over two lines, a large streak card and a long empty-day card, and the page footer peeked out behind the floating tab bar like a second card. Causes: `hidden` does not win against classes that set their own `display` (`.orb` is `inline-grid`, `.badge` is `inline-flex`), so the mascot and the category badge were never hidden. Now: the mascot sits in a `hidden sm:block` wrapper; on phones the Today title is just **Today** with the weekday and date as the small line above it and a compact streak chip; the empty-day card says "Nothing planned for today" with full-width goal rows; the footer is desktop-only; on the Goals top card the three stat tiles span the row and drop their third line on phones.
+- **Files:** `apps/web/src/App.tsx`.
+- **Data/rules impact:** none.
+- **Verified:** lint ✓ · build ✓ · tests ✓ · throwaway 400px sandbox of the new Today header, empty card and a badge (deleted): mascot and badge gone, title on one line. **Not verified:** the signed-in app (needs Google sign-in).
+- **Docs updated:** `context/ui-context.md` (phone rule about hiding).
+
 ### 2026-10-18 — Fix: the phone tab bar (and header) painted over dialogs  (branch `feature/phone-compact`)
 - **Type:** fix
 - **What & why:** On the Connect screen the goal-access dialog's buttons sat under the floating tab bar. Cause: the page content (`<main>`) has its own stacking layer (`z-10`), so a dialog written inside a screen could never rise above the tab bar (`z-50`) or the sticky header, whatever its own z-index. `Dialog` now draws itself on `<body>` through a React portal (carrying over the owner/professional tone from the app root), so every dialog covers everything.
