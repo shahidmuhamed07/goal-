@@ -1,6 +1,15 @@
 import { Collaborator, Goal, GoalAccessLevel } from './types';
 
-export const getTodayDateString = (): string => new Date().toISOString().split('T')[0];
+/**
+ * Today as "YYYY-MM-DD" on the person's own calendar. (It used to be the UTC
+ * date, which pointed at yesterday for part of every day in most time zones.)
+ */
+export const getTodayDateString = (): string => {
+  const now = new Date();
+  const month = String(now.getMonth() + 1).padStart(2, '0');
+  const day = String(now.getDate()).padStart(2, '0');
+  return `${now.getFullYear()}-${month}-${day}`;
+};
 
 /** A "YYYY-MM-DD" day shifted by whole days, staying on the same calendar the
  *  stored task dates use. */

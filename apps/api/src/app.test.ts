@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import type { AddressInfo } from 'node:net';
 import { after, before, describe, it } from 'node:test';
-import type { Banner, LiveContent } from '@goalpath/shared';
+import type { Banner, LiveContent, Page, Popup } from '@goalpath/shared';
 import { createApp } from './app';
 import { MemoryStore } from './memoryStore';
 
@@ -64,6 +64,46 @@ describe('live content', () => {
   it('never exposes internal fields', async () => {
     const first = (await live()).banners[0] as Record<string, unknown>;
     for (const key of ['name', 'status', 'audience', 'createdAt', 'updatedAt', 'startsAt', 'endsAt']) assert.ok(!(key in first), key);
+  });
+
+  describe('popups and pages', () => {
+    const popup = (over: Partial<Popup>): Popup => ({
+      id: 'pop_x', name: 'Test', title: 'Hi', body: 'Body', tone: 'brand', audience: 'everyone', frequency: 'once',
+      status: 'published', createdAt: day(-5), updatedAt: day(-1), ...over,
+    });
+    const page = (over: Partial<Page>): Page => ({
+      id: 'page_x', slug: 'x', title: 'A page', audience: 'everyone', blocks: [{ id: 'b1', type: 'heading', text: 'Hello' }],
+      status: 'published', createdAt: day(-5), updatedAt: day(-1), ...over,
+    });
+    before(async () => {
+      await store.upsert('popups', popup({ id: 'pop_old', updatedAt: day(-3) }) as never);
+      await store.upsert('popups', popup({ id: 'pop_new', updatedAt: day(-1), frequency: 'daily' }) as never);
+      await store.upsert('popups', popup({ id: 'pop_draft', status: 'draft' }) as never);
+      await store.upsert('popups', popup({ id: 'pop_ended', endsAt: day(-2) }) as never);
+      await store.upsert('popups', popup({ id: 'pop_pros', audience: 'professionals' }) as never);
+      await store.upsert('pages', page({ id: 'page_live', slug: 'summer' }) as never);
+      await store.upsert('pages', page({ id: 'page_draft', slug: 'draft', status: 'draft' }) as never);
+      await store.upsert('pages', page({ id: 'page_owners', slug: 'owners-only', audience: 'owners' }) as never);
+    });
+
+    it('serves live popups, newest first, and hides drafts and ended ones', async () => {
+      const ids = ((await live('?role=owner')).popups ?? []).map((p) => p.id);
+      assert.deepEqual(ids, ['pop_new', 'pop_old']);
+    });
+
+    it('filters popups and pages by audience, and shows a logged-out visitor only what is for everyone', async () => {
+      assert.ok(((await live('?role=professional')).popups ?? []).some((p) => p.id === 'pop_pros'));
+      assert.ok(!((await live()).popups ?? []).some((p) => p.id === 'pop_pros'));
+      assert.deepEqual(((await live()).pages ?? []).map((p) => p.slug), ['summer']);
+      assert.deepEqual(((await live('?role=owner')).pages ?? []).map((p) => p.slug).sort(), ['owners-only', 'summer']);
+    });
+
+    it('sends pages with their blocks and no internal fields', async () => {
+      const first = ((await live()).pages ?? [])[0] as unknown as Record<string, unknown>;
+      assert.deepEqual(Object.keys(first).sort(), ['blocks', 'id', 'slug', 'title']);
+      const popupKeys = Object.keys(((await live('?role=owner')).popups ?? [])[0] as unknown as Record<string, unknown>);
+      for (const key of ['name', 'status', 'audience', 'createdAt', 'updatedAt']) assert.ok(!popupKeys.includes(key), key);
+    });
   });
 });
 

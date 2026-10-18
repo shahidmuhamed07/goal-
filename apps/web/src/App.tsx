@@ -102,7 +102,8 @@ import { LoginScreen } from './components/LoginScreen';
 import { AppSelect } from './components/AppSelect';
 import { Orb } from './components/Orb';
 import { CmsBanners } from './cms/CmsBanners';
-import { useLiveBanners } from './cms/useLiveBanners';
+import { useLiveContent } from './cms/useLiveBanners';
+import { CmsPopups, CmsPageDialog } from './cms/CmsPopups';
 import { ProgressBar, GoalPathLogo, GoalPathLoader, GlassIconButton, GlassBadge, StreakBadge } from './components/UIElements';
 import { DailyTaskSection } from './components/DailyTaskSection';
 import { SubcategoryBlock } from './components/SubcategoryBlock';
@@ -120,6 +121,8 @@ import { Onboarding } from './components/Onboarding';
 import { GuidedGoal } from './components/GuidedGoal';
 import { ProgressDialog } from './components/ProgressDialog';
 import { BackButton } from './components/BackButton';
+import { MissedTasks } from './components/MissedTasks';
+import { findMissedTasks, moveTasksToDay, skipTasks } from './missed';
 import { HOME_TAB, backTarget, tabOrder, type TabKey } from './navigation';
 import { ChatPanel } from './components/ChatPanel';
 import { threadHasUnread } from './chat';
@@ -612,8 +615,12 @@ export default function App() {
     if (needsOnboarding) setPersonaPickerOpen(true);
   }, [needsOnboarding]);
 
-  // Banners the admin has published for this kind of person. Empty when the API is unreachable.
-  const liveBanners = useLiveBanners(user ? (profile?.persona === 'professional' ? 'professional' : 'owner') : undefined);
+  // Banners, popups and pages the admin has published for this kind of person. Empty when the API is unreachable.
+  const liveContent = useLiveContent(user ? (profile?.persona === 'professional' ? 'professional' : 'owner') : undefined);
+  const liveBanners = liveContent.banners;
+  // The admin page (by its address) that a banner, popup or button opened.
+  const [openPageSlug, setOpenPageSlug] = useState<string | null>(null);
+  const openCmsPage = liveContent.pages.find((p) => p.slug === openPageSlug) ?? null;
   const workspaceProfile = isOwner
     ? profile
     : activeClientProfile || clientList.find((c) => c.id === workspaceUid) || null;
@@ -1874,6 +1881,48 @@ export default function App() {
     }
   };
 
+  /** Unfinished tasks from the last two weeks that this person may change. */
+  const missedTasks = findMissedTasks(goals, todayDate).filter((m) => canEditTaskRecord(m.goalId, m.task));
+
+  /** Moves one missed task, or every missed task, to today. One write per goal. */
+  const handleMoveMissed = async (goalId?: string, taskId?: string) => {
+    const picked = missedTasks.filter((m) => (!goalId || m.goalId === goalId) && (!taskId || m.task.id === taskId));
+    if (picked.length === 0) return;
+    const idsByGoal = new Map<string, string[]>();
+    picked.forEach((m) => idsByGoal.set(m.goalId, [...(idsByGoal.get(m.goalId) || []), m.task.id]));
+
+    try {
+      for (const [id, taskIds] of idsByGoal) {
+        const target = goals.find((g) => g.id === id);
+        if (!target) continue;
+        const next = moveTasksToDay({
+          subcategories: target.subcategories || [],
+          tasks: target.tasks || [],
+          taskIds,
+          day: todayDate,
+        });
+        if (!fitsInGoalDocument(next.subcategories, next.tasks)) return;
+        await updateDoc(doc(db, 'goals', id), { subcategories: next.subcategories, tasks: next.tasks });
+      }
+      setSuccessMessage(picked.length === 1 ? 'Moved to today.' : `${picked.length} tasks moved to today.`);
+    } catch (err) {
+      console.error('Move missed task error:', err);
+      setErrorMessage('Failed to move the task to today.');
+    }
+  };
+
+  /** Lets a missed task go: it stays in the plan as not done, but is not offered again. */
+  const handleSkipMissed = async (goalId: string, taskId: string) => {
+    const target = goals.find((g) => g.id === goalId);
+    if (!target) return;
+    try {
+      await updateDoc(doc(db, 'goals', goalId), { tasks: skipTasks(target.tasks || [], [taskId]) });
+    } catch (err) {
+      console.error('Skip missed task error:', err);
+      setErrorMessage('Failed to skip the task.');
+    }
+  };
+
   const handleRequestAccess = async (rawCode: string, role: ProfessionalRole) => {
     if (!user) return;
     setConnectNotice(null);
@@ -2522,7 +2571,7 @@ export default function App() {
       </header>
 
       {/* Announcement bar from the admin */}
-      <CmsBanners banners={liveBanners} placement="announcement-bar" />
+      <CmsBanners banners={liveBanners} placement="announcement-bar" onOpenPage={setOpenPageSlug} />
 
       {/* VIEW SWITCHER TABS BAR */}
       <div className="hidden sm:block px-2.5 sm:px-6 py-2 sm:py-3">
@@ -2721,7 +2770,7 @@ export default function App() {
                 )}
 
                 {/* Banner from the admin, above the goal list */}
-                {isOwner && <CmsBanners banners={liveBanners} placement="goals-banner" />}
+                {isOwner && <CmsBanners banners={liveBanners} placement="goals-banner" onOpenPage={setOpenPageSlug} />}
 
                 {/* Clients you work with: one row each, and the whole row is the
                     control, so nobody has to guess that a name is clickable. */}
@@ -2948,7 +2997,10 @@ export default function App() {
                 )}
 
                 {/* Card from the admin, under the progress bar */}
-                <CmsBanners banners={liveBanners} placement="today-card" limit={1} />
+                <CmsBanners banners={liveBanners} placement="today-card" limit={1} onOpenPage={setOpenPageSlug} />
+
+                {/* Unfinished tasks from earlier days, with a way to pick them up or let them go */}
+                <MissedTasks items={missedTasks} onMove={handleMoveMissed} onSkip={handleSkipMissed} />
 
                 {/* Goals Work Breakdown for Today */}
                 {goals.length === 0 ? (
@@ -3607,6 +3659,16 @@ export default function App() {
           onFinish={handleFinishOnboarding}
           onClose={handleCloseOnboarding}
         />
+      )}
+
+      {/* POPUPS FROM THE ADMIN: one at a time, never over the first-run or guided questions */}
+      {!!user && !!profile && !dataLoading && !personaPickerOpen && !guidedOpen && (
+        <CmsPopups popups={liveContent.popups} onOpenPage={setOpenPageSlug} />
+      )}
+
+      {/* A PAGE FROM THE ADMIN, opened from a banner, popup or page button */}
+      {openCmsPage && (
+        <CmsPageDialog page={openCmsPage} onClose={() => setOpenPageSlug(null)} onOpenPage={setOpenPageSlug} />
       )}
     </div>
   );

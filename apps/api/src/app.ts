@@ -11,7 +11,11 @@ import {
   type ContentCollection,
   type LiveContent,
   type Me,
+  type Page,
+  type Popup,
   type PublicBanner,
+  type PublicPage,
+  type PublicPopup,
   type TeamMember,
 } from '@goalpath/shared';
 import type { AdminAuth } from './auth';
@@ -33,6 +37,16 @@ const isCollection = (v: string): v is ContentCollection => (CONTENT_COLLECTIONS
 function toPublic(b: Banner): PublicBanner {
   const { id, placement, title, body, imageUrl, ctaLabel, ctaUrl, tone, priority } = b;
   return { id, placement, title, body, imageUrl, ctaLabel, ctaUrl, tone, priority };
+}
+
+function toPublicPopup(p: Popup): PublicPopup {
+  const { id, title, body, imageUrl, ctaLabel, ctaUrl, tone, frequency } = p;
+  return { id, title, body, imageUrl, ctaLabel, ctaUrl, tone, frequency };
+}
+
+function toPublicPage(p: Page): PublicPage {
+  const { id, slug, title, blocks } = p;
+  return { id, slug, title, blocks };
 }
 
 export function createApp(store: ContentStore, options: AppOptions) {
@@ -60,7 +74,17 @@ export function createApp(store: ContentStore, options: AppOptions) {
         .filter((b) => (role ? matchesAudience(b.audience, { role }) : b.audience === 'everyone'))
         .sort((a, b) => b.priority - a.priority)
         .map(toPublic);
-      const body: LiveContent = { serverTime: at.toISOString(), banners };
+      const visibleTo = (audience: Banner['audience']) => (role ? matchesAudience(audience, { role }) : audience === 'everyone');
+      const popups = ((await store.list('popups')) as unknown as Popup[])
+        .filter((p) => isLive(p, at))
+        .filter((p) => visibleTo(p.audience))
+        .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
+        .map(toPublicPopup);
+      const pages = ((await store.list('pages')) as unknown as Page[])
+        .filter((p) => isLive(p, at))
+        .filter((p) => visibleTo(p.audience))
+        .map(toPublicPage);
+      const body: LiveContent = { serverTime: at.toISOString(), banners, popups, pages };
       res.set('Cache-Control', 'public, max-age=30');
       res.json(body);
     } catch (e) {

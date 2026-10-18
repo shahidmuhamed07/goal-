@@ -41,6 +41,8 @@ export interface TaskItem {
   text: string;
   priority: 'high' | 'medium' | 'low';
   completed: boolean;
+  /** Set aside from "Missed from earlier": it stays in the plan as not done but is no longer offered again. */
+  skipped?: boolean;
   date: string;
   subcategoryId?: string;
   goalId?: string;

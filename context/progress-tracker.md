@@ -53,7 +53,9 @@ Legend: ✅ shipped · 🟡 shipped with caveats · ⬜ not present
 | Planning | Weekly routines (repeat a subcategory on chosen weekdays until the goal ends) | 🟡 | Logic and UI verified; the new Firestore writes were **not** exercised against the real database. Routines don't follow a goal that is extended later |
 | Planning | Category quick picks in the add form | ✅ | 4 shown (recent names, then the category's routines). Starter-task suggestions were removed on purpose |
 | Planning | Today's Focus across all goals | ✅ | |
-| Engagement | Daily streak (current / longest / at-risk) | 🟡 | Counts the *scheduled* date of completed tasks; "today" uses UTC (see Known issues) |
+| Engagement | Daily streak (current / longest / at-risk) | 🟡 | Counts the *scheduled* date of completed tasks (see Known issues #2). "Today" is now the person's own local day |
+| Planning | Missed from earlier (Today screen): move to today or skip | ✅ | Last 14 days, goals the person can edit. Logic tested; **not** clicked through while signed in |
+| Content | Popups and pages from the admin shown in the app | 🟡 | Popup on start (once / daily / every visit), banner and popup buttons to `/pages/x` open the page in a dialog. Logic and API tested; **not** seen in the signed-in app |
 | Collaboration | Connection code, access requests, approve/deny with per-goal view/edit | ✅ | |
 | Collaboration | Professional roster, workspace switcher, client workspace | ✅ | |
 | Collaboration | Per-subcategory role tags | 🟡 | UI-only restriction, not enforced by rules |
@@ -74,7 +76,7 @@ Legend: ✅ shipped · 🟡 shipped with caveats · ⬜ not present
 Found by reading the code on 2026-10-11; none of these have been reproduced unless stated. Delete an item when it is fixed.
 
 **Correctness**
-1. **UTC vs local "today".** `getTodayDateString()` (`utils.ts`) returns the **UTC** date (`toISOString`), while `getCurrentMonthKey()` and `getMonthDays()` use **local** time. Near local midnight (or for users far from UTC, e.g. UTC+5:30 between 00:00 and 05:30), "today", the streak and today's tasks can point at the previous day, and month/day can disagree at month boundaries.
+1. *(Fixed 2026-10-18: `getTodayDateString()` now returns the local date. See the changelog.)*
 2. **Streak semantics.** `computeStreak` counts `task.date` of completed tasks; tasks have no completion timestamp. Checking off yesterday's task today credits yesterday.
 3. **Concurrent edits overwrite.** Tasks/milestones/subcategories are written as whole arrays from local state; a client and a professional editing the same goal at once can lose changes.
 4. **Possible lossy legacy-access migration** in `handleSaveGoalCollaboratorAssignments` (details: [backend-rules.md §7](backend-rules.md)).
@@ -119,6 +121,14 @@ Found by reading the code on 2026-10-11; none of these have been reproduced unle
 ---
 
 ## Changelog
+
+### 2026-10-18 — Missed tasks can be picked up; popups and pages from the admin show in the app; "today" is local  (branch `feature/phone-compact`)
+- **Type:** feature + fix
+- **What & why:** (1) **Missed from earlier.** On the Today screen, unfinished tasks from the last 14 days appear in a card, each with **Today** (moves it to today, into a subcategory of the same name, created if that day has none) and **Skip** (sets it aside: `skipped: true`, it stays in the plan as not done and is not offered again). **Move all to today** does every one, one write per goal. Only goals the person may edit are listed. The logic is pure (`src/missed.ts`) and the card is `components/MissedTasks.tsx`. (2) **Popups and pages in the app.** `GET /api/content/live` now also returns live **popups** (newest first) and **pages** for the viewer's audience, without internal fields. The app shows one popup at a time after sign-in (`once` never again once closed, `daily` the next day, `every-visit` once per visit; memory in `localStorage` key `gp-popup-closed`), never over the first-run or guided questions. A button or banner link `/pages/<address>` opens that page in a dialog (heading, text, image, button, divider blocks); web addresses open a new tab; anything else is ignored. Banners on the login screen leave `/pages/` buttons out (no pages there). (3) **Fixed the UTC "today"** (known issue #1): `getTodayDateString()` is now the local date, so the streak, Today and new tasks no longer point at yesterday for part of the day.
+- **Files:** `src/missed.ts`, `src/missed.test.ts`, `src/components/MissedTasks.tsx`, `src/types.ts` (`TaskItem.skipped`), `src/utils.ts`, `src/App.tsx`, `src/cms/links.ts`, `src/cms/popupRules.ts`, `src/cms/CmsPopups.tsx`, `src/cms/CmsBanners.tsx`, `src/cms/useLiveBanners.ts` (adds `useLiveContent`), `src/cmsRules.test.ts`; `packages/shared/src/cms.ts` (`PublicPopup`, `PublicPage`, `LiveContent`), `apps/api/src/app.ts`, `apps/api/src/app.test.ts`.
+- **Data/rules impact:** tasks may carry `skipped: true` (Firestore rules only pin the keys `tasks`, `subcategories`, `milestones`, so no rules change). The API reply gained `popups` and `pages`; an older API without them still works (the app shows none).
+- **Verified:** lint ✓ (all four workspaces) · web tests 74/74 ✓ (8 new for popup/link rules, 8 for missed tasks) · API tests 37/37 ✓ (3 new: popups live/ordered/hidden, audience filtering for popups and pages, no internal fields). The dev server renders the login screen. **Not verified:** anything signed in (the Missed card, a popup and a page dialog in the real app, writes to Firestore from the new handlers) because it needs a real Google sign-in; the popup `localStorage` memory in a browser.
+- **Docs updated:** `progress-tracker.md`, `ui-context.md`, `architecture.md`, `backend-rules.md`.
 
 ### 2026-10-18 — Fix: the New Goal window did not scroll (the page behind did); Help me plan starts by asking the area  (branch `feature/phone-compact`)
 - **Type:** fix

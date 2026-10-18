@@ -73,7 +73,7 @@ Default for anything not listed: **deny all** (`match /{document=**} { allow rea
 | `targetDate` | `YYYY-MM` string | Owner-only. |
 | `milestones` | `Milestone[]` `{ id, monthKey, title, completed }` | Editable by editors. |
 | `subcategories` | `Subcategory[]` `{ id, name, order, date?, editorRole?, repeatId?, repeatDays? }` | Editable by editors. `repeatId` links the days of a weekly routine and `repeatDays` (0 = Sunday … 6 = Saturday) lists its weekdays; both are absent on one-off subcategories. See "Weekly routines" below. |
-| `tasks` | `TaskItem[]` `{ id, text, priority, completed, date, subcategoryId? }` | Editable by editors. |
+| `tasks` | `TaskItem[]` `{ id, text, priority, completed, skipped?, date, subcategoryId? }` | Editable by editors. `skipped` is set by "Skip" in *Missed from earlier*: the task stays, not done, and is no longer offered again. |
 | `viewerUids` | string[] | Professionals who may **read** this goal (includes editors). Written only by the owner. |
 | `editorUids` | string[] | Professionals who may **edit** content. Subset of `viewerUids`. Written only by the owner. |
 | `id` | string | A `goal-<timestamp>` value is also stored inside the doc at creation; the app ignores it and uses the Firestore document id. |

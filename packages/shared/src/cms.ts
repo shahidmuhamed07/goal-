@@ -175,9 +175,19 @@ export type PublicBanner = Pick<
   'id' | 'placement' | 'title' | 'body' | 'imageUrl' | 'ctaLabel' | 'ctaUrl' | 'tone' | 'priority'
 >;
 
+/** A popup as the app receives it. `frequency` lets the app decide whether to show it again. */
+export type PublicPopup = Pick<Popup, 'id' | 'title' | 'body' | 'imageUrl' | 'ctaLabel' | 'ctaUrl' | 'tone' | 'frequency'>;
+
+/** A page as the app receives it: its address, title and blocks. */
+export type PublicPage = Pick<Page, 'id' | 'slug' | 'title' | 'blocks'>;
+
 /** The reply of the public "what is live right now" route. */
 export interface LiveContent {
   /** The server's clock, so the app can tell how fresh this is. ISO. */
   serverTime: string;
   banners: PublicBanner[];
+  /** Newest first. An older API may leave this out. */
+  popups?: PublicPopup[];
+  /** An older API may leave this out. */
+  pages?: PublicPage[];
 }
