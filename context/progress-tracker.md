@@ -120,6 +120,14 @@ Found by reading the code on 2026-10-11; none of these have been reproduced unle
 
 ## Changelog
 
+### 2026-10-18 — Fix: the phone tab bar (and header) painted over dialogs  (branch `feature/phone-compact`)
+- **Type:** fix
+- **What & why:** On the Connect screen the goal-access dialog's buttons sat under the floating tab bar. Cause: the page content (`<main>`) has its own stacking layer (`z-10`), so a dialog written inside a screen could never rise above the tab bar (`z-50`) or the sticky header, whatever its own z-index. `Dialog` now draws itself on `<body>` through a React portal (carrying over the owner/professional tone from the app root), so every dialog covers everything.
+- **Files:** `apps/web/src/components/Dialog.tsx`.
+- **Data/rules impact:** none.
+- **Verified:** lint ✓ · build ✓ · tests ✓ · throwaway 400×600 sandbox (deleted) with a `z-10` main, a `z-50` fixed bar and a dialog inside: the dialog covers the bar and fits the screen. **Not verified:** the signed-in app, and the professional (warm-tone) colours inside a portalled dialog.
+- **Docs updated:** `context/ui-context.md` (layer order).
+
 ### 2026-10-18 — Connect screen on phone: labelled actions, confirm dialogs, dialogs that fit  (branch `feature/phone-compact`)
 - **Type:** ui
 - **What & why:** The Connect screen's lists were rows of unlabelled round icons (message, "verified", target, bin), so nobody could tell what Share/View/Remove did, and removing someone swapped a tiny Remove/Cancel pair in beside the icons. Now each person is a **flat row** (initial badge, name, role, email, a "Can see" line of goal chips) with **labelled buttons**: Message, Profile, Goal access (with a count), Remove (red). Clients I support gets Message, Open/Viewing, Remove. **Removing a professional, removing a client and leaving professional mode all open a proper confirm dialog** (new shared `ConfirmDialog`, built on `Dialog`) that says what will happen. Dialogs now fit a phone: small margins, the buttons share a row, the goal-access list no longer scrolls inside the scrolling dialog, and the No access / View / Edit picker fills the row. Fewer card-in-card effects: Connect cards use smaller padding on phones and the people lists lost their inner boxes.
