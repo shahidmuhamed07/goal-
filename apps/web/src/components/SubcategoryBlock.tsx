@@ -400,7 +400,7 @@ export const SubcategoryBlock: React.FC<SubcategoryBlockProps> = ({
             <span className="section-label">On</span>
             <WeekdayPicker value={repeatDraft} onChange={setRepeatDraft} />
           </div>
-          <p className="text-[11px] font-medium text-slate-600">{previewText()}</p>
+          <p className="text-xs font-medium text-slate-600">{previewText()}</p>
           <div className="flex justify-end gap-2">
             <button type="button" className="chip px-3 py-1.5 text-xs" onClick={() => setRepeatOpen(false)}>
               Cancel
@@ -543,7 +543,7 @@ export const SubcategoryBlock: React.FC<SubcategoryBlockProps> = ({
                 </button>
               </div>
               {repeating && later.days > 0 && (
-                <label className="flex items-center gap-2 px-1 text-[11px] font-medium text-slate-600 cursor-pointer">
+                <label className="flex items-center gap-2 px-1 text-xs font-medium text-slate-600 cursor-pointer">
                   <input
                     type="checkbox"
                     checked={forward}

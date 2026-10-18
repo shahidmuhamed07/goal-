@@ -1072,7 +1072,7 @@ body:has(.scrim) {
   transition: transform 0.2s var(--ease-glide), box-shadow 0.2s;
 }
 @media (max-width: 639px) {
-  .back-btn { min-height: 2.5rem; padding-right: 0.75rem; }
+  .back-btn { min-height: 2.25rem; padding-right: 0.75rem; }
 }
 .back-btn:hover { box-shadow: inset 0 0 0 1px var(--color-emerald-300), 0 8px 20px -10px rgb(70 60 160 / 0.5); }
 .back-btn:active { transform: scale(0.97); }

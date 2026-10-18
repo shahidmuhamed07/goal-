@@ -111,7 +111,7 @@ const StepHeading: React.FC<{ step: number; title: string; children?: React.Reac
 }) => (
   <div className="flex items-center justify-between gap-3 flex-wrap">
     <div className="flex items-center gap-2.5 min-w-0">
-      <span className="w-6 h-6 rounded-full grid place-items-center shrink-0 text-[11px] font-extrabold text-white bg-[color:var(--tone-700)]">
+      <span className="w-5 h-5 sm:w-6 sm:h-6 rounded-full grid place-items-center shrink-0 text-xs font-extrabold text-white bg-[color:var(--tone-700)]">
         {step}
       </span>
       <h3 className="text-sm font-bold text-slate-800 truncate">{title}</h3>
@@ -409,7 +409,8 @@ export const DailyTaskSection: React.FC<DailyTaskSectionProps> = ({
               Today
             </button>
           )}
-          <span className="badge tabular-nums">
+          {/* "0/0 done" says nothing, so a phone leaves it out until the day has tasks */}
+          <span className={`badge tabular-nums ${selectedDateTasks.length === 0 ? 'max-sm:hidden!' : ''}`}>
             {completedCount}/{selectedDateTasks.length} done
           </span>
         </div>
@@ -456,7 +457,7 @@ export const DailyTaskSection: React.FC<DailyTaskSectionProps> = ({
                 }
                 onClick={() => selectDate(date)}
               >
-                <span className="text-[9px] sm:text-[10px] uppercase tracking-wide opacity-80">
+                <span className="text-xs uppercase tracking-wide opacity-80">
                   {WEEKDAY_SHORT[weekdayOf(date)]}
                 </span>
                 <span className="text-sm sm:text-base font-extrabold tabular-nums leading-tight">
@@ -478,7 +479,7 @@ export const DailyTaskSection: React.FC<DailyTaskSectionProps> = ({
               <button
                 type="button"
                 data-plain
-                className="text-[11px] font-semibold text-slate-500 hover:text-slate-800 cursor-pointer"
+                className="text-xs font-semibold text-slate-500 hover:text-slate-800 cursor-pointer"
                 onClick={handleToggleAll}
               >
                 {allExpanded ? 'Collapse all' : 'Expand all'}
@@ -517,7 +518,7 @@ export const DailyTaskSection: React.FC<DailyTaskSectionProps> = ({
               />
               {quickPicks.length > 0 && (
                 <div className="flex items-center gap-2 -mx-3 px-3 sm:mx-0 sm:px-0 overflow-x-auto no-scrollbar sm:flex-wrap sm:overflow-visible">
-                  <span className="shrink-0 text-[11px] font-semibold text-slate-500">Quick pick</span>
+                  <span className="shrink-0 text-xs font-semibold text-slate-500">Quick pick</span>
                   {quickPicks.map((pick) => (
                     <button
                       key={pick}
@@ -596,7 +597,7 @@ export const DailyTaskSection: React.FC<DailyTaskSectionProps> = ({
                   <div className="flex flex-wrap items-center gap-2">
                     <button
                       type="button"
-                      className="chip px-2.5 py-1 text-[11px]"
+                      className="chip px-2.5 py-1 text-xs"
                       data-active={repeatDays.length === 7}
                       onClick={() => setRepeatDays([0, 1, 2, 3, 4, 5, 6])}
                     >
@@ -604,14 +605,14 @@ export const DailyTaskSection: React.FC<DailyTaskSectionProps> = ({
                     </button>
                     <button
                       type="button"
-                      className="chip px-2.5 py-1 text-[11px]"
+                      className="chip px-2.5 py-1 text-xs"
                       data-active={repeatDays.length === 5 && [1, 2, 3, 4, 5].every((d) => repeatDays.includes(d))}
                       onClick={() => setRepeatDays([1, 2, 3, 4, 5])}
                     >
                       Weekdays
                     </button>
                   </div>
-                  <p className="text-[11px] font-medium text-slate-600">
+                  <p className="text-xs font-medium text-slate-600">
                     {repeatDays.length === 0
                       ? 'Pick at least one day.'
                       : repeatDates.length === 0
@@ -634,7 +635,7 @@ export const DailyTaskSection: React.FC<DailyTaskSectionProps> = ({
                     onToggle={togglePicked}
                     startOn={selectedDate}
                   />
-                  <p className="text-[11px] font-medium text-slate-600">
+                  <p className="text-xs font-medium text-slate-600">
                     {pickedDates.length === 0
                       ? 'Tap the days you want. Tap a day again to remove it.'
                       : `${describePattern({ kind: 'dates', dates: pickedDates })}: ${pickedDates
@@ -673,9 +674,9 @@ export const DailyTaskSection: React.FC<DailyTaskSectionProps> = ({
         )}
 
         {isEmptyDay && !addOpen && (
-          <div className="neu-inset text-center px-4 py-6 sm:py-9">
+          <div className="neu-inset text-center px-4 py-4 sm:py-9">
             <p className="text-sm font-bold text-slate-700">Nothing planned for {longDate(selectedDate)}</p>
-            <p className="text-xs text-slate-500 mt-1 max-w-xs mx-auto">
+            <p className="text-xs text-slate-500 mt-1 max-w-xs mx-auto max-sm:hidden">
               {canAdd
                 ? 'Add a subcategory such as “Chest day”, then fill it with tasks. Repeat it weekly if it comes back.'
                 : 'Nothing has been planned for this day yet.'}
@@ -683,7 +684,7 @@ export const DailyTaskSection: React.FC<DailyTaskSectionProps> = ({
             {canAdd && (
               <button
                 type="button"
-                className="btn-tone inline-flex items-center gap-1.5 mt-4 px-4 py-2.5 text-xs"
+                className="btn-tone inline-flex items-center gap-1.5 mt-3 sm:mt-4 px-4 py-2.5 text-xs"
                 onClick={openAdd}
               >
                 <Plus className="w-3.5 h-3.5 stroke-[2.5]" />

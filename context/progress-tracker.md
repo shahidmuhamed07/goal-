@@ -122,6 +122,14 @@ Found by reading the code on 2026-10-11; none of these have been reproduced unle
 
 ## Changelog
 
+### 2026-10-18 — Goal page on phone: less to read, readable small text  (branch `feature/phone-compact`)
+- **Type:** ui
+- **What & why:** The goal page still felt big and full of small print. On phones only: the goal description, the "Assigned:" label and "None assigned" are hidden (the **Manage** button stays), "0/0 done" is hidden until the day has tasks, the empty-day card loses its explanation line and is shorter, the "All goals" back button is 36px, and the step numbers are a little smaller. The smallest text got bigger: weekday labels on the week strip went from 9px to 11px, and every 11px label in the goal page parts (`DailyTaskSection`, `SubcategoryBlock`, `MonthlyMilestoneSection`, the Assigned row) went to 12px (`text-xs`) on every screen size.
+- **Files:** `apps/web/src/App.tsx`, `apps/web/src/components/DailyTaskSection.tsx`, `SubcategoryBlock.tsx`, `MonthlyMilestoneSection.tsx`, `apps/web/src/index.css`.
+- **Data/rules impact:** none.
+- **Verified:** lint ✓ · tests 74/74 ✓ · throwaway 400px sandbox (header markup copied, real `DailyTaskSection`, fake data; deleted): header 149px (was 175) and Daily plan 314px (was 370), 462px together. **Not verified:** the signed-in page, a goal with tasks and subcategories, the milestone roadmap and subcategory blocks at 12px, other phone widths.
+- **Docs updated:** none needed (the back button is now 36px on phones; `ui-context.md` still says 44px).
+
 ### 2026-10-18 — Goal page on phone: smaller header and Daily plan  (branch `feature/phone-compact`)
 - **Type:** ui
 - **What & why:** The goal page was too big on a phone. Below 640px only: the header card has less padding and smaller gaps, the title is `text-lg`, the description shows one line, "Manage Access" reads "Manage", and the back button is 40px instead of 44px. The Daily plan card has less padding and tighter spacing, the month chip reads "Oct 2026" (no "(current)"), so the title, month and "0/0 done" fit on one line instead of two, and the day keys are a little shorter. Desktop is unchanged.

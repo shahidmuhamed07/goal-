@@ -3312,7 +3312,7 @@ export default function App() {
                             {currentGoal.title}
                           </h1>
                           {currentGoal.description && (
-                            <p className="text-slate-600 text-xs sm:text-sm mt-0.5 max-w-3xl leading-relaxed line-clamp-1 sm:line-clamp-none">
+                            <p className="text-slate-600 text-xs sm:text-sm mt-0.5 max-w-3xl leading-relaxed max-sm:hidden">
                               {currentGoal.description}
                             </p>
                           )}
@@ -3338,14 +3338,14 @@ export default function App() {
                       )}
 
                       {isOwner && profile?.collaborators && profile.collaborators.length > 0 && (
-                        <div className="mt-2 flex items-center gap-1.5 flex-wrap text-[11px]">
-                          <span className="text-slate-400 font-medium">Assigned:</span>
+                        <div className="mt-2 flex items-center gap-1.5 flex-wrap text-xs">
+                          <span className="text-slate-400 font-medium max-sm:hidden">Assigned:</span>
                           {(() => {
                             const assigned = profile.collaborators.filter((c) =>
                               isGoalSharedWith(c, currentGoal.id)
                             );
                             if (assigned.length === 0) {
-                              return <span className="text-slate-400 italic">None assigned</span>;
+                              return <span className="text-slate-400 italic max-sm:hidden">None assigned</span>;
                             }
                             return assigned.map((c) => (
                               <span key={c.uid} className="badge">
@@ -3357,7 +3357,7 @@ export default function App() {
                           <button
                             type="button"
                             onClick={() => setManagingAssignedGoal(currentGoal)}
-                            className="chip flex items-center gap-1 px-2.5 py-1 text-[11px]"
+                            className="chip flex items-center gap-1 px-2.5 py-1 text-xs"
                           >
                             <Settings className="w-3 h-3" />
                             <span className="sm:hidden">Manage</span>

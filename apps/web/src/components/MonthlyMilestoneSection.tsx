@@ -166,7 +166,7 @@ export const MonthlyMilestoneSection: React.FC<MonthlyMilestoneSectionProps> = (
               <span className="font-extrabold text-[color:var(--tone-900)]">{monthProgressPct}%</span>
             </div>
             <ProgressBar value={monthProgressPct} height="h-2" color="bg-[color:var(--tone-700)]" />
-            <div className="text-[11px] text-slate-500">
+            <div className="text-xs text-slate-500">
               {monthTasksTotal > 0
                 ? `${monthTasksCompleted} of ${monthTasksTotal} tasks done`
                 : 'No tasks scheduled yet'}
@@ -217,7 +217,7 @@ export const MonthlyMilestoneSection: React.FC<MonthlyMilestoneSectionProps> = (
             ))}
           </div>
 
-          <div className="flex items-center justify-between text-[11px] font-medium text-slate-500 pt-1">
+          <div className="flex items-center justify-between text-xs font-medium text-slate-500 pt-1">
             <span>Whole goal</span>
             <span className="font-bold text-[color:var(--tone-900)]">{overallPct}% complete</span>
           </div>
