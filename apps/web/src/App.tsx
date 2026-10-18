@@ -108,7 +108,7 @@ import { GuidedGoal } from './components/GuidedGoal';
 import { ProgressDialog } from './components/ProgressDialog';
 import { BackButton } from './components/BackButton';
 import { MissedTasks } from './components/MissedTasks';
-import { findMissedTasks, moveTasksToDay, skipTasks } from './missed';
+import { findMissedTasks, findPushableRoutines, moveTasksToDay, pushRoutineForward, skipTasks, type PushableRoutine } from './missed';
 import { HOME_TAB, backTarget, tabOrder, type TabKey } from './navigation';
 import { ChatPanel } from './components/ChatPanel';
 import { threadHasUnread } from './chat';
@@ -1700,6 +1700,70 @@ export default function App() {
     }
   };
 
+  /** Weekly routines with missed days, in goals this person may change, that can be pushed later. */
+  const pushableRoutines = findPushableRoutines(
+    goals.filter((g) => canEditGoal(g.id)),
+    todayDate
+  ).filter((r) => {
+    const goal = goals.find((g) => g.id === r.goalId);
+    const sub = goal?.subcategories.find((s) => s.repeatId === r.repeatId);
+    return !!sub && canEditSubcategoryTasks(r.goalId, sub);
+  });
+
+  /** A dry run for the push dialog: what pushing would do, nothing saved. */
+  const previewPush = (routine: PushableRoutine, days: number[], everyWeeks: number) => {
+    const target = goals.find((g) => g.id === routine.goalId);
+    return pushRoutineForward({
+      subcategories: target?.subcategories || [],
+      tasks: target?.tasks || [],
+      repeatId: routine.repeatId,
+      today: todayDate,
+      endDate: target ? goalEndDate(target) : todayDate,
+      days,
+      everyWeeks,
+    });
+  };
+
+  /** Pushes a routine forward: its missed days and the rest of the plan slide onto its own days. */
+  const handlePushRoutine = async (routine: PushableRoutine, days: number[], everyWeeks: number) => {
+    const target = goals.find((g) => g.id === routine.goalId);
+    if (!target) return;
+    const result = previewPush(routine, days, everyWeeks);
+    if (result.moved === 0) {
+      setErrorMessage('There is no room left before the goal ends to push this routine.');
+      return;
+    }
+    if (!fitsInGoalDocument(result.subcategories, result.tasks)) return;
+    try {
+      await saveGoal(routine.goalId, { subcategories: result.subcategories, tasks: result.tasks });
+      setSuccessMessage(
+        `Pushed “${routine.name}”. It now runs until ${formatDisplayDate(result.lastDay || todayDate)}.${
+          result.dropped > 0 ? ` ${result.dropped} ${result.dropped === 1 ? 'day' : 'days'} did not fit before the goal ends.` : ''
+        }`
+      );
+    } catch (err) {
+      console.error('Push routine error:', err);
+      setErrorMessage('Failed to push the plan.');
+    }
+  };
+
+  /** Lets a routine's missed days go and carries on with the rest as planned. */
+  const handleSkipRoutineDays = async (routine: PushableRoutine) => {
+    const target = goals.find((g) => g.id === routine.goalId);
+    if (!target) return;
+    const ids = missedTasks
+      .filter((m) => m.goalId === routine.goalId && target.subcategories.find((s) => s.id === m.task.subcategoryId)?.repeatId === routine.repeatId)
+      .map((m) => m.task.id);
+    if (ids.length === 0) return;
+    try {
+      await saveGoal(routine.goalId, { tasks: skipTasks(target.tasks || [], ids) });
+      setSuccessMessage(`Skipped the missed days of “${routine.name}”. The rest carries on as planned.`);
+    } catch (err) {
+      console.error('Skip routine days error:', err);
+      setErrorMessage('Failed to skip those days.');
+    }
+  };
+
   const handleRequestAccess = async (rawCode: string, role: ProfessionalRole) => {
     if (!user) return;
     setConnectNotice(null);
@@ -2555,7 +2619,15 @@ export default function App() {
                 <CmsBanners banners={liveBanners} placement="today-card" limit={1} onOpenPage={setOpenPageSlug} />
 
                 {/* Unfinished tasks from earlier days, with a way to pick them up or let them go */}
-                <MissedTasks items={missedTasks} onMove={handleMoveMissed} onSkip={handleSkipMissed} />
+                <MissedTasks
+                  items={missedTasks}
+                  onMove={handleMoveMissed}
+                  onSkip={handleSkipMissed}
+                  routines={pushableRoutines}
+                  previewPush={previewPush}
+                  onPushRoutine={handlePushRoutine}
+                  onSkipRoutine={handleSkipRoutineDays}
+                />
 
                 {/* Goals Work Breakdown for Today */}
                 {goals.length === 0 ? (

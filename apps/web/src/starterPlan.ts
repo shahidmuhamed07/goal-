@@ -96,6 +96,8 @@ export interface StarterRoutine {
   name: string;
   weekdays: number[];
   tasks: string[];
+  /** Weeks between repeats: 1 (or missing) is every week, 2 is every other week. */
+  everyWeeks?: number;
 }
 
 export interface StarterPlan {
@@ -508,6 +510,10 @@ export const materializePlan = (
       tasks,
       name: routine.name,
       days: routine.weekdays,
+      pattern:
+        routine.everyWeeks && routine.everyWeeks > 1
+          ? { kind: 'weekly', days: routine.weekdays, everyWeeks: routine.everyWeeks }
+          : undefined,
       fromDate,
       endDate,
       editorRole: null,

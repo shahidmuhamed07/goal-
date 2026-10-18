@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import type { MissedTask } from '../missed';
+import type { MissedTask, PushResult, PushableRoutine } from '../missed';
+import { PushPlanDialog } from './PushPlanDialog';
 
 interface MissedTasksProps {
   items: MissedTask[];
@@ -7,6 +8,12 @@ interface MissedTasksProps {
   onMove: (goalId?: string, taskId?: string) => void;
   /** Sets one task aside so it is not offered again. */
   onSkip: (goalId: string, taskId: string) => void;
+  /** Weekly routines with missed days, which can be pushed later. Left out, there is no push option. */
+  routines?: PushableRoutine[];
+  /** A dry run of pushing a routine, for the dialog to describe it. */
+  previewPush?: (routine: PushableRoutine, days: number[], everyWeeks: number) => PushResult;
+  onPushRoutine?: (routine: PushableRoutine, days: number[], everyWeeks: number) => Promise<void> | void;
+  onSkipRoutine?: (routine: PushableRoutine) => Promise<void> | void;
 }
 
 const SHOWN_AT_FIRST = 3;
@@ -19,8 +26,9 @@ const dayLabel = (date: string): string =>
  * weeks, each with two quiet choices: move it to today, or let it go. Renders
  * nothing when nothing was missed.
  */
-export const MissedTasks: React.FC<MissedTasksProps> = ({ items, onMove, onSkip }) => {
+export const MissedTasks: React.FC<MissedTasksProps> = ({ items, onMove, onSkip, routines = [], previewPush, onPushRoutine, onSkipRoutine }) => {
   const [showAll, setShowAll] = useState(false);
+  const [pushOpen, setPushOpen] = useState(false);
   if (items.length === 0) return null;
 
   const visible = showAll ? items : items.slice(0, SHOWN_AT_FIRST);
@@ -35,11 +43,18 @@ export const MissedTasks: React.FC<MissedTasksProps> = ({ items, onMove, onSkip 
             {items.length} {items.length === 1 ? 'task' : 'tasks'} you can still pick up.
           </p>
         </div>
-        {items.length > 1 && (
-          <button type="button" className="chip px-3 py-1.5 text-xs shrink-0" onClick={() => onMove()}>
-            Move all to today
-          </button>
-        )}
+        <div className="flex shrink-0 flex-col items-end gap-2 sm:flex-row">
+          {routines.length > 0 && previewPush && onPushRoutine && onSkipRoutine && (
+            <button type="button" className="chip px-3 py-1.5 text-xs" data-active="true" onClick={() => setPushOpen(true)}>
+              Push my plan
+            </button>
+          )}
+          {items.length > 1 && (
+            <button type="button" className="chip px-3 py-1.5 text-xs" onClick={() => onMove()}>
+              Move all to today
+            </button>
+          )}
+        </div>
       </div>
 
       <ul className="space-y-2">
@@ -77,6 +92,22 @@ export const MissedTasks: React.FC<MissedTasksProps> = ({ items, onMove, onSkip 
         <button type="button" className="chip px-3 py-1.5 text-xs" onClick={() => setShowAll(true)}>
           Show {hidden} more
         </button>
+      )}
+
+      {pushOpen && previewPush && onPushRoutine && onSkipRoutine && (
+        <PushPlanDialog
+          routines={routines}
+          preview={previewPush}
+          onPush={async (routine, days, everyWeeks) => {
+            await onPushRoutine(routine, days, everyWeeks);
+            setPushOpen(false);
+          }}
+          onSkip={async (routine) => {
+            await onSkipRoutine(routine);
+            setPushOpen(false);
+          }}
+          onClose={() => setPushOpen(false)}
+        />
       )}
     </section>
   );

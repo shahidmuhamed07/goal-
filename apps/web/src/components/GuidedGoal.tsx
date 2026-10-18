@@ -4,13 +4,16 @@ import {
   Briefcase,
   Building2,
   ChevronLeft,
+  Clock,
   Coins,
   Dumbbell,
   GraduationCap,
+  Plus,
   Sparkles,
   X,
 } from 'lucide-react';
 import { AskBubble, OptionRow } from './Onboarding';
+import { RoutineEditor, isRoutineReady, type DraftRoutine } from './RoutineEditor';
 import {
   MINUTE_CHOICES,
   MONTH_CHOICES,
@@ -25,7 +28,7 @@ import {
   type NicheKey,
   type PlanMaker,
 } from '../guidedGoal';
-import type { StarterPlan } from '../starterPlan';
+import type { StarterPlan, StarterRoutine } from '../starterPlan';
 import { WEEKDAY_LETTER, WEEKDAY_LONG, WEEK_ORDER, describeDays } from '../recurrence';
 
 const NICHE_ICONS: Record<NicheKey, React.ElementType> = {
@@ -62,12 +65,15 @@ export const GuidedGoal: React.FC<GuidedGoalProps> = ({ onClose, onCreate, makeP
 
   const [answers, setAnswers] = useState<Answers>({});
   const [days, setDays] = useState<number[]>([1, 3, 5]);
-  const [minutes, setMinutes] = useState(30);
+  // The time for each session is optional: nothing is asked or assumed until the person adds it.
+  const [minutes, setMinutes] = useState<number | null>(null);
   const [months, setMonths] = useState(3);
 
   const [plan, setPlan] = useState<StarterPlan | null>(null);
   const [titleDraft, setTitleDraft] = useState('');
-  const [skipped, setSkipped] = useState<string[]>([]);
+  // The routines of the plan as the person is shaping them, and which one is open for editing.
+  const [draft, setDraft] = useState<DraftRoutine[]>([]);
+  const [openRoutine, setOpenRoutine] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -112,7 +118,8 @@ export const GuidedGoal: React.FC<GuidedGoalProps> = ({ onClose, onCreate, makeP
         if (cancelled) return;
         setPlan(made);
         setTitleDraft(made.title);
-        setSkipped([]);
+        setDraft(made.routines.map((r, i) => ({ uid: `r${i}`, name: r.name, weekdays: r.weekdays, tasks: r.tasks, everyWeeks: r.everyWeeks ?? 1, included: true })));
+        setOpenRoutine(null);
       })
       .catch(() => {
         if (!cancelled) setError('We could not put a plan together. Please go back and try again.');
@@ -122,13 +129,38 @@ export const GuidedGoal: React.FC<GuidedGoalProps> = ({ onClose, onCreate, makeP
     };
   }, [step, nicheKey, answers, days, minutes, months, makePlan]);
 
-  const chosenRoutines = plan ? plan.routines.filter((r) => !skipped.includes(r.name)) : [];
+  const chosenRoutines = draft.filter((r) => r.included);
+  const updateRoutine = (uid: string, changes: Partial<DraftRoutine>) =>
+    setDraft((prev) => prev.map((r) => (r.uid === uid ? { ...r, ...changes } : r)));
+  const moveRoutine = (uid: string, direction: -1 | 1) =>
+    setDraft((prev) => {
+      const from = prev.findIndex((r) => r.uid === uid);
+      const to = from + direction;
+      if (from < 0 || to < 0 || to >= prev.length) return prev;
+      const next = [...prev];
+      [next[from], next[to]] = [next[to], next[from]];
+      return next;
+    });
+  const addRoutine = () => {
+    const uid = `new-${Date.now()}`;
+    setDraft((prev) => [...prev, { uid, name: '', weekdays: days.length > 0 ? days : [1, 3, 5], tasks: [''], everyWeeks: 1, included: true }]);
+    setOpenRoutine(uid);
+  };
+
+  /** What gets saved: only the routines left included, cleaned up, in the order shown. */
+  const finalRoutines = (): StarterRoutine[] =>
+    chosenRoutines.map((r) => ({
+      name: cleanText(r.name, 60),
+      weekdays: r.weekdays,
+      tasks: r.tasks.map((t) => cleanText(t, 160)).filter(Boolean),
+      ...(r.everyWeeks > 1 ? { everyWeeks: r.everyWeeks } : {}),
+    }));
 
   const canNext = (): boolean => {
     if (step === 'niche') return !!nicheKey;
     if (question) return isAnswered(question, answers);
     if (step === 'week') return days.length > 0;
-    if (step === 'preview') return !!plan && chosenRoutines.length > 0 && cleanText(titleDraft, 100).length > 0 && !creating;
+    if (step === 'preview') return !!plan && chosenRoutines.length > 0 && chosenRoutines.every(isRoutineReady) && cleanText(titleDraft, 100).length > 0 && !creating;
     return true;
   };
 
@@ -137,7 +169,7 @@ export const GuidedGoal: React.FC<GuidedGoalProps> = ({ onClose, onCreate, makeP
     setCreating(true);
     setError(null);
     try {
-      const id = await onCreate({ ...plan, title: cleanText(titleDraft, 100), routines: chosenRoutines });
+      const id = await onCreate({ ...plan, title: cleanText(titleDraft, 100), routines: finalRoutines() });
       if (id) onClose(id);
       else setError('We could not save your goal. Check your connection and try again.');
     } catch {
@@ -202,7 +234,7 @@ export const GuidedGoal: React.FC<GuidedGoalProps> = ({ onClose, onCreate, makeP
     if (step === 'week') {
       return (
         <>
-          <AskBubble title="Plan your week" sub="Three quick choices. You can change all of it later." />
+          <AskBubble title="Plan your week" sub="Pick your days and how long it runs. You can change all of it later." />
 
           <p className="section-label mt-6 mb-2">Which days?</p>
           <div className="grid grid-cols-7 gap-2" role="group" aria-label="Days of the week">
@@ -222,14 +254,29 @@ export const GuidedGoal: React.FC<GuidedGoalProps> = ({ onClose, onCreate, makeP
           </div>
           <p className="mt-2 text-xs font-medium text-slate-500">{days.length === 0 ? 'Pick at least one day' : `Every ${describeDays(days)}`}</p>
 
-          <p className="section-label mt-6 mb-2">How long each time?</p>
-          <div className="grid grid-cols-4 gap-2" role="group" aria-label="Minutes each day">
-            {MINUTE_CHOICES.map((m) => (
-              <button key={m} type="button" className="chip py-3 text-sm" data-active={minutes === m} aria-pressed={minutes === m} onClick={() => setMinutes(m)}>
-                {m === 60 ? '1 hour' : `${m} min`}
-              </button>
-            ))}
-          </div>
+          {minutes === null ? (
+            <button type="button" className="chip mt-6 inline-flex items-center gap-2 px-4 py-2.5 text-sm" onClick={() => setMinutes(30)}>
+              <Clock className="h-4 w-4" />
+              Add a time for each session
+              <span className="font-medium text-slate-500">(optional)</span>
+            </button>
+          ) : (
+            <>
+              <div className="mt-6 mb-2 flex items-center justify-between gap-3">
+                <p className="section-label">How long each time?</p>
+                <button type="button" className="text-xs font-semibold text-[color:var(--tone-700)] cursor-pointer" data-plain onClick={() => setMinutes(null)}>
+                  Remove time
+                </button>
+              </div>
+              <div className="grid grid-cols-4 gap-2" role="group" aria-label="Minutes each day">
+                {MINUTE_CHOICES.map((m) => (
+                  <button key={m} type="button" className="chip py-3 text-sm" data-active={minutes === m} aria-pressed={minutes === m} onClick={() => setMinutes(m)}>
+                    {m === 60 ? '1 hour' : `${m} min`}
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
 
           <p className="section-label mt-6 mb-2">For how long?</p>
           <div className="grid grid-cols-4 gap-2" role="group" aria-label="Months">
@@ -246,7 +293,7 @@ export const GuidedGoal: React.FC<GuidedGoalProps> = ({ onClose, onCreate, makeP
     // preview
     return (
       <>
-        <AskBubble title="Here is a starting point" sub="Rename it, switch routines off, then create it. You can edit everything later." />
+        <AskBubble title="Here is a starting point" sub="Change anything you like: days, how often, tasks, order. Then create it." />
         {!plan && !error && <p className="mt-8 text-center text-sm text-slate-500">Putting your plan together…</p>}
         {plan && (
           <div className="mt-6 space-y-4">
@@ -266,36 +313,31 @@ export const GuidedGoal: React.FC<GuidedGoalProps> = ({ onClose, onCreate, makeP
             </div>
 
             <ul className="space-y-3" aria-label="Routines in this plan">
-              {plan.routines.map((r) => {
-                const on = !skipped.includes(r.name);
-                return (
-                  <li key={r.name} className={`neu p-4 transition-opacity ${on ? '' : 'opacity-50'}`}>
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0">
-                        <p className="font-bold text-slate-900">{r.name}</p>
-                        <p className="text-xs font-semibold text-[color:var(--tone-700)]">{describeDays(r.weekdays)}</p>
-                      </div>
-                      <button
-                        type="button"
-                        className="chip px-3 py-1 text-xs"
-                        data-active={on}
-                        aria-pressed={on}
-                        aria-label={`${on ? 'Remove' : 'Add'} ${r.name}`}
-                        onClick={() => setSkipped((prev) => (on ? [...prev, r.name] : prev.filter((n) => n !== r.name)))}
-                      >
-                        {on ? 'Included' : 'Left out'}
-                      </button>
-                    </div>
-                    <ul className="mt-2 space-y-1 text-sm text-slate-600 list-disc pl-5">
-                      {r.tasks.map((t) => (
-                        <li key={t}>{t}</li>
-                      ))}
-                    </ul>
-                  </li>
-                );
-              })}
+              {draft.map((routine, index) => (
+                <RoutineEditor
+                  key={routine.uid}
+                  routine={routine}
+                  index={index}
+                  count={draft.length}
+                  expanded={openRoutine === routine.uid}
+                  onToggleExpanded={() => setOpenRoutine((current) => (current === routine.uid ? null : routine.uid))}
+                  onChange={(changes) => updateRoutine(routine.uid, changes)}
+                  onMove={(direction) => moveRoutine(routine.uid, direction)}
+                  onRemove={() => {
+                    setDraft((prev) => prev.filter((r) => r.uid !== routine.uid));
+                    setOpenRoutine(null);
+                  }}
+                />
+              ))}
             </ul>
+            <button type="button" className="chip inline-flex w-full items-center justify-center gap-2 py-3 text-sm" onClick={addRoutine}>
+              <Plus className="h-4 w-4" />
+              Add a routine
+            </button>
             {chosenRoutines.length === 0 && <p className="text-sm font-medium text-rose-600">Keep at least one routine to create the goal.</p>}
+            {chosenRoutines.length > 0 && !chosenRoutines.every(isRoutineReady) && (
+              <p className="text-sm font-medium text-rose-600">Every routine needs a name and at least one day.</p>
+            )}
           </div>
         )}
         {error && <p className="mt-6 text-center text-sm font-medium text-rose-600" role="alert">{error}</p>}

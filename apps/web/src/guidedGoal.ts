@@ -35,10 +35,13 @@ export interface GuidedQuestion {
   showIf?: (answers: Answers) => boolean;
 }
 
-/** What every niche asks last: when, for how long each time, and for how many months. */
+/**
+ * What every niche asks last: which days and for how many months. The time for each
+ * session is optional: `null` means the person did not add one, and the plan uses a normal amount.
+ */
 export interface CommonAnswers {
   days: number[];
-  minutes: number;
+  minutes: number | null;
   months: number;
 }
 
@@ -742,6 +745,8 @@ export const isAnswered = (question: GuidedQuestion, answers: Answers): boolean 
 
 /** The choices offered for how long each session is and how long the goal runs. */
 export const MINUTE_CHOICES = [15, 30, 45, 60];
+/** Used when the person does not say how long each session is. */
+export const DEFAULT_MINUTES = 30;
 export const MONTH_CHOICES = [1, 3, 6, 12];
 
 /**
@@ -756,7 +761,7 @@ export const buildGuidedPlan = (key: NicheKey, answers: Answers, common: CommonA
   const count = Math.max(1, Math.min(MAX_ROUTINES, drafted.routines.length, days.length));
   const chosen = drafted.routines.slice(0, count);
   const spread = spreadOverDays(chosen.length, days);
-  const perRoutine = tasksForMinutes(common.minutes);
+  const perRoutine = tasksForMinutes(common.minutes ?? DEFAULT_MINUTES);
 
   return {
     focus: niche.key === 'custom' ? 'custom' : niche.key,

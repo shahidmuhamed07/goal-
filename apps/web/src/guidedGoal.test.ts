@@ -99,6 +99,14 @@ describe('every niche makes a sound plan', () => {
 });
 
 describe('the common answers shape the plan', () => {
+  it('the time for each session is optional, and leaving it out gives a normal amount', () => {
+    for (const n of NICHES) {
+      const none = buildGuidedPlan(n.key, firstChoices(n.key), common({ minutes: null }));
+      const normal = buildGuidedPlan(n.key, firstChoices(n.key), common({ minutes: 30 }));
+      assert.deepEqual(none.routines.map((r) => r.tasks.length), normal.routines.map((r) => r.tasks.length), n.key);
+    }
+  });
+
   it('fewer minutes mean fewer tasks per routine', () => {
     for (const n of NICHES) {
       const short = buildGuidedPlan(n.key, firstChoices(n.key), common({ minutes: 15 }));
@@ -249,6 +257,16 @@ describe('it plugs into the calendar', () => {
       assert.ok(subcategories.length > 5, n.key);
       assert.ok(tasks.every((t) => subcategories.some((s) => s.id === t.subcategoryId)), n.key);
     }
+  });
+
+  it('a routine set to every other week lands on every second week only, with that remembered', () => {
+    const base = { focus: 'custom' as const, title: 'T', category: 'Health', description: '', months: 2 };
+    const weekly = materializePlan({ ...base, routines: [{ name: 'Yoga', weekdays: [1], tasks: ['Stretch'] }] }, { fromDate: '2026-10-12', endDate: '2026-11-30', seed: 1 });
+    const biweekly = materializePlan({ ...base, routines: [{ name: 'Yoga', weekdays: [1], tasks: ['Stretch'], everyWeeks: 2 }] }, { fromDate: '2026-10-12', endDate: '2026-11-30', seed: 1 });
+    assert.equal(weekly.subcategories.length, 8);
+    assert.deepEqual(biweekly.subcategories.map((s) => s.date), ['2026-10-12', '2026-10-26', '2026-11-09', '2026-11-23']);
+    assert.ok(biweekly.subcategories.every((s) => s.repeatEvery === 2));
+    assert.equal(weekly.subcategories.some((s) => 'repeatEvery' in s), false);
   });
 
   it('the AI-ready seam: the rules plan maker returns the same plan', async () => {
