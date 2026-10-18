@@ -346,7 +346,7 @@ export const DailyTaskSection: React.FC<DailyTaskSectionProps> = ({
   const canAdd = canManageCategories;
 
   return (
-    <div className="neu rounded-2xl p-4 sm:p-6 space-y-6">
+    <div className="neu rounded-2xl p-3 sm:p-6 space-y-4 sm:space-y-6">
       {/* HEADER: what this is, which month, and how today is going */}
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <div className="flex items-center gap-2.5 flex-wrap">
@@ -363,7 +363,9 @@ export const DailyTaskSection: React.FC<DailyTaskSectionProps> = ({
                 title="Choose a month"
               >
                 <Calendar className="w-3.5 h-3.5" />
-                <span>
+                {/* Short on a phone so the title, month and count fit on one line */}
+                <span className="sm:hidden">{formatMonthKey(activeMonthKey)}</span>
+                <span className="max-sm:hidden">
                   {formatFullMonth(activeMonthKey)}
                   {activeMonthKey === currentCalendarMonth ? ' (current)' : ''}
                 </span>
@@ -438,7 +440,7 @@ export const DailyTaskSection: React.FC<DailyTaskSectionProps> = ({
               <button
                 key={date}
                 type="button"
-                className="chip flex flex-col items-center gap-0 sm:gap-0.5 px-0 py-1.5 sm:py-2.5 text-xs"
+                className="chip flex flex-col items-center gap-0 sm:gap-0.5 px-0 py-1 sm:py-2.5 text-xs"
                 data-active={selected}
                 disabled={!inGoal}
                 aria-pressed={selected}

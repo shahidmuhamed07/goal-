@@ -122,6 +122,14 @@ Found by reading the code on 2026-10-11; none of these have been reproduced unle
 
 ## Changelog
 
+### 2026-10-18 — Goal page on phone: smaller header and Daily plan  (branch `feature/phone-compact`)
+- **Type:** ui
+- **What & why:** The goal page was too big on a phone. Below 640px only: the header card has less padding and smaller gaps, the title is `text-lg`, the description shows one line, "Manage Access" reads "Manage", and the back button is 40px instead of 44px. The Daily plan card has less padding and tighter spacing, the month chip reads "Oct 2026" (no "(current)"), so the title, month and "0/0 done" fit on one line instead of two, and the day keys are a little shorter. Desktop is unchanged.
+- **Files:** `apps/web/src/App.tsx`, `apps/web/src/components/DailyTaskSection.tsx`, `apps/web/src/index.css`.
+- **Data/rules impact:** none.
+- **Verified:** lint ✓ · tests 74/74 ✓ · a throwaway 400px sandbox of the header markup and the real `DailyTaskSection` with fake data (deleted): header 175px, Daily plan 370px, both on one screen; the title row is one line. **Not verified:** the signed-in goal page itself (the header is copied markup in the sandbox, not the real one), and other phone widths such as 360px.
+- **Docs updated:** none needed.
+
 ### 2026-10-18 — Missed tasks can be picked up; popups and pages from the admin show in the app; "today" is local  (branch `feature/phone-compact`)
 - **Type:** feature + fix
 - **What & why:** (1) **Missed from earlier.** On the Today screen, unfinished tasks from the last 14 days appear in a card, each with **Today** (moves it to today, into a subcategory of the same name, created if that day has none) and **Skip** (sets it aside: `skipped: true`, it stays in the plan as not done and is not offered again). **Move all to today** does every one, one write per goal. Only goals the person may edit are listed. The logic is pure (`src/missed.ts`) and the card is `components/MissedTasks.tsx`. (2) **Popups and pages in the app.** `GET /api/content/live` now also returns live **popups** (newest first) and **pages** for the viewer's audience, without internal fields. The app shows one popup at a time after sign-in (`once` never again once closed, `daily` the next day, `every-visit` once per visit; memory in `localStorage` key `gp-popup-closed`), never over the first-run or guided questions. A button or banner link `/pages/<address>` opens that page in a dialog (heading, text, image, button, divider blocks); web addresses open a new tab; anything else is ignored. Banners on the login screen leave `/pages/` buttons out (no pages there). (3) **Fixed the UTC "today"** (known issue #1): `getTodayDateString()` is now the local date, so the streak, Today and new tasks no longer point at yesterday for part of the day.

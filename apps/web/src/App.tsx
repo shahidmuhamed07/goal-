@@ -3217,10 +3217,10 @@ export default function App() {
 
             {/* VIEW 3: GOAL DETAIL */}
             {activeTab === 'detail' && currentGoal && (
-              <div className="space-y-6">
+              <div className="space-y-3 sm:space-y-6">
                 {/* Top Goal Bar */}
                 <div
-                  className={`neu rounded-2xl p-4 sm:p-6 transition-colors duration-200 ${
+                  className={`neu rounded-2xl p-3 sm:p-6 transition-colors duration-200 ${
                     !isOwner ? 'border-violet-200/90 shadow-violet-950/5' : 'border-violet-200/80'
                   }`}
                 >
@@ -3304,15 +3304,15 @@ export default function App() {
                               setActiveTab('dashboard');
                             }}
                           />
-                          <div className="mt-3 flex items-center gap-1.5 flex-wrap">
+                          <div className="mt-2 sm:mt-3 flex items-center gap-1.5 flex-wrap">
                             <span className="badge">{currentGoal.category || 'General'}</span>
                             <span className="badge">{formatFullMonth(currentGoal.targetDate)}</span>
                           </div>
-                          <h1 className="mt-2 text-xl sm:text-3xl font-bold text-slate-900">
+                          <h1 className="mt-1.5 sm:mt-2 text-lg sm:text-3xl leading-tight font-bold text-slate-900">
                             {currentGoal.title}
                           </h1>
                           {currentGoal.description && (
-                            <p className="text-slate-600 text-xs sm:text-sm mt-0.5 max-w-3xl leading-relaxed">
+                            <p className="text-slate-600 text-xs sm:text-sm mt-0.5 max-w-3xl leading-relaxed line-clamp-1 sm:line-clamp-none">
                               {currentGoal.description}
                             </p>
                           )}
@@ -3360,7 +3360,8 @@ export default function App() {
                             className="chip flex items-center gap-1 px-2.5 py-1 text-[11px]"
                           >
                             <Settings className="w-3 h-3" />
-                            <span>Manage Access</span>
+                            <span className="sm:hidden">Manage</span>
+                            <span className="max-sm:hidden">Manage Access</span>
                           </button>
                         </div>
                       )}
@@ -3396,9 +3397,9 @@ export default function App() {
                 </div>
 
                 {/* 2-Column Responsive Layout */}
-                <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+                <div className="grid grid-cols-1 lg:grid-cols-12 gap-3 sm:gap-6 items-start">
                   {/* LEFT: the editing flow (pick a day, plan it), the wider column */}
-                  <div className="lg:col-span-7 space-y-6">
+                  <div className="lg:col-span-7 space-y-3 sm:space-y-6">
                     <DailyTaskSection
                       goal={currentGoal}
                       isOwner={isOwner}
