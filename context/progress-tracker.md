@@ -120,6 +120,14 @@ Found by reading the code on 2026-10-11; none of these have been reproduced unle
 
 ## Changelog
 
+### 2026-10-18 — Goals top card: smaller on phones, and Progress now shows each goal  (branch `feature/phone-compact`)
+- **Type:** ui + fix
+- **What & why:** The "Your goals" card took a lot of phone space (mascot, then three boxed tiles). On phones it is now a slim card: "Your goals" with the streak on the same line and the three numbers (Active goals, Tasks today, Progress) as one strip with thin dividers; no mascot. Desktop keeps the mascot and tiles. Also, tapping **Progress** used to open whichever goal happened to be first, which made no sense. It now opens a **Progress dialog** (`ProgressDialog`): the overall number ("42% of your months are done"), then each goal with a bar and "1 of 4 months done"; tapping a goal opens it. Active goals still scrolls to the list, Tasks today and the streak still go to Today.
+- **Files:** `apps/web/src/App.tsx`, `apps/web/src/components/ProgressDialog.tsx` (new).
+- **Data/rules impact:** none.
+- **Verified:** lint ✓ · build ✓ · tests ✓ · throwaway 400px sandbox with the same card markup and the real `ProgressDialog` (deleted): slim card and dialog render and fit. **Not verified:** the signed-in Goals screen itself, and the desktop Progress tile (changed the same way: it opens the dialog).
+- **Docs updated:** none needed.
+
 ### 2026-10-18 — Goal page on phone: compact "Plan" flow  (branch `feature/phone-compact`)
 - **Type:** ui
 - **What & why:** On the goal page the week strip (tall pills), the "Add subcategory" button and the add form took far too much of a phone screen: quick picks wrapped into three rows, the four "When" choices into ragged rows, and the form buttons sat apart. On phones now: the week keys are shorter with a smaller date; the plan header button just says **Add**; **Quick pick** is one row you scroll sideways; **When** is a tidy 2×2 grid; the Cancel / Add buttons fill the row; the empty-day box is shorter. Desktop is unchanged.

@@ -118,6 +118,7 @@ import { ProfessionalProfilePanel } from './components/ProfessionalProfilePanel'
 import { AccountProfilePanel } from './components/AccountProfilePanel';
 import { Onboarding } from './components/Onboarding';
 import { GuidedGoal } from './components/GuidedGoal';
+import { ProgressDialog } from './components/ProgressDialog';
 import { BackButton } from './components/BackButton';
 import { nicheForCategory, type NicheKey } from './guidedGoal';
 import { HOME_TAB, backTarget, tabOrder, type TabKey } from './navigation';
@@ -259,6 +260,7 @@ export default function App() {
   const [guidedNiche, setGuidedNiche] = useState<NicheKey | undefined>(undefined);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchOpen, setSearchOpen] = useState(false);
+  const [progressOpen, setProgressOpen] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState('all');
   const [dailyMasterDate, setDailyMasterDate] = useState<string>(getTodayDateString());
   const [selectedGoalMonth, setSelectedGoalMonth] = useState<string>(getCurrentMonthKey());
@@ -2623,18 +2625,42 @@ export default function App() {
                   <>
                 {/* Dashboard hero: a raised panel, not a picture. In this style the
                     depth is the decoration, so the numbers carry the colour. */}
-                <div className="rise neu-lg relative overflow-hidden p-4 sm:p-5">
-                  <div className="relative z-10 flex items-center justify-between gap-4 flex-wrap">
-                    <div className="flex items-center gap-3 min-w-0">
-                      <Orb size={52} float className="shrink-0" />
-                      <div className="min-w-0 space-y-1">
+                <div className="rise neu-lg relative overflow-hidden p-3.5 sm:p-5">
+                  <div className="relative z-10 flex items-center justify-between gap-3 sm:gap-4 flex-wrap">
+                    <div className="flex items-center gap-3 min-w-0 w-full sm:w-auto">
+                      <span className="hidden sm:block shrink-0">
+                        <Orb size={52} float />
+                      </span>
+                      <div className="min-w-0 flex-1 flex items-center justify-between gap-3 sm:block sm:space-y-1">
                         <h1 className="page-title">Your goals</h1>
                         <StreakBadge stats={streakStats} onClick={() => setActiveTab('today')} />
                       </div>
                     </div>
 
+                    {/* Phone: the same three numbers as one slim strip, not three boxes */}
+                    <div className="sm:hidden grid grid-cols-3 w-full divide-x divide-[color:var(--hairline)] text-center">
+                      <button
+                        type="button"
+                        onClick={() => document.getElementById('goals-grid')?.scrollIntoView({ behavior: 'smooth' })}
+                        className="py-1 cursor-pointer"
+                      >
+                        <div className="text-lg font-black leading-tight text-[color:var(--tone-800)]">{goals.length}</div>
+                        <div className="meta">{!isOwner ? 'Client goals' : 'Active goals'}</div>
+                      </button>
+                      <button type="button" onClick={() => setActiveTab('today')} className="py-1 cursor-pointer">
+                        <div className="text-lg font-black leading-tight text-slate-900">
+                          {allTodayTasks.filter((t) => t.completed).length}/{allTodayTasks.length}
+                        </div>
+                        <div className="meta">Tasks today</div>
+                      </button>
+                      <button type="button" onClick={() => setProgressOpen(true)} className="py-1 cursor-pointer">
+                        <div className="text-lg font-black leading-tight text-slate-900">{overallProgress}%</div>
+                        <div className="meta">Progress</div>
+                      </button>
+                    </div>
+
                     {/* Three tappable stats */}
-                    <div className="grid grid-cols-3 gap-2 sm:gap-3 w-full sm:w-auto sm:flex-shrink-0">
+                    <div className="hidden sm:grid grid-cols-3 gap-3 sm:flex-shrink-0">
                       {/* Stat 1: Goals */}
                       <button
                         type="button"
@@ -2677,21 +2703,16 @@ export default function App() {
                       {/* Stat 3: Progress */}
                       <button
                         type="button"
-                        onClick={() => {
-                          if (goals.length > 0) {
-                            setSelectedGoalId(goals[0].id);
-                            setActiveTab('detail');
-                          }
-                        }}
+                        onClick={() => setProgressOpen(true)}
                         className="neu-sm press group/card select-none text-center sm:text-left px-3 py-2.5 cursor-pointer"
-                        title="Click to view progress roadmap"
+                        title="See the progress of each goal"
                       >
                         <div className="text-lg sm:text-xl font-black text-slate-900">{overallProgress}%</div>
                         <div className="text-[10px] font-semibold text-slate-600">
                           Progress
                         </div>
                         <div className="text-[9px] font-bold text-slate-600 group-hover/card:text-violet-800 hidden sm:flex items-center justify-center sm:justify-start gap-0.5 mt-0.5 transition">
-                          <span>Roadmap</span>
+                          <span>By goal</span>
                           <ArrowRight className="w-2.5 h-2.5 group-hover/card:translate-x-0.5 transition-transform" />
                         </div>
                       </button>
@@ -3452,6 +3473,18 @@ export default function App() {
 
       {/* The screens below are mounted only while open, so each opening starts clean.
           Left mounted, they kept the last step, answers or half-typed text after closing. */}
+
+      {progressOpen && (
+        <ProgressDialog
+          goals={goals}
+          overall={overallProgress}
+          onClose={() => setProgressOpen(false)}
+          onOpenGoal={(goalId) => {
+            setProgressOpen(false);
+            openGoal(goalId);
+          }}
+        />
+      )}
 
       {/* OPTIONAL "HELP ME PLAN" QUESTIONS. Opens over the form, so closing it returns to the form as it was. */}
       {guidedOpen && (
