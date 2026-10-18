@@ -171,9 +171,9 @@ describe('production safety', () => {
 describe('admin login', () => {
   // A fake token checker: the token text decides who you are.
   const verify = async (token: string) => {
-    if (token === 'owner-token') return { email: 'owner@example.com', emailVerified: true };
-    if (token === 'stranger-token') return { email: 'stranger@example.com', emailVerified: true };
-    if (token === 'unverified-token') return { email: 'owner@example.com', emailVerified: false };
+    if (token === 'owner-token') return { uid: 'u-owner', email: 'owner@example.com', emailVerified: true };
+    if (token === 'stranger-token') return { uid: 'u-stranger', email: 'stranger@example.com', emailVerified: true };
+    if (token === 'unverified-token') return { uid: 'u-owner', email: 'owner@example.com', emailVerified: false };
     throw new Error('bad token');
   };
   const store = new MemoryStore();
@@ -254,7 +254,7 @@ describe('team: owners and managers', () => {
   const verify = async (token: string) => {
     const email = people[token];
     if (!email) throw new Error('bad token');
-    return { email, emailVerified: true };
+    return { uid: `u-${email}`, email, emailVerified: true };
   };
   const store = new MemoryStore();
   const app = createApp(store, {

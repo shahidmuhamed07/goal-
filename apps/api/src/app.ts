@@ -18,15 +18,18 @@ import {
   type PublicPopup,
   type TeamMember,
 } from '@goalpath/shared';
-import type { AdminAuth } from './auth';
+import type { AdminAuth, TokenVerifier } from './auth';
 import { SCHEMAS } from './schemas';
 import { DuplicateError, type ContentStore, type Doc } from './store';
+import { createUserRoutes } from './userRoutes';
 
 export interface AppOptions {
   corsOrigins: string[];
   isProduction: boolean;
   /** How admins prove who they are. Without it the admin is open on a developer's machine and locked in production. */
   adminAuth?: AdminAuth;
+  /** How the app's own users prove who they are (their Firebase login token). Without it people's data is unavailable. */
+  userAuth?: TokenVerifier;
   /** Lets tests control "now". */
   now?: () => Date;
 }
@@ -53,8 +56,9 @@ export function createApp(store: ContentStore, options: AppOptions) {
   const now = options.now ?? (() => new Date());
   const app = express();
   app.disable('x-powered-by');
-  app.use(express.json({ limit: '256kb' }));
-  app.use(cors({ origin: options.corsOrigins, methods: ['GET', 'PUT', 'DELETE'], allowedHeaders: ['content-type', 'authorization'] }));
+  // A goal with a long plan is one large request, so the ceiling is just above one goal's own limit.
+  app.use(express.json({ limit: '1100kb' }));
+  app.use(cors({ origin: options.corsOrigins, methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'], allowedHeaders: ['content-type', 'authorization'] }));
 
   app.get('/health', (_req, res) => {
     res.json({ ok: true, time: now().toISOString() });
@@ -278,6 +282,9 @@ export function createApp(store: ContentStore, options: AppOptions) {
 
   app.use('/api/admin', adminRoutes);
 
+  /** People's own data: accounts, goals, connections and chat. Every route here needs a login. */
+  app.use('/api', createUserRoutes(store, { verify: options.userAuth, now }));
+
   app.use((_req, res) => {
     res.status(404).json({ error: 'not_found' });
   });
@@ -289,6 +296,10 @@ export function createApp(store: ContentStore, options: AppOptions) {
     }
     if (err instanceof DuplicateError) {
       res.status(409).json({ error: 'duplicate', field: err.field });
+      return;
+    }
+    if (typeof err === 'object' && err && 'type' in err && err.type === 'entity.too.large') {
+      res.status(413).json({ error: 'too_large' });
       return;
     }
     if (err instanceof SyntaxError && 'body' in err) {

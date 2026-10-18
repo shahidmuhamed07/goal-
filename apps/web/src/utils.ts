@@ -70,48 +70,13 @@ export const computeStreak = (goals: Goal[], today: string): StreakStats => {
   return { current, longest, doneToday, atRisk: current > 0 && !doneToday };
 };
 
-/**
- * Permission a connected professional holds for one goal, or null when the goal
- * was never shared with them. Older accounts only stored `assignedGoalIds`,
- * which always meant full editing access.
- */
-export const getGoalAccessLevel = (
-  collaborator: Collaborator | null | undefined,
-  goalId: string
-): GoalAccessLevel | null => {
-  if (!collaborator) return null;
-  const explicit = collaborator.goalAccess?.[goalId];
-  if (explicit === 'view' || explicit === 'edit') return explicit;
-  if (collaborator.assignedGoalIds?.includes(goalId)) return 'edit';
-  return null;
-};
+export { getGoalAccessLevel, buildGoalAccessArrays } from '@goalpath/shared';
+import { getGoalAccessLevel, buildGoalAccessArrays } from '@goalpath/shared';
 
 export const isGoalSharedWith = (
   collaborator: Collaborator | null | undefined,
   goalId: string
 ): boolean => getGoalAccessLevel(collaborator, goalId) !== null;
-
-/**
- * The access lists a goal document must carry for Firestore to enforce who can
- * read and write it. Editors are also viewers, so a single `viewerUids` query
- * returns everything a professional is allowed to see.
- */
-export const buildGoalAccessArrays = (
-  collaborators: Collaborator[] | null | undefined,
-  goalId: string
-): { viewerUids: string[]; editorUids: string[] } => {
-  const viewerUids: string[] = [];
-  const editorUids: string[] = [];
-
-  (collaborators || []).forEach((collaborator) => {
-    const level = getGoalAccessLevel(collaborator, goalId);
-    if (!level) return;
-    viewerUids.push(collaborator.uid);
-    if (level === 'edit') editorUids.push(collaborator.uid);
-  });
-
-  return { viewerUids, editorUids };
-};
 
 /** Access lists for every goal at once, keyed by goal id. */
 export const buildGoalAccessMap = (
@@ -195,7 +160,7 @@ export const getMonthsDifference = (startKey: string, endKey: string): number =>
   return (endY - startY) * 12 + (endM - startM);
 };
 
-export const PROFESSIONAL_ROLES = ['Trainer', 'Dietitian', 'Doctor'] as const;
+export { PROFESSIONAL_ROLES } from '@goalpath/shared';
 const CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 
 export const generateInviteCode = (): string => {

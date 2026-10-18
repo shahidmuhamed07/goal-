@@ -1,5 +1,5 @@
 import { MongoClient, type Db } from 'mongodb';
-import { DuplicateError, type ContentStore, type Doc, type StoreCollection } from './store';
+import { DuplicateError, type ContentStore, type Doc, type Filter, type FindOptions, type StoreCollection } from './store';
 
 /** MongoDB error code for "a unique index would be violated". */
 const DUPLICATE_KEY = 11000;
@@ -21,6 +21,18 @@ export class MongoStore implements ContentStore {
     this.db = this.client.db(this.dbName);
     // Two pages cannot share an address.
     await this.db.collection('pages').createIndex({ slug: 1 }, { unique: true });
+    // Two accounts cannot share an access code (accounts without one yet are left out of the index).
+    await this.db
+      .collection('users')
+      .createIndex({ code: 1 }, { unique: true, partialFilterExpression: { code: { $type: 'string' } } });
+    // The lookups the app makes all the time.
+    await this.db.collection('users').createIndex({ collaboratorUids: 1 });
+    await this.db.collection('goals').createIndex({ userId: 1 });
+    await this.db.collection('goals').createIndex({ viewerUids: 1 });
+    await this.db.collection('accessRequests').createIndex({ toUid: 1 });
+    await this.db.collection('accessRequests').createIndex({ fromUid: 1 });
+    await this.db.collection('chats').createIndex({ participantUids: 1 });
+    await this.db.collection('messages').createIndex({ chatId: 1, createdAt: 1 });
   }
 
   async close() {
@@ -39,11 +51,26 @@ export class MongoStore implements ContentStore {
     return rest as Doc;
   }
 
+  async find(c: StoreCollection, filter: Filter, options: FindOptions = {}): Promise<Doc[]> {
+    // A field holding a list matches when the list contains the value, which is how MongoDB already treats a plain equality.
+    let cursor = this.db.collection(c).find(filter as never);
+    if (options.sort) {
+      const desc = options.sort.startsWith('-');
+      cursor = cursor.sort({ [desc ? options.sort.slice(1) : options.sort]: desc ? -1 : 1 });
+    }
+    if (options.limit) cursor = cursor.limit(options.limit);
+    const docs = await cursor.toArray();
+    return docs.map(({ _id, ...rest }) => rest as Doc);
+  }
+
   async upsert(c: StoreCollection, doc: Doc) {
     try {
       await this.db.collection(c).replaceOne({ _id: doc.id as never }, { ...doc, _id: doc.id as never }, { upsert: true });
     } catch (e) {
-      if (typeof e === 'object' && e && 'code' in e && e.code === DUPLICATE_KEY) throw new DuplicateError('slug');
+      if (typeof e === 'object' && e && 'code' in e && e.code === DUPLICATE_KEY) {
+        const pattern = 'keyPattern' in e && e.keyPattern && typeof e.keyPattern === 'object' ? Object.keys(e.keyPattern) : [];
+        throw new DuplicateError(pattern[0] ?? 'slug');
+      }
       throw e;
     }
   }

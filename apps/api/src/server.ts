@@ -19,8 +19,10 @@ async function main() {
     process.exit(1);
   }
 
+  // One check of Firebase login tokens serves both the admin and the app's own users.
+  const verify = createFirebaseVerifier(env.FIREBASE_PROJECT_ID);
   const ownerEmails = parseEmails(env.ADMIN_EMAILS);
-  const adminAuth = ownerEmails.length > 0 ? { verify: createFirebaseVerifier(env.FIREBASE_PROJECT_ID), ownerEmails } : undefined;
+  const adminAuth = ownerEmails.length > 0 ? { verify, ownerEmails } : undefined;
   if (!adminAuth) {
     console.warn(
       env.NODE_ENV === 'production'
@@ -31,6 +33,7 @@ async function main() {
 
   const app = createApp(store, {
     adminAuth,
+    userAuth: verify,
     corsOrigins: env.CORS_ORIGINS.split(',').map((s) => s.trim()).filter(Boolean),
     isProduction: env.NODE_ENV === 'production',
   });

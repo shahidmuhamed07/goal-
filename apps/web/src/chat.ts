@@ -1,11 +1,6 @@
 import { ChatThread } from './types';
 
-/**
- * The document id for the conversation between two users. Both uids are sorted
- * and joined, so whichever side opens the chat resolves the same thread.
- */
-export const chatIdFor = (uidA: string, uidB: string): string =>
-  [uidA, uidB].sort().join('__');
+export { chatIdFor } from '@goalpath/shared';
 
 /**
  * Whether a thread holds a message the given user has not seen: a last message

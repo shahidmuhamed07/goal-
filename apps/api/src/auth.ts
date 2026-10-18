@@ -2,8 +2,12 @@ import { createRemoteJWKSet, jwtVerify } from 'jose';
 
 /** Who a valid login token belongs to. */
 export interface Identity {
+  /** The account's own id, the same one the app sees as `user.uid`. */
+  uid: string;
   email: string;
   emailVerified: boolean;
+  name?: string;
+  picture?: string;
 }
 
 /** Checks a login token and says whose it is, or throws when it is not valid. */
@@ -31,7 +35,13 @@ export function createFirebaseVerifier(projectId: string): TokenVerifier {
       audience: projectId,
     });
     if (!payload.sub || typeof payload.email !== 'string') throw new Error('token has no account');
-    return { email: payload.email.toLowerCase(), emailVerified: payload.email_verified === true };
+    return {
+      uid: payload.sub,
+      email: payload.email.toLowerCase(),
+      emailVerified: payload.email_verified === true,
+      name: typeof payload.name === 'string' ? payload.name : undefined,
+      picture: typeof payload.picture === 'string' ? payload.picture : undefined,
+    };
   };
 }
 
