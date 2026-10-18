@@ -176,6 +176,7 @@ A day counts when ≥ 1 task **scheduled on that date** is completed (it uses `t
 | Type-check | `npm run lint` (= `tsc --noEmit`). Baseline on 2026-10-11: passes with no errors. |
 | Production build | `npm run build` → `dist/` |
 | Deploy | Push/merge to `main` → `.github/workflows/firebase-hosting-merge.yml`: Node 20, `npm ci`, `npm run build`, `FirebaseExtended/action-hosting-deploy` to the `live` channel. Secrets: `FIREBASE_SERVICE_ACCOUNT`, `FIREBASE_PROJECT_ID`. |
+| Deploy (admin) | Push/merge to `main` touching `apps/admin`, `packages/shared` or `deploy/admin` → `.github/workflows/firebase-admin-hosting.yml` builds the admin (`VITE_API_URL` = the Render API) and deploys `deploy/admin/firebase.json` to the Hosting site `goal-path-admin`, which must exist first. Also runnable by hand from the Actions tab. |
 | Firestore rules | **Not deployed by the workflow** (hosting only). Deploy manually: `firebase deploy --only firestore:rules`. |
 | Hosting config | SPA rewrite (`** → /index.html`); everything `no-cache` except `/assets/**` (immutable, 1 year). |
 

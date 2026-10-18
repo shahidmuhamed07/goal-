@@ -122,6 +122,14 @@ Found by reading the code on 2026-10-11; none of these have been reproduced unle
 
 ## Changelog
 
+### 2026-10-18 — Deploy the admin to its own Firebase Hosting site  (branch `feature/phone-compact`)
+- **Type:** config
+- **What & why:** The admin was only runnable on a developer's machine. Added a second Hosting site config (`deploy/admin/firebase.json`, site `goal-path-admin`, single-page rewrite because the admin uses `BrowserRouter`) and a workflow (`.github/workflows/firebase-admin-hosting.yml`) that builds the admin with `VITE_API_URL=https://goal-tcrb.onrender.com` and deploys it on pushes to `main` that touch the admin or shared code, or by hand. The app's own workflow and `firebase.json` are unchanged. The README has a "Going live" section with the one-time console steps.
+- **Files:** `deploy/admin/firebase.json`, `.github/workflows/firebase-admin-hosting.yml`, `README.md`.
+- **Data/rules impact:** none. Needs, outside the repo: the Hosting site created in Firebase, its address in the Authentication authorized domains and in the API's `CORS_ORIGINS` on Render.
+- **Verified:** `npm run build:admin` with the live API address builds, and the address is in the bundle. **Not verified:** the workflow itself (it cannot succeed until the Hosting site exists), the deployed admin, sign-in from the new domain.
+- **Docs updated:** `README.md`.
+
 ### 2026-10-18 — Goal page on phone: less to read, readable small text  (branch `feature/phone-compact`)
 - **Type:** ui
 - **What & why:** The goal page still felt big and full of small print. On phones only: the goal description, the "Assigned:" label and "None assigned" are hidden (the **Manage** button stays), "0/0 done" is hidden until the day has tasks, the empty-day card loses its explanation line and is shorter, the "All goals" back button is 36px, and the step numbers are a little smaller. The smallest text got bigger: weekday labels on the week strip went from 9px to 11px, and every 11px label in the goal page parts (`DailyTaskSection`, `SubcategoryBlock`, `MonthlyMilestoneSection`, the Assigned row) went to 12px (`text-xs`) on every screen size.

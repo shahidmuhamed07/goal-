@@ -7,7 +7,7 @@ This repository holds everything in one place (a *monorepo*):
 | Folder | What it is | Status |
 |---|---|---|
 | `apps/web` | The app people use. React + Vite, login with Firebase Auth. | Live |
-| `apps/admin` | The admin dashboard: banners, popups, pages and starter plans. | Working, with practice data |
+| `apps/admin` | The admin dashboard: banners, popups, pages and starter plans. | Working; deploys to its own Firebase Hosting site (see "Going live") |
 | `apps/api` | The backend (Express + MongoDB). Serves live content and the admin routes. | Working; admin routes have no login yet |
 | `packages/shared` | Types and rules the three programs above agree on. | Working |
 | `context/` | Project notes: overview, architecture, UI, rules, progress. | Keep updated |
@@ -39,6 +39,23 @@ admin  ──writes──►  content (banners, popups, pages, plans)  ──rea
 ```
 
 The admin saves content through `apps/api` into MongoDB; the app asks the API what is live right now. Set up the database once with `npm run db:setup -w @goalpath/api`, then `npm run db:check -w @goalpath/api`. Run the API with `npm run start -w @goalpath/api`. The admin's practice mode (browser storage) is still available with `VITE_USE_MOCK=true`.
+
+## Going live
+
+Pushing to `main` deploys two websites from GitHub Actions. The API runs separately on Render.
+
+| What | Where | How |
+|---|---|---|
+| App | Firebase Hosting, the project's default site | `.github/workflows/firebase-hosting-merge.yml` |
+| Admin | Firebase Hosting, a second site named `goal-path-admin` | `.github/workflows/firebase-admin-hosting.yml`, config in `deploy/admin/firebase.json` |
+| API + database | Render (Express) and MongoDB Atlas | Render deploys it; settings are in Render's Environment tab |
+
+One-time setup for the admin site:
+
+1. **Firebase console → Hosting → Add another site**, with the address `goal-path-admin` (if it is taken, pick another and change `site` in `deploy/admin/firebase.json`). Its address is `https://goal-path-admin.web.app`.
+2. **Firebase console → Authentication → Settings → Authorized domains**: make sure `goal-path-admin.web.app` is listed, or Google sign-in in the admin shows "unauthorized domain".
+3. **Render → the API service → Environment**: set `CORS_ORIGINS` to include the admin address (and keep the app's), for example `https://goal-path-9f4cc.web.app,https://goal-path-9f4cc.firebaseapp.com,https://goal-path-admin.web.app`, and check `ADMIN_EMAILS`. Then redeploy.
+4. Run the "Deploy admin to Firebase Hosting on merge" workflow once from the **Actions** tab (or push a change to `apps/admin`).
 
 ## Working here
 
