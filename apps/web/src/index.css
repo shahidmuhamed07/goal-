@@ -635,6 +635,25 @@ input[type="radio"] {
   .neu-sm {
     border-radius: 14px;
   }
+  /* Dialogs fill the phone width with small margins, and their buttons share a row. */
+  .scrim {
+    padding: 0.5rem;
+  }
+  .dialog {
+    padding: 1.125rem;
+    border-radius: 24px;
+  }
+  .seg-item {
+    flex: 1 1 auto;
+    justify-content: center;
+  }
+  .dialog-foot > button {
+    flex: 1 1 auto;
+    justify-content: center;
+  }
+  .dialog-foot > .meta {
+    flex-basis: 100%;
+  }
   .segmented {
     padding: 0.2rem;
     background: rgb(255 255 255 / 0.96);

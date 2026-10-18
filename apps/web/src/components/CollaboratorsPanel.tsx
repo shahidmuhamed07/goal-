@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { LogOut, Check, Target, Eye, Pencil, BadgeCheck, ExternalLink, Trash2, MessageCircle } from 'lucide-react';
+import { LogOut, Check, Target, Eye, Pencil, BadgeCheck, ExternalLink, Trash2, MessageCircle, ArrowRight } from 'lucide-react';
 import { User } from 'firebase/auth';
 import { doc, getDoc } from 'firebase/firestore';
 import { db } from '../firebase';
@@ -17,6 +17,7 @@ import { ProfessionalProfileCard } from './ProfessionalProfilePanel';
 import { AccessPicker } from './AccessPicker';
 import { AppSelect } from './AppSelect';
 import { Dialog } from './Dialog';
+import { ConfirmDialog } from './ConfirmDialog';
 
 interface CollaboratorsPanelProps {
   user: User;
@@ -43,41 +44,66 @@ interface CollaboratorsPanelProps {
   unreadChatUids: Set<string>;
 }
 
-/** A round icon button for the roster lists, with an optional count or unread dot. */
-const IconAction: React.FC<{
+/** The initial of a name in a round tone badge: the face of a person in a list. */
+const Avatar: React.FC<{ name: string }> = ({ name }) => (
+  <span
+    aria-hidden="true"
+    className="w-10 h-10 shrink-0 rounded-full grid place-items-center text-sm font-black bg-[color-mix(in_srgb,var(--tone-500)_14%,white)] text-[color:var(--tone-700)]"
+  >
+    {(name.trim().charAt(0) || '?').toUpperCase()}
+  </span>
+);
+
+/** A labelled action for a person in a list: an icon and a word, so nothing has to be guessed. */
+const RowAction: React.FC<{
   onClick: () => void;
-  title: string;
-  tone?: 'blue' | 'slate' | 'violet' | 'rose';
+  label: string;
   children: React.ReactNode;
-  badge?: number;
+  danger?: boolean;
+  /** A count shown after the label. */
+  count?: number;
+  /** A red dot for something unread. */
   dot?: boolean;
-}> = ({ onClick, title, tone = 'slate', children, badge, dot }) => (
+  active?: boolean;
+}> = ({ onClick, label, children, danger, count, dot, active }) => (
   <button
     type="button"
     onClick={onClick}
-    title={title}
-    aria-label={title}
-    className="icon-action"
-    data-tone={tone === 'rose' ? 'danger' : tone === 'slate' ? undefined : 'tone'}
+    data-danger={danger ? 'true' : undefined}
+    data-active={active ? 'true' : undefined}
+    className="chip relative inline-flex items-center justify-center gap-1.5 px-3 py-2.5 text-xs"
   >
     {children}
-    {typeof badge === 'number' && badge > 0 && (
-      <span className="absolute -top-1 -right-1 min-w-[16px] h-4 px-1 rounded-full bg-[color:var(--tone-600)] text-white text-[10px] font-bold grid place-items-center leading-none ring-2 ring-white">
-        {badge}
+    <span>{label}</span>
+    {typeof count === 'number' && count > 0 && (
+      <span className="min-w-[18px] h-[18px] px-1 rounded-full bg-[color:var(--tone-600)] text-white text-[10px] font-bold grid place-items-center leading-none">
+        {count}
       </span>
     )}
-    {dot && <span className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-rose-500 ring-2 ring-white" />}
+    {dot && <span className="absolute top-1 right-2 w-2 h-2 rounded-full bg-rose-500 ring-2 ring-white" />}
   </button>
 );
 
-/** A compact message icon-button with an unread dot, shared by both lists. */
-const MessageButton: React.FC<{ onClick: () => void; hasUnread: boolean }> = ({
-  onClick,
-  hasUnread,
-}) => (
-  <IconAction onClick={onClick} title="Message" tone="blue" dot={hasUnread}>
-    <MessageCircle className="w-4 h-4" />
-  </IconAction>
+/** Who can see which goal, as small chips (green pencil = can edit, blue eye = view only). */
+const SharedGoalChips: React.FC<{ items: Array<{ goal: Goal; level: GoalAccessLevel | null }> }> = ({ items }) => (
+  <div className="flex items-center gap-1.5 flex-wrap">
+    <span className="section-label mr-0.5">Can see</span>
+    {items.length === 0 ? (
+      <span className="meta">no goals yet</span>
+    ) : (
+      items.map(({ goal, level }) => (
+        <span
+          key={goal.id}
+          className={`text-xs px-2 py-0.5 rounded-md font-medium flex items-center gap-1 ${
+            level === 'edit' ? 'bg-emerald-50 text-emerald-800' : 'bg-sky-50 text-sky-800'
+          }`}
+        >
+          {level === 'edit' ? <Pencil className="w-3 h-3" /> : <Eye className="w-3 h-3" />}
+          <span>{goal.title}</span>
+        </span>
+      ))
+    )}
+  </div>
 );
 
 export const CollaboratorsPanel: React.FC<CollaboratorsPanelProps> = ({
@@ -221,7 +247,7 @@ export const CollaboratorsPanel: React.FC<CollaboratorsPanelProps> = ({
   // Strictly respect user intent: only show who is collaborating with this client, the exit button, and the list of clients they work on.
   if (isViewingClient) {
     return (
-      <div className="space-y-6 max-w-3xl">
+      <div className="space-y-4 sm:space-y-6 max-w-3xl">
         {/* ACTIVE CLIENT WORKSPACE BANNER WITH GREEN EXIT BUTTON */}
         <div className="neu-deep text-slate-800 rounded-2xl p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div className="space-y-1">
@@ -257,7 +283,7 @@ export const CollaboratorsPanel: React.FC<CollaboratorsPanelProps> = ({
         </div>
 
         {/* WHO ALL THE PEOPLE ARE COLLABORATED WITH THIS CLIENT */}
-        <div className="neu rounded-2xl p-6">
+        <div className="neu rounded-2xl p-4 sm:p-6">
           <h2 className="card-title flex items-center gap-2">
             <span>People Connected with this Client</span>
             <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-blue-100 text-blue-900">
@@ -336,7 +362,7 @@ export const CollaboratorsPanel: React.FC<CollaboratorsPanelProps> = ({
         </div>
 
         {/* ALL CLIENTS YOU SUPPORT */}
-        <div className="neu rounded-2xl p-6">
+        <div className="neu rounded-2xl p-4 sm:p-6">
           <h2 className="card-title">All Clients You Work With</h2>
           <p className="text-xs text-slate-500 mt-1 mb-4">
             Switch between client accounts you have been approved to manage.
@@ -380,7 +406,7 @@ export const CollaboratorsPanel: React.FC<CollaboratorsPanelProps> = ({
 
   // DEFAULT OWNER VIEW:
   return (
-    <div className="space-y-6 max-w-3xl">
+    <div className="space-y-4 sm:space-y-6 max-w-3xl">
       {isViewingClient && (
         <div className="neu-deep text-slate-800 rounded-2xl p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div className="space-y-1">
@@ -415,7 +441,7 @@ export const CollaboratorsPanel: React.FC<CollaboratorsPanelProps> = ({
         </p>
       </div>
 
-      <div className="neu rounded-2xl p-6">
+      <div className="neu rounded-2xl p-4 sm:p-6">
         <h2 className="card-title">My Code</h2>
         <p className="card-lede">Give this to a professional so they can request access to your account.</p>
         <div className="flex items-center gap-3">
@@ -433,7 +459,7 @@ export const CollaboratorsPanel: React.FC<CollaboratorsPanelProps> = ({
         </div>
       </div>
 
-      <div className="neu rounded-2xl p-6">
+      <div className="neu rounded-2xl p-4 sm:p-6">
         <h2 className="card-title">Connect as Professional</h2>
         <p className="card-lede">Enter a client’s code and the role you are requesting.</p>
         <form onSubmit={handleSubmit} className="flex flex-col sm:flex-row gap-2">
@@ -482,7 +508,7 @@ export const CollaboratorsPanel: React.FC<CollaboratorsPanelProps> = ({
       </div>
 
       {/* PENDING REQUESTS */}
-      <div className="neu rounded-2xl p-6">
+      <div className="neu rounded-2xl p-4 sm:p-6">
         <h2 className="card-title">Pending requests</h2>
         <p className="card-lede">Professionals waiting for your approval. You will choose which goals to assign upon approving.</p>
         {incomingError && (
@@ -528,127 +554,56 @@ export const CollaboratorsPanel: React.FC<CollaboratorsPanelProps> = ({
         )}
       </div>
 
-      {/* CONNECTED PROFESSIONALS */}
-      <div className="neu rounded-2xl p-6">
+      {/* CONNECTED PROFESSIONALS: one flat row per person, every action labelled */}
+      <div className="neu rounded-2xl p-4 sm:p-6">
         <h2 className="card-title">Connected professionals</h2>
         <p className="card-lede">
           People connected to your account. They can only edit daily tasks and subcategories in the goals assigned to them.
         </p>
         {collaborators.length === 0 ? (
-          <p className="text-sm text-slate-400">None yet.</p>
+          <p className="meta">None yet.</p>
         ) : (
-          <ul className="space-y-3.5">
+          <ul className="divide-y divide-[color:var(--hairline)]">
             {collaborators.map((c) => {
               const sharedGoals = goals
                 .map((g) => ({ goal: g, level: getGoalAccessLevel(c, g.id) }))
                 .filter((entry) => entry.level !== null);
+              const name = c.name || c.email || c.uid;
 
               return (
-                <li key={c.uid} className="neu-inset-sm p-4 space-y-3">
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <span className="text-sm font-bold text-slate-900">{c.name || c.email || c.uid}</span>
-                        <span className="badge">
-                          {c.role}
-                        </span>
+                <li key={c.uid} className="py-4 first:pt-0 last:pb-0 space-y-3">
+                  <div className="flex items-center gap-3">
+                    <Avatar name={name} />
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-sm font-bold text-slate-900 break-words">{name}</span>
+                        <span className="badge">{c.role}</span>
                       </div>
-                      <div className="text-xs text-slate-500 mt-0.5">{c.email}</div>
+                      {c.email && <div className="meta truncate">{c.email}</div>}
                     </div>
-
-                    {confirmRemoveUid === c.uid ? (
-                      <div className="neu-inset-sm flex items-center gap-1.5 p-1 shrink-0">
-                        <button
-                          type="button"
-                          disabled={isRemoving}
-                          onClick={async () => {
-                            try {
-                              setIsRemoving(true);
-                              await onRemove(c.uid);
-                            } finally {
-                              setIsRemoving(false);
-                              setConfirmRemoveUid(null);
-                            }
-                          }}
-                          className="btn-danger px-2.5 py-1 text-xs"
-                        >
-                          {isRemoving ? 'Removing…' : 'Remove'}
-                        </button>
-                        <button
-                          type="button"
-                          disabled={isRemoving}
-                          onClick={() => setConfirmRemoveUid(null)}
-                          className="chip px-2.5 py-1 text-xs"
-                        >
-                          Cancel
-                        </button>
-                      </div>
-                    ) : (
-                      <div className="flex items-center gap-1.5 shrink-0">
-                        <MessageButton
-                          onClick={() =>
-                            onOpenChat({
-                              uid: c.uid,
-                              name: c.name || c.email || 'Professional',
-                              role: c.role,
-                            })
-                          }
-                          hasUnread={unreadChatUids.has(c.uid)}
-                        />
-                        <IconAction
-                          onClick={() => handleOpenCredentials(c)}
-                          title="View credentials"
-                          tone="slate"
-                        >
-                          <BadgeCheck className="w-4 h-4" />
-                        </IconAction>
-                        <IconAction
-                          onClick={() => handleOpenManageModal(c)}
-                          title={`Manage goal access (${sharedGoals.length})`}
-                          tone="violet"
-                          badge={sharedGoals.length}
-                        >
-                          <Target className="w-4 h-4" />
-                        </IconAction>
-                        <IconAction
-                          onClick={() => setConfirmRemoveUid(c.uid)}
-                          title="Remove professional"
-                          tone="rose"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </IconAction>
-                      </div>
-                    )}
                   </div>
 
-                  {/* Assigned Goals tags */}
-                  <div className="pt-2 border-t border-slate-100 flex items-center gap-1.5 flex-wrap">
-                    <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mr-1">
-                      Shared Goals:
-                    </span>
-                    {sharedGoals.length === 0 ? (
-                      <span className="text-xs text-slate-500 font-medium bg-slate-300/30 px-2 py-0.5 rounded-md">
-                        No access to any goal
-                      </span>
-                    ) : (
-                      sharedGoals.map(({ goal, level }) => (
-                        <span
-                          key={goal.id}
-                          className={`text-xs px-2 py-0.5 rounded-md font-medium border flex items-center gap-1 ${
-                            level === 'edit'
-                              ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
-                              : 'bg-sky-50 text-sky-800 border-sky-200'
-                          }`}
-                        >
-                          {level === 'edit' ? (
-                            <Pencil className="w-3 h-3" />
-                          ) : (
-                            <Eye className="w-3 h-3" />
-                          )}
-                          <span>{goal.title}</span>
-                        </span>
-                      ))
-                    )}
+                  <SharedGoalChips items={sharedGoals} />
+
+                  <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
+                    <RowAction
+                      label="Message"
+                      dot={unreadChatUids.has(c.uid)}
+                      onClick={() =>
+                        onOpenChat({ uid: c.uid, name: c.name || c.email || 'Professional', role: c.role })
+                      }
+                    >
+                      <MessageCircle className="w-4 h-4" />
+                    </RowAction>
+                    <RowAction label="Profile" onClick={() => handleOpenCredentials(c)}>
+                      <BadgeCheck className="w-4 h-4" />
+                    </RowAction>
+                    <RowAction label="Goal access" count={sharedGoals.length} onClick={() => handleOpenManageModal(c)}>
+                      <Target className="w-4 h-4" />
+                    </RowAction>
+                    <RowAction label="Remove" danger onClick={() => setConfirmRemoveUid(c.uid)}>
+                      <Trash2 className="w-4 h-4" />
+                    </RowAction>
                   </div>
                 </li>
               );
@@ -658,13 +613,13 @@ export const CollaboratorsPanel: React.FC<CollaboratorsPanelProps> = ({
       </div>
 
       {/* CLIENTS I SUPPORT */}
-      <div className="neu rounded-2xl p-6">
+      <div className="neu rounded-2xl p-4 sm:p-6">
         <h2 className="card-title">Clients I support</h2>
         <p className="card-lede">Accounts that approved you as a professional.</p>
         {clientList.length === 0 ? (
-          <p className="text-sm text-slate-400">You are not connected to any clients yet.</p>
+          <p className="meta">You are not connected to any clients yet.</p>
         ) : (
-          <ul className="space-y-3">
+          <ul className="divide-y divide-[color:var(--hairline)]">
             {clientList.map((c) => {
               const myCollab = (c.collaborators || []).find((x) => x.uid === user.uid);
               const active = workspaceUid === c.id;
@@ -672,75 +627,35 @@ export const CollaboratorsPanel: React.FC<CollaboratorsPanelProps> = ({
               const connectedOn = formatJoinedDate(myCollab?.addedAt);
               const clientName = c.displayName || c.email || 'Client';
               return (
-                <li
-                  key={c.id}
-                  className="neu-inset-sm flex flex-wrap items-center justify-between gap-x-3 gap-y-2 px-3.5 py-3"
-                >
-                  <div className="min-w-0">
-                    <div className="text-sm font-semibold text-slate-900">{clientName}</div>
-                    {(joinedOn || connectedOn) && (
-                      <div className="text-[11px] text-slate-400 mt-0.5">
-                        {joinedOn ? `Joined ${joinedOn}` : `Connected ${connectedOn}`}
-                      </div>
-                    )}
+                <li key={c.id} className="py-4 first:pt-0 last:pb-0 space-y-3">
+                  <div className="flex items-center gap-3">
+                    <Avatar name={clientName} />
+                    <div className="min-w-0 flex-1">
+                      <div className="text-sm font-bold text-slate-900 break-words">{clientName}</div>
+                      {(joinedOn || connectedOn) && (
+                        <div className="meta">{joinedOn ? `Joined ${joinedOn}` : `Connected ${connectedOn}`}</div>
+                      )}
+                    </div>
                   </div>
 
-                  <div className="flex items-center gap-1.5 shrink-0 flex-wrap justify-end">
-                    <MessageButton
-                      onClick={() =>
-                        onOpenChat({ uid: c.id || '', name: clientName })
-                      }
-                      hasUnread={unreadChatUids.has(c.id || '')}
-                    />
-
-                    <button
-                      type="button"
-                      onClick={() => onSwitchWorkspace(active ? user.uid : (c.id || ''))}
-                      className="chip px-3 py-1.5 text-xs"
-                      data-active={active}
+                  <div className="grid grid-cols-3 gap-2 sm:flex sm:flex-wrap">
+                    <RowAction
+                      label="Message"
+                      dot={unreadChatUids.has(c.id || '')}
+                      onClick={() => onOpenChat({ uid: c.id || '', name: clientName })}
                     >
-                      {active ? 'Viewing' : 'Open'}
-                    </button>
-
-                    {confirmRemoveClientId === c.id ? (
-                      <div className="neu-inset-sm flex items-center gap-1 p-1">
-                        <button
-                          type="button"
-                          disabled={isRemovingClient}
-                          onClick={async () => {
-                            try {
-                              setIsRemovingClient(true);
-                              await onRemoveClient(c.id || '', clientName);
-                            } finally {
-                              setIsRemovingClient(false);
-                              setConfirmRemoveClientId(null);
-                            }
-                          }}
-                          className="btn-danger px-2 py-1 text-[11px]"
-                        >
-                          {isRemovingClient ? '...' : 'Remove'}
-                        </button>
-                        <button
-                          type="button"
-                          disabled={isRemovingClient}
-                          onClick={() => setConfirmRemoveClientId(null)}
-                          className="chip px-2.5 py-1 text-[11px]"
-                        >
-                          Cancel
-                        </button>
-                      </div>
-                    ) : (
-                      <button
-                        type="button"
-                        onClick={() => setConfirmRemoveClientId(c.id || '')}
-                        aria-label={`Remove ${clientName} from your client list`}
-                        title="Remove this client"
-                        className="icon-action"
-                        data-tone="danger"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
-                    )}
+                      <MessageCircle className="w-4 h-4" />
+                    </RowAction>
+                    <RowAction
+                      label={active ? 'Viewing' : 'Open'}
+                      active={active}
+                      onClick={() => onSwitchWorkspace(active ? user.uid : c.id || '')}
+                    >
+                      <ArrowRight className="w-4 h-4" />
+                    </RowAction>
+                    <RowAction label="Remove" danger onClick={() => setConfirmRemoveClientId(c.id || '')}>
+                      <Trash2 className="w-4 h-4" />
+                    </RowAction>
                   </div>
                 </li>
               );
@@ -748,6 +663,57 @@ export const CollaboratorsPanel: React.FC<CollaboratorsPanelProps> = ({
           </ul>
         )}
       </div>
+
+      {/* REMOVE CONFIRMS: a dialog, never an inline Remove / Cancel pair */}
+      {confirmRemoveUid && (
+        <ConfirmDialog
+          title="Remove this professional?"
+          description={
+            <>
+              <strong>{collaborators.find((c) => c.uid === confirmRemoveUid)?.name || collaborators.find((c) => c.uid === confirmRemoveUid)?.email || 'They'}</strong>{' '}
+              will lose access to your account and every goal you shared. They can ask again with your code.
+            </>
+          }
+          confirmLabel="Yes, remove"
+          busyLabel="Removing…"
+          busy={isRemoving}
+          onCancel={() => setConfirmRemoveUid(null)}
+          onConfirm={async () => {
+            try {
+              setIsRemoving(true);
+              await onRemove(confirmRemoveUid);
+            } finally {
+              setIsRemoving(false);
+              setConfirmRemoveUid(null);
+            }
+          }}
+        />
+      )}
+      {confirmRemoveClientId && (
+        <ConfirmDialog
+          title="Remove this client?"
+          description={
+            <>
+              <strong>{(() => { const c = clientList.find((x) => x.id === confirmRemoveClientId); return c?.displayName || c?.email || 'This client'; })()}</strong>{' '}
+              will leave your client list and you will no longer see their goals. They can connect with you again later.
+            </>
+          }
+          confirmLabel="Yes, remove"
+          busyLabel="Removing…"
+          busy={isRemovingClient}
+          onCancel={() => setConfirmRemoveClientId(null)}
+          onConfirm={async () => {
+            const c = clientList.find((x) => x.id === confirmRemoveClientId);
+            try {
+              setIsRemovingClient(true);
+              await onRemoveClient(confirmRemoveClientId, c?.displayName || c?.email || 'Client');
+            } finally {
+              setIsRemovingClient(false);
+              setConfirmRemoveClientId(null);
+            }
+          }}
+        />
+      )}
 
       {/* ASSIGN GOALS DIALOG */}
       {isModalOpen && (
@@ -809,7 +775,7 @@ export const CollaboratorsPanel: React.FC<CollaboratorsPanelProps> = ({
               </p>
             </div>
           ) : (
-            <ul className="max-h-[22rem] space-y-2.5 overflow-y-auto pr-1">
+            <ul className="space-y-2.5">
               {goals.map((g) => (
                 <li key={g.id} className="neu-inset-sm flex flex-col gap-3 p-3.5 sm:flex-row sm:items-center sm:justify-between">
                   <div className="min-w-0">

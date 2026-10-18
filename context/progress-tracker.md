@@ -120,6 +120,14 @@ Found by reading the code on 2026-10-11; none of these have been reproduced unle
 
 ## Changelog
 
+### 2026-10-18 — Connect screen on phone: labelled actions, confirm dialogs, dialogs that fit  (branch `feature/phone-compact`)
+- **Type:** ui
+- **What & why:** The Connect screen's lists were rows of unlabelled round icons (message, "verified", target, bin), so nobody could tell what Share/View/Remove did, and removing someone swapped a tiny Remove/Cancel pair in beside the icons. Now each person is a **flat row** (initial badge, name, role, email, a "Can see" line of goal chips) with **labelled buttons**: Message, Profile, Goal access (with a count), Remove (red). Clients I support gets Message, Open/Viewing, Remove. **Removing a professional, removing a client and leaving professional mode all open a proper confirm dialog** (new shared `ConfirmDialog`, built on `Dialog`) that says what will happen. Dialogs now fit a phone: small margins, the buttons share a row, the goal-access list no longer scrolls inside the scrolling dialog, and the No access / View / Edit picker fills the row. Fewer card-in-card effects: Connect cards use smaller padding on phones and the people lists lost their inner boxes.
+- **Files:** `components/ConfirmDialog.tsx` (new), `components/CollaboratorsPanel.tsx`, `components/ProfessionalProfilePanel.tsx` (leave confirm), `index.css` (phone dialog rules).
+- **Data/rules impact:** none.
+- **Verified:** lint ✓ · build ✓ · tests ✓ · in a throwaway 400px sandbox of the real `CollaboratorsPanel` (deleted): the two lists, the remove confirm, the goal-access dialog and the profile dialog all fit the screen. **Not verified:** the signed-in Connect screen with real data, the professional-side "Clients I support" confirm with a real removal, and the leave-professional confirm.
+- **Docs updated:** `context/ui-context.md` (UI standard table).
+
 ### 2026-10-18 — Fix: dialogs on phone were cut off at the top  (branch `feature/phone-compact`)
 - **Type:** fix + ui
 - **What & why:** On the Connect tab (phone), the professional-profile dialog appeared scrolled and cut off at the top. Cause: the tab panels keep a `transform` after their slide-in animation (`animation-fill-mode: both`), and a transformed parent makes `position: fixed` children (every dialog's dimmed layer) position against the long page content instead of the screen. Fixed by letting the animation fill backwards only, so the screen-fixed layer is really screen-fixed again. Also, a tall dialog now keeps its **title and close button on top and its buttons at the bottom** while only the middle scrolls (`.dialog` is a flex column, `.dialog-body` scrolls), and uses `dvh` so phone browser bars don't push it off screen.

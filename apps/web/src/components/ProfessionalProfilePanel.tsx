@@ -1,3 +1,4 @@
+import { ConfirmDialog } from './ConfirmDialog';
 import React, { useEffect, useState } from 'react';
 import { User } from 'firebase/auth';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
@@ -8,13 +9,11 @@ import {
   Copy,
   ExternalLink,
   Eye,
-  LogOut,
   Mail,
   Pencil,
   Plus,
   ShieldCheck,
   Trash2,
-  TriangleAlert,
   X,
 } from 'lucide-react';
 import { db } from '../firebase';
@@ -717,43 +716,21 @@ export const ProfessionalProfilePanel: React.FC<ProfessionalProfilePanelProps> =
 
       {/* Leave-professional confirm: only appears when the red icon is tapped. */}
       {confirmLeave && (
-        <div className="scrim">
-          <div className="dialog space-y-4" data-size="sm">
-            <div className="flex items-start gap-3">
-              <span className="w-10 h-10 rounded-xl grid place-items-center bg-rose-100 text-rose-600 shrink-0">
-                <TriangleAlert className="w-5 h-5" />
-              </span>
-              <div className="min-w-0">
-                <h3 className="text-base font-bold text-slate-900">Leave professional mode?</h3>
-                <p className="text-xs text-slate-600 leading-relaxed mt-1.5">
-                  You will be <strong>disconnected from all of your clients</strong> and will
-                  <strong> no longer show up as a professional</strong>. Your own goals stay, and your
-                  profile is kept so you can turn it back on later — but you would have to reconnect with
-                  each client again.
-                </p>
-              </div>
-            </div>
-            <div className="flex items-center justify-end gap-2 pt-1">
-              <button
-                type="button"
-                disabled={switching}
-                onClick={() => setConfirmLeave(false)}
-                className="chip px-4 py-2.5 text-xs"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                disabled={switching}
-                onClick={onSwitchToClient}
-                className="btn-danger flex items-center gap-1.5 px-4 py-2.5 text-xs"
-              >
-                <LogOut className="w-3.5 h-3.5" />
-                <span>{switching ? 'Leaving…' : 'Yes, leave & remove clients'}</span>
-              </button>
-            </div>
-          </div>
-        </div>
+        <ConfirmDialog
+          title="Leave professional mode?"
+          description={
+            <>
+              You will be <strong>disconnected from all of your clients</strong> and will{' '}
+              <strong>no longer show up as a professional</strong>. Your own goals stay, and your profile is kept so
+              you can turn it back on later, but you would have to reconnect with each client again.
+            </>
+          }
+          confirmLabel="Yes, leave & remove clients"
+          busyLabel="Leaving…"
+          busy={switching}
+          onCancel={() => setConfirmLeave(false)}
+          onConfirm={onSwitchToClient}
+        />
       )}
     </div>
   );

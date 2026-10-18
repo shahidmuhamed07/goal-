@@ -109,6 +109,8 @@ Spacing, text sizes, dialogs and controls are decided **once**, in shared parts.
 |---|---|---|
 | A dialog | `<Dialog>` (`components/Dialog.tsx`): kicker, title, description, close button, body, footer, Esc to close | your own `fixed inset-0` overlay, a blur, a dark tint |
 | Behind an overlay | `.scrim` (full layer) or `.scrim-dim` (just the dim). Light dim, **no blur** | `bg-slate-900/..`, `backdrop-blur-*` |
+| "Are you sure?" (remove, leave, disconnect) | `<ConfirmDialog>` (`components/ConfirmDialog.tsx`): title, plain sentence, Cancel + red confirm button | an inline Remove / Cancel pair that swaps in beside the icon |
+| A person in a list (a professional, a client) | a flat row (`divide-y`) with an avatar, name, `.meta` email and **labelled** `RowAction` chips (Message, Profile, Goal access, Remove) | a card inside a card, a row of unlabelled icons |
 | A dropdown | `<AppSelect>` with `className="field-control ..."` and `wrapperClassName` for width | a native `<select>` |
 | No access / View / Edit | `<AccessPicker>` | hand-made buttons |
 | Going back out of a screen | `<BackButton label="All goals">`: 44px pill, on its **own row** above the badges and title | a small "← Back" chip beside badges |
