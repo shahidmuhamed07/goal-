@@ -427,7 +427,7 @@ export const DailyTaskSection: React.FC<DailyTaskSectionProps> = ({
           </div>
         </StepHeading>
 
-        <div className="grid grid-cols-7 gap-1.5 sm:gap-2.5 pb-1">
+        <div className="grid grid-cols-7 gap-1 sm:gap-2.5 pb-1">
           {weekDates.map((date) => {
             const inGoal = date >= horizonStart && date <= horizonEnd;
             const selected = date === selectedDate;
@@ -438,7 +438,7 @@ export const DailyTaskSection: React.FC<DailyTaskSectionProps> = ({
               <button
                 key={date}
                 type="button"
-                className="chip flex flex-col items-center gap-0.5 py-2 sm:py-2.5 text-xs"
+                className="chip flex flex-col items-center gap-0 sm:gap-0.5 px-0 py-1.5 sm:py-2.5 text-xs"
                 data-active={selected}
                 disabled={!inGoal}
                 aria-pressed={selected}
@@ -454,10 +454,10 @@ export const DailyTaskSection: React.FC<DailyTaskSectionProps> = ({
                 }
                 onClick={() => selectDate(date)}
               >
-                <span className="text-[10px] uppercase tracking-wide opacity-80">
+                <span className="text-[9px] sm:text-[10px] uppercase tracking-wide opacity-80">
                   {WEEKDAY_SHORT[weekdayOf(date)]}
                 </span>
-                <span className="text-base font-extrabold tabular-nums leading-tight">
+                <span className="text-sm sm:text-base font-extrabold tabular-nums leading-tight">
                   {Number(date.slice(8, 10))}
                 </span>
                 {/* One mark per day: filled = all done, ring = tasks waiting, dot = planned, ★ = today */}
@@ -490,7 +490,8 @@ export const DailyTaskSection: React.FC<DailyTaskSectionProps> = ({
                 aria-expanded={addOpen}
               >
                 <Plus className="w-3.5 h-3.5 stroke-[2.5]" />
-                <span>Add subcategory</span>
+                <span className="hidden sm:inline">Add subcategory</span>
+                <span className="sm:hidden">Add</span>
               </button>
             )}
           </div>
@@ -498,7 +499,7 @@ export const DailyTaskSection: React.FC<DailyTaskSectionProps> = ({
 
         {/* The one place a subcategory is created: a name, and optionally a weekly repeat. */}
         {canAdd && addOpen && (
-          <form onSubmit={handleAdd} className="neu-inset p-4 space-y-4 pop">
+          <form onSubmit={handleAdd} className="neu-inset p-3 sm:p-4 space-y-3.5 sm:space-y-4 pop">
             <div className="space-y-2">
               <label className="section-label block" htmlFor="new-subcategory-name">
                 Name
@@ -513,13 +514,13 @@ export const DailyTaskSection: React.FC<DailyTaskSectionProps> = ({
                 className="w-full text-sm rounded-xl px-3.5 py-2.5"
               />
               {quickPicks.length > 0 && (
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="text-[11px] font-semibold text-slate-500">Quick pick</span>
+                <div className="flex items-center gap-2 -mx-3 px-3 sm:mx-0 sm:px-0 overflow-x-auto no-scrollbar sm:flex-wrap sm:overflow-visible">
+                  <span className="shrink-0 text-[11px] font-semibold text-slate-500">Quick pick</span>
                   {quickPicks.map((pick) => (
                     <button
                       key={pick}
                       type="button"
-                      className="chip px-2.5 py-1.5 text-xs"
+                      className="chip shrink-0 px-2.5 py-1.5 text-xs"
                       data-active={newName.trim().toLowerCase() === pick.toLowerCase()}
                       onClick={() => setNewName(pick)}
                     >
@@ -532,10 +533,10 @@ export const DailyTaskSection: React.FC<DailyTaskSectionProps> = ({
 
             <div className="space-y-2.5">
               <span className="section-label block">When</span>
-              <div className="flex flex-wrap items-center gap-2">
+              <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center">
                 <button
                   type="button"
-                  className="chip px-3 py-1.5 text-xs"
+                  className="chip px-3 py-2 sm:py-1.5 text-xs"
                   data-active={!weekly && !datesMode}
                   onClick={() => {
                     setWeekly(false);
@@ -546,7 +547,7 @@ export const DailyTaskSection: React.FC<DailyTaskSectionProps> = ({
                 </button>
                 <button
                   type="button"
-                  className="chip inline-flex items-center gap-1.5 px-3 py-1.5 text-xs"
+                  className="chip inline-flex items-center justify-center gap-1.5 px-3 py-2 sm:py-1.5 text-xs"
                   data-active={weekly && everyWeeks === 1}
                   onClick={() => {
                     setWeekly(true);
@@ -560,7 +561,7 @@ export const DailyTaskSection: React.FC<DailyTaskSectionProps> = ({
                 </button>
                 <button
                   type="button"
-                  className="chip inline-flex items-center gap-1.5 px-3 py-1.5 text-xs"
+                  className="chip inline-flex items-center justify-center gap-1.5 px-3 py-2 sm:py-1.5 text-xs"
                   data-active={weekly && everyWeeks === 2}
                   onClick={() => {
                     setWeekly(true);
@@ -574,7 +575,7 @@ export const DailyTaskSection: React.FC<DailyTaskSectionProps> = ({
                 </button>
                 <button
                   type="button"
-                  className="chip inline-flex items-center gap-1.5 px-3 py-1.5 text-xs"
+                  className="chip inline-flex items-center justify-center gap-1.5 px-3 py-2 sm:py-1.5 text-xs"
                   data-active={datesMode}
                   onClick={() => {
                     setDatesMode(true);
@@ -644,12 +645,12 @@ export const DailyTaskSection: React.FC<DailyTaskSectionProps> = ({
             </div>
 
             <div className="flex justify-end gap-2">
-              <button type="button" className="chip px-3.5 py-2 text-xs" onClick={closeAdd}>
+              <button type="button" className="chip px-3.5 py-2.5 sm:py-2 text-xs" onClick={closeAdd}>
                 Cancel
               </button>
               <button
                 type="submit"
-                className="btn-tone px-4 py-2 text-xs"
+                className="btn-tone flex-1 sm:flex-none px-4 py-2.5 sm:py-2 text-xs"
                 disabled={
                   !newName.trim() ||
                   adding ||
@@ -670,7 +671,7 @@ export const DailyTaskSection: React.FC<DailyTaskSectionProps> = ({
         )}
 
         {isEmptyDay && !addOpen && (
-          <div className="neu-inset text-center px-4 py-9">
+          <div className="neu-inset text-center px-4 py-6 sm:py-9">
             <p className="text-sm font-bold text-slate-700">Nothing planned for {longDate(selectedDate)}</p>
             <p className="text-xs text-slate-500 mt-1 max-w-xs mx-auto">
               {canAdd

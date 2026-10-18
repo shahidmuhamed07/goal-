@@ -120,6 +120,14 @@ Found by reading the code on 2026-10-11; none of these have been reproduced unle
 
 ## Changelog
 
+### 2026-10-18 — Goal page on phone: compact "Plan" flow  (branch `feature/phone-compact`)
+- **Type:** ui
+- **What & why:** On the goal page the week strip (tall pills), the "Add subcategory" button and the add form took far too much of a phone screen: quick picks wrapped into three rows, the four "When" choices into ragged rows, and the form buttons sat apart. On phones now: the week keys are shorter with a smaller date; the plan header button just says **Add**; **Quick pick** is one row you scroll sideways; **When** is a tidy 2×2 grid; the Cancel / Add buttons fill the row; the empty-day box is shorter. Desktop is unchanged.
+- **Files:** `apps/web/src/components/DailyTaskSection.tsx`.
+- **Data/rules impact:** none.
+- **Verified:** lint ✓ · build ✓ · tests ✓ · throwaway 400px sandbox of the real `DailyTaskSection` with a fake goal (deleted): the form fits in about 300px of height. **Not verified:** the signed-in goal page, the "Every week" weekday picker and the "Pick dates" calendar on a phone, the task rows below.
+- **Docs updated:** none needed.
+
 ### 2026-10-18 — Fix: Today and Goals on phone still showed desktop pieces  (branch `feature/phone-compact`)
 - **Type:** fix + ui
 - **What & why:** The user's phone screenshot of Today still showed the big mascot, a date title that wrapped over two lines, a large streak card and a long empty-day card, and the page footer peeked out behind the floating tab bar like a second card. Causes: `hidden` does not win against classes that set their own `display` (`.orb` is `inline-grid`, `.badge` is `inline-flex`), so the mascot and the category badge were never hidden. Now: the mascot sits in a `hidden sm:block` wrapper; on phones the Today title is just **Today** with the weekday and date as the small line above it and a compact streak chip; the empty-day card says "Nothing planned for today" with full-width goal rows; the footer is desktop-only; on the Goals top card the three stat tiles span the row and drop their third line on phones.
