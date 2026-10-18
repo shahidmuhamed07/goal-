@@ -952,8 +952,14 @@ input[type="radio"] {
   background: rgb(26 25 39 / 0.32);
 }
 
+/* While a dialog is open the page behind it does not scroll: the dialog does. */
+body:has(.scrim) {
+  overflow: hidden;
+}
+
 /* The full-screen layer behind a dialog. */
 .scrim {
+  overscroll-behavior: contain;
   position: fixed;
   inset: 0;
   z-index: 60;
@@ -990,7 +996,8 @@ input[type="radio"] {
 
 /* Header, body and footer share one rhythm: 1rem between parts, a hairline above the footer. */
 .dialog-head { display: flex; flex-shrink: 0; align-items: flex-start; justify-content: space-between; gap: 0.75rem; }
-.dialog-body { display: grid; align-content: start; gap: 1rem; margin-top: 1rem; flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
+/* The side padding (undone by the negative margin) keeps focus rings and the scrollbar off the content's edge. */
+.dialog-body { display: grid; align-content: start; gap: 1rem; margin: 1rem -0.5rem 0; padding: 0.25rem 0.5rem; flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
 .dialog-foot {
   flex-shrink: 0;
   display: flex;

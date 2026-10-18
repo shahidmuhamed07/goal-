@@ -120,7 +120,6 @@ import { Onboarding } from './components/Onboarding';
 import { GuidedGoal } from './components/GuidedGoal';
 import { ProgressDialog } from './components/ProgressDialog';
 import { BackButton } from './components/BackButton';
-import { nicheForCategory, type NicheKey } from './guidedGoal';
 import { HOME_TAB, backTarget, tabOrder, type TabKey } from './navigation';
 import { ChatPanel } from './components/ChatPanel';
 import { threadHasUnread } from './chat';
@@ -257,7 +256,6 @@ export default function App() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   // The optional "Help me plan" questions, opened from inside the create-goal form.
   const [guidedOpen, setGuidedOpen] = useState(false);
-  const [guidedNiche, setGuidedNiche] = useState<NicheKey | undefined>(undefined);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchOpen, setSearchOpen] = useState(false);
   const [progressOpen, setProgressOpen] = useState(false);
@@ -3489,7 +3487,6 @@ export default function App() {
       {/* OPTIONAL "HELP ME PLAN" QUESTIONS. Opens over the form, so closing it returns to the form as it was. */}
       {guidedOpen && (
         <GuidedGoal
-          initialNiche={guidedNiche}
           onClose={(goalId) => {
             setGuidedOpen(false);
             if (goalId) {
@@ -3505,10 +3502,7 @@ export default function App() {
       {isModalOpen && (
         <CreateGoalModal
           isOpen
-          onHelpMeChoose={(category) => {
-            setGuidedNiche(nicheForCategory(category));
-            setGuidedOpen(true);
-          }}
+          onHelpMeChoose={() => setGuidedOpen(true)}
           onClose={() => setIsModalOpen(false)}
           collaborators={profile?.collaborators || []}
           onSave={handleCreateGoal}

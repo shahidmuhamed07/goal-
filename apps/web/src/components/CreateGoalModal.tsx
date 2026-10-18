@@ -8,7 +8,6 @@ import {
   GraduationCap,
   Calendar,
   Sparkles,
-  X,
   Target,
   Plus,
 } from 'lucide-react';
@@ -21,6 +20,7 @@ import {
   GOAL_CATEGORIES,
 } from '../utils';
 import { Collaborator } from '../types';
+import { Dialog } from './Dialog';
 
 interface CreateGoalModalProps {
   isOpen: boolean;
@@ -28,9 +28,9 @@ interface CreateGoalModalProps {
   collaborators?: Collaborator[];
   /**
    * Shows an optional "Help me plan" button for people who are not sure how to set the goal up.
-   * It gets the category picked so far (null for a custom one), so the questions can start there.
+   * The questions always start by asking which area the goal is about.
    */
-  onHelpMeChoose?: (category: string | null) => void;
+  onHelpMeChoose?: () => void;
   onSave: (data: {
     title: string;
     category: string;
@@ -129,34 +129,30 @@ export const CreateGoalModal: React.FC<CreateGoalModalProps> = ({
   };
 
   return (
-    <div className="scrim">
-      <div className="dialog space-y-5" data-size="lg">
-        {/* Modal Header */}
-        <div className="flex justify-between items-center pb-3 border-b border-slate-300/40">
-          <div className="flex items-center gap-2.5">
-            <div className="neu-sm w-9 h-9 grid place-items-center text-emerald-700">
-              <Target className="w-5 h-5 stroke-[2.2]" />
-            </div>
-            <div>
-              <h3 className="text-base sm:text-lg font-bold text-slate-900 leading-tight">
-                Define New Goal Path
-              </h3>
-              <p className="text-[11px] sm:text-xs text-slate-500 font-medium">
-                Set milestones, assign categories, and map your monthly roadmap
-              </p>
-            </div>
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="chip w-8 h-8 grid place-items-center"
-            title="Close"
-            aria-label="Close"
-          >
-            <X className="w-4 h-4" />
+    <Dialog
+      size="lg"
+      kicker="New goal"
+      title="Define New Goal Path"
+      description="Set milestones, assign categories, and map your monthly roadmap"
+      onClose={onClose}
+      footer={
+        <>
+          {duration === null && <span className="meta mr-auto">Choose the goal length to continue</span>}
+          <button type="button" onClick={onClose} className="chip px-4 py-2.5 text-sm">
+            Cancel
           </button>
-        </div>
-
+          <button
+            type="submit"
+            form="create-goal-form"
+            disabled={saving || !title.trim() || !activeCategory || duration === null}
+            className="btn-tone px-5 py-2.5 text-sm inline-flex items-center gap-2"
+          >
+            <Plus className="w-4 h-4 stroke-[3]" />
+            <span>{saving ? 'Creating…' : 'Create goal'}</span>
+          </button>
+        </>
+      }
+    >
         {onHelpMeChoose && (
           <div className="neu-inset-sm flex items-center justify-between gap-3 px-3.5 py-2.5">
             <div className="min-w-0">
@@ -166,7 +162,7 @@ export const CreateGoalModal: React.FC<CreateGoalModalProps> = ({
             <button
               type="button"
               className="chip inline-flex items-center gap-1.5 px-3 py-1.5 text-xs shrink-0"
-              onClick={() => onHelpMeChoose(isCustomCategory ? null : category)}
+              onClick={onHelpMeChoose}
             >
               <Sparkles className="w-3.5 h-3.5" />
               Help me plan
@@ -174,7 +170,7 @@ export const CreateGoalModal: React.FC<CreateGoalModalProps> = ({
           </div>
         )}
 
-        <form onSubmit={handleSubmit} className="space-y-5">
+        <form id="create-goal-form" onSubmit={handleSubmit} className="space-y-5">
           {/* Goal Title */}
           <div>
             <label className="section-label block mb-1.5" htmlFor="new-goal-title">
@@ -372,28 +368,7 @@ export const CreateGoalModal: React.FC<CreateGoalModalProps> = ({
               </div>
             </div>
           )}
-
-          {/* Action Buttons */}
-          <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-300/40">
-            {duration === null && (
-              <span className="text-[11px] font-medium text-slate-500 mr-auto">
-                Choose the goal length to continue
-              </span>
-            )}
-            <button type="button" onClick={onClose} className="chip px-4 py-2.5 text-xs sm:text-sm">
-              Cancel
-            </button>
-            <button
-              type="submit"
-              disabled={saving || !title.trim() || !activeCategory || duration === null}
-              className="btn-tone px-5 py-2.5 text-sm flex items-center gap-2"
-            >
-              <Plus className="w-4 h-4 stroke-[3]" />
-              <span>{saving ? 'Creating…' : 'Create goal'}</span>
-            </button>
-          </div>
         </form>
-      </div>
-    </div>
+    </Dialog>
   );
 };

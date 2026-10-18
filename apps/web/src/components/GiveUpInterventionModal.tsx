@@ -74,7 +74,7 @@ export const GiveUpInterventionModal: React.FC<GiveUpInterventionModalProps> = (
       <div className="dialog overflow-hidden! p-0! text-slate-800" data-size="lg">
         
         {/* Top Header */}
-        <div className="border-b border-slate-300/40 px-5 sm:px-6 py-4 flex items-center justify-between gap-3">
+        <div className="shrink-0 border-b border-slate-300/40 px-5 sm:px-6 py-4 flex items-center justify-between gap-3">
           <div className="flex items-center gap-2.5">
             <div className="neu-sm w-9 h-9 grid place-items-center text-emerald-700">
               <HeartHandshake className="w-5 h-5" />
@@ -105,7 +105,7 @@ export const GiveUpInterventionModal: React.FC<GiveUpInterventionModalProps> = (
         </div>
 
         {/* Tab Navigation Steps */}
-        <div className="px-5 sm:px-6 py-3 border-b border-slate-300/40">
+        <div className="shrink-0 px-5 sm:px-6 py-3 border-b border-slate-300/40">
           <div className="neu-inset-sm flex items-center justify-between gap-1 p-1 text-xs font-semibold">
             <button
               type="button"
@@ -152,7 +152,7 @@ export const GiveUpInterventionModal: React.FC<GiveUpInterventionModalProps> = (
         </div>
 
         {/* Modal Tab Content Area */}
-        <div className="p-5 sm:p-6 space-y-4">
+        <div className="p-5 sm:p-6 space-y-4 min-h-0 flex-1 overflow-y-auto">
           
           {/* TAB 1: REFLECTION */}
           {activeTab === 'reflect' && (

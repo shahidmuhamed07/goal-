@@ -6,7 +6,6 @@ import {
   cleanText,
   isAnswered,
   makePlanWithRules,
-  nicheForCategory,
   visibleQuestions,
   type Answers,
   type CommonAnswers,
@@ -236,19 +235,9 @@ describe('moving on needs only a tap', () => {
   });
 });
 
-describe('starting from the plain form', () => {
-  it('maps each category to its niche, and a custom or unknown category to none', () => {
-    assert.equal(nicheForCategory('Career'), 'career');
-    assert.equal(nicheForCategory('Finance & Wealth'), 'money');
-    assert.equal(nicheForCategory('Learning & Skills'), 'learning');
-    assert.equal(nicheForCategory('Health'), 'health');
-    assert.equal(nicheForCategory(null), undefined);
-    assert.equal(nicheForCategory('Gardening'), undefined);
-    assert.equal(nicheForCategory('General'), undefined);
-  });
-
-  it('every category in the plain form has a niche', () => {
-    for (const c of GOAL_CATEGORIES) assert.ok(nicheForCategory(c), c);
+describe('the plain form and the helper agree', () => {
+  it('every category in the plain form has a niche in the helper', () => {
+    for (const c of GOAL_CATEGORIES) assert.ok(NICHES.some((n) => n.category === c), c);
   });
 });
 

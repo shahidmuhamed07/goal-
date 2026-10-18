@@ -43,8 +43,6 @@ interface GuidedGoalProps {
   onClose: (goalId?: string) => void;
   /** Saves the goal and its routines. Returns the new goal's id, or null when it could not be saved. */
   onCreate: (plan: StarterPlan) => Promise<string | null>;
-  /** Start at this niche's first question (the person already chose a category). */
-  initialNiche?: NicheKey;
   /** Turns answers into a plan. Defaults to the built-in rules; an AI can be supplied later. */
   makePlan?: PlanMaker;
 }
@@ -56,10 +54,10 @@ interface GuidedGoalProps {
  * then check a sample plan and change it before saving. The plan is only a base,
  * and every routine and task can be edited on the goal's page afterwards.
  */
-export const GuidedGoal: React.FC<GuidedGoalProps> = ({ onClose, onCreate, initialNiche, makePlan = makePlanWithRules }) => {
-  const [nicheKey, setNicheKey] = useState<NicheKey | null>(initialNiche ?? null);
-  // Starting from a niche skips the first screen (which is just "pick a niche").
-  const [stepIndex, setStepIndex] = useState(initialNiche ? 1 : 0);
+export const GuidedGoal: React.FC<GuidedGoalProps> = ({ onClose, onCreate, makePlan = makePlanWithRules }) => {
+  // It always opens on "what do you want to work on?": nothing is chosen for the person.
+  const [nicheKey, setNicheKey] = useState<NicheKey | null>(null);
+  const [stepIndex, setStepIndex] = useState(0);
   const [direction, setDirection] = useState<1 | -1>(1);
 
   const [answers, setAnswers] = useState<Answers>({});

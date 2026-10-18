@@ -120,6 +120,14 @@ Found by reading the code on 2026-10-11; none of these have been reproduced unle
 
 ## Changelog
 
+### 2026-10-18 — Fix: the New Goal window did not scroll (the page behind did); Help me plan starts by asking the area  (branch `feature/phone-compact`)
+- **Type:** fix
+- **What & why:** (1) After the dialog change that keeps the title and buttons in place, the **New Goal** window (hand-built, not using `Dialog`) could no longer scroll its own content, and the page behind it scrolled instead. `CreateGoalModal` now uses the shared `Dialog` (title and Create button stay put, the middle scrolls, the page behind is locked). The give-up window got the same inner scroll area. As a safety net, the page never scrolls while any dialog layer is open (`body:has(.scrim)`), and the dialog body keeps a small side padding so the scrollbar and focus rings no longer clip the fields. (2) **Help me plan** used to skip its first question when a category was already selected in the form (Career is selected by default), jumping straight into Career questions. It now **always opens on "What do you want to work on?"** with nothing pre-chosen, and the questions follow one after another. Removed the now-unused `nicheForCategory` and its test (kept a test that every form category has a helper niche).
+- **Files:** `components/CreateGoalModal.tsx`, `components/GiveUpInterventionModal.tsx`, `components/GuidedGoal.tsx`, `App.tsx`, `guidedGoal.ts`, `guidedGoal.test.ts`, `index.css`.
+- **Data/rules impact:** none.
+- **Verified:** lint ✓ · build ✓ · tests 58/58 ✓ · throwaway 400×700 sandbox of the real `CreateGoalModal` over a long page (deleted): the dialog body scrolls (238px), the page behind is locked, fields are not clipped. **Not verified:** the signed-in app, the give-up window's scroll, and the guided flow on a phone (the niche-first change is logic only).
+- **Docs updated:** none needed.
+
 ### 2026-10-18 — Goals top card: smaller on phones, and Progress now shows each goal  (branch `feature/phone-compact`)
 - **Type:** ui + fix
 - **What & why:** The "Your goals" card took a lot of phone space (mascot, then three boxed tiles). On phones it is now a slim card: "Your goals" with the streak on the same line and the three numbers (Active goals, Tasks today, Progress) as one strip with thin dividers; no mascot. Desktop keeps the mascot and tiles. Also, tapping **Progress** used to open whichever goal happened to be first, which made no sense. It now opens a **Progress dialog** (`ProgressDialog`): the overall number ("42% of your months are done"), then each goal with a bar and "1 of 4 months done"; tapping a goal opens it. Active goals still scrolls to the list, Tasks today and the streak still go to Today.

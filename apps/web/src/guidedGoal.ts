@@ -726,10 +726,6 @@ export const NICHES: Niche[] = [career, business, health, fitness, money, learni
 
 export const nicheByKey = (key: NicheKey): Niche => NICHES.find((n) => n.key === key) ?? NICHES[0];
 
-/** The niche that goes with a category chosen in the plain form, so the questions can start where the person already is. */
-export const nicheForCategory = (category: string | null | undefined): NicheKey | undefined =>
-  NICHES.find((n) => n.key !== 'custom' && n.category === category)?.key;
-
 /** The questions that apply to these answers (some are only asked after an earlier answer). */
 export const visibleQuestions = (niche: Niche, answers: Answers): GuidedQuestion[] =>
   niche.questions.filter((q) => !q.showIf || q.showIf(answers));
