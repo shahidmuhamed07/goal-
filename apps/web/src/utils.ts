@@ -78,18 +78,6 @@ export const isGoalSharedWith = (
   goalId: string
 ): boolean => getGoalAccessLevel(collaborator, goalId) !== null;
 
-/** Access lists for every goal at once, keyed by goal id. */
-export const buildGoalAccessMap = (
-  goals: Goal[],
-  collaborators: Collaborator[] | null | undefined
-): Record<string, { viewerUids: string[]; editorUids: string[] }> => {
-  const map: Record<string, { viewerUids: string[]; editorUids: string[] }> = {};
-  goals.forEach((goal) => {
-    map[goal.id] = buildGoalAccessArrays(collaborators, goal.id);
-  });
-  return map;
-};
-
 export const getCurrentMonthKey = (): string => {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
@@ -161,18 +149,6 @@ export const getMonthsDifference = (startKey: string, endKey: string): number =>
 };
 
 export { PROFESSIONAL_ROLES } from '@goalpath/shared';
-const CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-
-export const generateInviteCode = (): string => {
-  let code = '';
-  for (let i = 0; i < 6; i += 1) {
-    code += CODE_CHARS[Math.floor(Math.random() * CODE_CHARS.length)];
-  }
-  return code;
-};
-
-export const requestDocId = (fromUid: string, toUid: string): string => `${fromUid}_${toUid}`;
-
 export interface MonthDayInfo {
   dateStr: string; // YYYY-MM-DD
   dayNum: number;  // 1..31

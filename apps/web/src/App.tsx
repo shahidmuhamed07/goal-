@@ -13,20 +13,6 @@ import {
   signOut,
   onAuthStateChanged,
 } from 'firebase/auth';
-import {
-  collection,
-  query,
-  where,
-  onSnapshot,
-  addDoc,
-  updateDoc,
-  deleteDoc,
-  doc,
-  getDoc,
-  getDocs,
-  setDoc,
-  runTransaction,
-} from 'firebase/firestore';
 
 import {
   Plus,
@@ -50,7 +36,10 @@ import {
   UsersRound,
 } from 'lucide-react';
 
-import { auth, db, googleProvider } from './firebase';
+import { auth, googleProvider } from './firebase';
+import { appApi, type GoalChanges } from './api/appApi';
+import { ApiError } from './api/client';
+import { usePolling } from './api/usePolling';
 import {
   Goal,
   Milestone,
@@ -70,14 +59,11 @@ import {
   formatMonthKey,
   formatFullMonth,
   generateMonthRange,
-  generateInviteCode,
-  requestDocId,
   formatJoinedDate,
   PROFESSIONAL_ROLES,
   getMonthDays,
   formatDisplayDate,
   addMonthsToKey,
-  buildGoalAccessArrays,
   getGoalAccessLevel,
   isGoalSharedWith,
   computeStreak,
@@ -168,7 +154,7 @@ function useSegmentedTrack(activeKey: string) {
   return { ref, track };
 }
 
-/** Maps a Firestore goal document onto the shape the interface uses. */
+/** Fills in anything an older goal may lack, so the interface can rely on every field being there. */
 const mapGoalDoc = (id: string, data: Record<string, unknown>): Goal => ({
   id,
   userId: (data.userId as string) || '',
@@ -184,51 +170,19 @@ const mapGoalDoc = (id: string, data: Record<string, unknown>): Goal => ({
   editorUids: Array.isArray(data.editorUids) ? (data.editorUids as string[]) : undefined,
 });
 
-async function ensureUserProfile(firebaseUser: User) {
-  const userRef = doc(db, 'users', firebaseUser.uid);
-  const existing = await getDoc(userRef);
-  if (existing.exists() && existing.data().code) {
-    await updateDoc(userRef, {
-      displayName: firebaseUser.displayName || existing.data().displayName || '',
-      email: firebaseUser.email || existing.data().email || '',
-      photoURL: firebaseUser.photoURL || existing.data().photoURL || '',
-    });
-    return;
-  }
+const normalizeGoal = (goal: Goal): Goal => mapGoalDoc(goal.id, goal as unknown as Record<string, unknown>);
 
-  for (let i = 0; i < 10; i += 1) {
-    const code = generateInviteCode();
-    const codeRef = doc(db, 'codes', code);
-    try {
-      await runTransaction(db, async (transaction) => {
-        const codeSnap = await transaction.get(codeRef);
-        const userSnap = await transaction.get(userRef);
-        if (userSnap.exists() && userSnap.data().code) return;
-        if (codeSnap.exists()) throw new Error('CODE_TAKEN');
-        transaction.set(codeRef, { uid: firebaseUser.uid });
-        transaction.set(
-          userRef,
-          {
-            displayName: firebaseUser.displayName || '',
-            email: firebaseUser.email || '',
-            photoURL: firebaseUser.photoURL || '',
-            code,
-            collaborators: userSnap.exists() ? userSnap.data().collaborators || [] : [],
-            collaboratorUids: userSnap.exists() ? userSnap.data().collaboratorUids || [] : [],
-            createdAt: new Date().toISOString(),
-          },
-          { merge: true }
-        );
-      });
-      return;
-    } catch (err: unknown) {
-      const errorMsg = err instanceof Error ? err.message : String(err);
-      if (errorMsg.includes('CODE_TAKEN')) continue;
-      throw err;
-    }
+/** A short, plain sentence for a failed call to the API. */
+const apiProblem = (err: unknown, fallback: string): string => {
+  if (err instanceof ApiError) {
+    if (err.code === 'unreachable') return 'Could not reach the server. Check your connection and try again.';
+    if (err.code === 'read_only') return 'You can only view this goal, not change it.';
+    if (err.code === 'owner_only') return 'Only the goal owner can do that.';
+    if (err.code === 'goal_too_large') return 'That would make this goal too large to save.';
+    if (err.code === 'too_many_requests') return 'Too many attempts. Please wait a minute and try again.';
   }
-  throw new Error('Could not generate a unique access code.');
-}
+  return fallback;
+};
 
 export default function App() {
   // Auth State
@@ -288,13 +242,6 @@ export default function App() {
   const [outgoingRequests, setOutgoingRequests] = useState<AccessRequest[]>([]);
   const [clientList, setClientList] = useState<UserProfile[]>([]);
   const [clientsReady, setClientsReady] = useState(false);
-  /**
-   * Clients this professional has removed from their own list. Kept on their
-   * own profile so it follows them between devices. Only the client can fully
-   * revoke access, so the shared request is marked "removed" and the client's
-   * account drops the professional the next time it signs in.
-   */
-  const [withdrawnClientIds, setWithdrawnClientIds] = useState<string[]>([]);
   const [workspaceUid, setWorkspaceUid] = useState<string | null>(null);
   const [connectNotice, setConnectNotice] = useState<{ type: 'ok' | 'error'; text: string } | null>(null);
   const [incomingError, setIncomingError] = useState<string | null>(null);
@@ -303,14 +250,7 @@ export default function App() {
   const [chatThreads, setChatThreads] = useState<ChatThread[]>([]);
   const [chatTarget, setChatTarget] = useState<{ uid: string; name: string; role?: string } | null>(null);
 
-  /**
-   * The clients actually shown in the interface: everyone connected except the
-   * ones this professional has removed.
-   */
-  const visibleClients = useMemo(
-    () => clientList.filter((c) => !withdrawnClientIds.includes(c.id || '')),
-    [clientList, withdrawnClientIds]
-  );
+
 
   // Listen for Firebase Auth State Changes
   useEffect(() => {
@@ -342,98 +282,79 @@ export default function App() {
     });
   }, []);
 
+  // After sign-in the account is created on the server if it is new (it also holds the invite
+  // code). A sleeping server can take a while to wake, so a failed try is simply tried again.
+  const [accountReady, setAccountReady] = useState(false);
+  const [serverSlow, setServerSlow] = useState(false);
   useEffect(() => {
     if (!user) {
       setWorkspaceUid(null);
       setProfile(null);
-      return;
-    }
-    setWorkspaceUid((prev) => prev || user.uid);
-    ensureUserProfile(user).catch((err) => {
-      console.error('ensureUserProfile:', err);
-      setErrorMessage(
-        err.message || 'Could not set up your access code. Check Firestore rules for users/codes.'
-      );
-    });
-  }, [user]);
-
-  useEffect(() => {
-    if (!user) {
-      setProfile(null);
+      setAccountReady(false);
+      setServerSlow(false);
       return undefined;
     }
-    const unsub = onSnapshot(
-      doc(db, 'users', user.uid),
-      (snap) => {
-        if (snap.exists()) {
-          const data = snap.data();
-          setProfile({ id: snap.id, ...data } as UserProfile);
-          setWithdrawnClientIds(Array.isArray(data.withdrawnClients) ? data.withdrawnClients : []);
-        }
-      },
-      (err) => {
-        console.error('Profile listener:', err);
-        setErrorMessage('Unable to load your profile. Allow read/write on the users collection.');
-      }
-    );
-    return () => unsub();
+    setWorkspaceUid((prev) => prev || user.uid);
+    let cancelled = false;
+    let timer: number | undefined;
+    const attempt = () => {
+      appApi
+        .sync()
+        .then((account) => {
+          if (cancelled) return;
+          setProfile(account);
+          setAccountReady(true);
+          setServerSlow(false);
+        })
+        .catch((err) => {
+          if (cancelled) return;
+          console.error('Account setup:', err);
+          setServerSlow(true);
+          timer = window.setTimeout(attempt, 4000);
+        });
+    };
+    attempt();
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
   }, [user]);
+
+  // Everything the app shows comes from one answer that is refreshed every few seconds while
+  // the app is open, and again whenever the person comes back to it.
+  const overviewPoll = usePolling((signal) => appApi.overview(signal), {
+    enabled: !!user && accountReady,
+    intervalMs: 10_000,
+    resetKey: user?.uid,
+  });
+  const overview = overviewPoll.data;
+
+  useEffect(() => {
+    if (overviewPoll.error && !overview) setServerSlow(true);
+    if (overview) setServerSlow(false);
+  }, [overviewPoll.error, overview]);
 
   useEffect(() => {
     if (!user) {
       setIncomingRequests([]);
       setOutgoingRequests([]);
       setIncomingError(null);
-      return undefined;
-    }
-    const incomingQ = query(collection(db, 'accessRequests'), where('toUid', '==', user.uid));
-    const outgoingQ = query(collection(db, 'accessRequests'), where('fromUid', '==', user.uid));
-
-    const unsubIn = onSnapshot(
-      incomingQ,
-      (snap) => {
-        const rows = snap.docs.map((d) => ({ id: d.id, ...d.data() } as AccessRequest));
-        setIncomingError(null);
-        setIncomingRequests(rows);
-      },
-      (err) => {
-        console.error('[accessRequests incoming ERROR]', err.code, err.message, err);
-        setIncomingError(err.message || String(err));
-      }
-    );
-    const unsubOut = onSnapshot(
-      outgoingQ,
-      (snap) => {
-        const rows = snap.docs.map((d) => ({ id: d.id, ...d.data() } as AccessRequest));
-        setOutgoingRequests(rows);
-      },
-      (err) => console.error('[accessRequests outgoing ERROR]', err.code, err.message, err)
-    );
-    return () => {
-      unsubIn();
-      unsubOut();
-    };
-  }, [user]);
-
-  // All conversations this user is part of, for the message threads and their
-  // unread markers. Kept account-wide (not workspace-scoped) so a new message
-  // shows up wherever the user is.
-  useEffect(() => {
-    if (!user) {
       setChatThreads([]);
-      return undefined;
+      setClientList([]);
+      setClientsReady(false);
+      setSharedGoals([]);
+      return;
     }
-    const threadsQ = query(
-      collection(db, 'chats'),
-      where('participantUids', 'array-contains', user.uid)
-    );
-    const unsub = onSnapshot(
-      threadsQ,
-      (snap) => setChatThreads(snap.docs.map((d) => ({ id: d.id, ...d.data() } as ChatThread))),
-      (err) => console.error('Chat threads listener:', err)
-    );
-    return () => unsub();
-  }, [user]);
+    if (!overview) return;
+    setProfile(overview.profile);
+    setIncomingRequests(overview.incoming);
+    setOutgoingRequests(overview.outgoing);
+    setIncomingError(null);
+    setChatThreads(overview.threads);
+    setClientList(overview.clients);
+    setClientsReady(true);
+    setSharedGoals(overview.sharedGoals.map(normalizeGoal));
+  }, [user, overview]);
 
   // Uids this user has an unread message from, and the total, for the badges.
   const unreadChatUids = useMemo(() => {
@@ -449,155 +370,63 @@ export default function App() {
     return set;
   }, [chatThreads, user]);
 
-  // Realtime client list & active client profile listener
-  const [activeClientProfile, setActiveClientProfile] = useState<UserProfile | null>(null);
   const [isAccountMenuOpen, setIsAccountMenuOpen] = useState(false);
   const [copiedEmail, setCopiedEmail] = useState(false);
 
-  /**
-   * A professional who removes a client marks the shared request "removed".
-   * Access itself lives on the client's account, so the client is the one who
-   * can actually clear it. This runs that cleanup the next time they sign in.
-   */
-  const clearedWithdrawnPros = useRef<string[]>([]);
-  useEffect(() => {
-    if (!user || !profile) return;
-    const stillListed = (profile.collaborators || []).map((c) => c.uid);
-    const pending = incomingRequests.filter(
-      (r) => r.status === 'removed' && stillListed.includes(r.fromUid)
-    );
-    const next = pending.find((r) => !clearedWithdrawnPros.current.includes(r.fromUid));
-    if (!next) return;
-    clearedWithdrawnPros.current.push(next.fromUid);
-    handleRemoveCollaborator(next.fromUid);
-  }, [user, profile, incomingRequests]);
-
-  useEffect(() => {
-    if (!user) {
-      setClientList([]);
-      setClientsReady(false);
-      return undefined;
-    }
-    const clientsQ = query(
-      collection(db, 'users'),
-      where('collaboratorUids', 'array-contains', user.uid)
-    );
-    const unsub = onSnapshot(
-      clientsQ,
-      (snap) => {
-        setClientList(snap.docs.map((d) => ({ id: d.id, ...d.data() } as UserProfile)));
-        setClientsReady(true);
-      },
-      (err) => {
-        console.error('Client list:', err);
-        setClientsReady(true);
-      }
-    );
-    return () => unsub();
-  }, [user]);
-
-  // Realtime listener for active client workspace if switching to a client's account
-  useEffect(() => {
-    if (!user || !workspaceUid || workspaceUid === user.uid) {
-      setActiveClientProfile(null);
-      return undefined;
-    }
-    const unsub = onSnapshot(
-      doc(db, 'users', workspaceUid),
-      (snap) => {
-        if (snap.exists()) {
-          setActiveClientProfile({ id: snap.id, ...snap.data() } as UserProfile);
-        }
-      },
-      (err) => console.error('Active client profile listener:', err)
-    );
-    return () => unsub();
-  }, [user, workspaceUid]);
+  // The client whose workspace is open, taken from the list of clients.
+  const activeClientProfile = useMemo(
+    () => (workspaceUid ? clientList.find((c) => c.id === workspaceUid) || null : null),
+    [clientList, workspaceUid]
+  );
 
   useEffect(() => {
     if (!user || !workspaceUid || workspaceUid === user.uid) return;
     if (!clientsReady) return;
-    if (!visibleClients.some((c) => c.id === workspaceUid) && !activeClientProfile) {
+    if (!clientList.some((c) => c.id === workspaceUid)) {
       setWorkspaceUid(user.uid);
       setActiveTab(HOME_TAB);
       setSelectedGoalId(null);
     }
-  }, [user, workspaceUid, visibleClients, activeClientProfile, clientsReady]);
+  }, [user, workspaceUid, clientList, clientsReady]);
 
-  // Realtime Firestore: goals for active workspace
+  // The goals in the open workspace: my own, or the ones a client shared with me. Newest first.
   useEffect(() => {
     if (!user || !workspaceUid) {
       setGoals([]);
       setDataLoading(false);
       return;
     }
-
-    setDataLoading(true);
-    setErrorMessage(null);
-
-    const goalsRef = collection(db, 'goals');
-    // The owner loads their own goals. A professional loads every goal shared
-    // with them, because that is the only shape the security rules can prove.
-    // Goals belonging to other clients are filtered out below, so one client's
-    // workspace never shows another client's goals.
-    const viewingClient = workspaceUid !== user.uid;
-    const q = viewingClient
-      ? query(goalsRef, where('viewerUids', 'array-contains', user.uid))
-      : query(goalsRef, where('userId', '==', workspaceUid));
-
-    const unsubscribe = onSnapshot(
-      q,
-      (snapshot) => {
-        const fetchedGoals: Goal[] = [];
-        snapshot.forEach((docSnap) => {
-          const data = docSnap.data();
-          if (viewingClient && data.userId !== workspaceUid) return;
-          fetchedGoals.push(mapGoalDoc(docSnap.id, data));
-        });
-
-        // Sort newest first
-        fetchedGoals.sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
-
-        setGoals(fetchedGoals);
-        setDataLoading(false);
-      },
-      (error) => {
-        console.error('Firestore onSnapshot error:', error);
-        setErrorMessage('Unable to load goals from cloud storage. Please check connection.');
-        setDataLoading(false);
-      }
-    );
-
-    return () => unsubscribe();
-  }, [user, workspaceUid]);
-
+    if (!overview) {
+      setDataLoading(true);
+      return;
+    }
+    const list = workspaceUid === user.uid ? overview.goals : overview.sharedGoals.filter((g) => g.userId === workspaceUid);
+    setGoals(list.map(normalizeGoal).sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || '')));
+    setDataLoading(false);
+  }, [user, workspaceUid, overview]);
 
   /**
-   * Every goal shared with this professional, across all of their clients.
-   *
-   * The workspace listener above only ever loads one workspace at a time, so on
-   * the dashboard it returns the professional's own goals and the per-client
-   * "Assigned Session(s)" counts came out as zero. This keeps the full picture.
+   * Every goal shared with this professional, across all of their clients, so the dashboard can
+   * count "Assigned Session(s)" for each client, not only for the workspace that is open.
    */
   const [sharedGoals, setSharedGoals] = useState<Goal[]>([]);
   const isProfessional = clientList.length > 0 || profile?.persona === 'professional';
-  useEffect(() => {
-    if (!user || !isProfessional) {
-      setSharedGoals([]);
-      return undefined;
+
+  /**
+   * Changes a goal: shown at once, then sent to the server. If the server refuses, the real state
+   * is fetched back and the error is passed on so the caller can say what went wrong.
+   */
+  const saveGoal = async (goalId: string, changes: GoalChanges) => {
+    overviewPoll.touch();
+    setGoals((prev) => prev.map((g) => (g.id === goalId ? { ...g, ...changes } : g)));
+    try {
+      await appApi.patchGoal(goalId, changes);
+      overviewPoll.touch();
+    } catch (err) {
+      await overviewPoll.refresh();
+      throw err;
     }
-    const q = query(collection(db, 'goals'), where('viewerUids', 'array-contains', user.uid));
-    const unsub = onSnapshot(
-      q,
-      (snapshot) => {
-        const rows: Goal[] = [];
-        snapshot.forEach((docSnap) => rows.push(mapGoalDoc(docSnap.id, docSnap.data())));
-        setSharedGoals(rows);
-      },
-      (err) => console.error('Shared goals listener:', err)
-    );
-    return () => unsub();
-  }, [user, isProfessional]);
+  };
 
   const isOwner = !!user && workspaceUid === user.uid;
 
@@ -774,8 +603,8 @@ export default function App() {
 
   /**
    * What the signed-in user may do with one goal. Access lives on the goal
-   * document itself, which is what the Firestore rules check, so the interface
-   * and the database always agree.
+   * itself, which is what the server checks, so the interface and the server
+   * always agree.
    *   'edit' - owner or assigned editor
    *   'view' - assigned read-only professional
    *   null   - not shared with this user
@@ -791,31 +620,6 @@ export default function App() {
 
   const canViewGoal = (goalId: string) => goalAccessLevel(goalId) !== null;
   const canEditGoal = (goalId: string) => goalAccessLevel(goalId) === 'edit';
-
-  // Goals created before per-goal permissions existed carry no access lists yet.
-  // The owner's browser fills them in once, so professionals can be granted read
-  // or edit access from then on.
-  useEffect(() => {
-    if (!isOwner || dataLoading) return;
-    const stale = goals.filter(
-      (g) => !Array.isArray(g.viewerUids) || !Array.isArray(g.editorUids)
-    );
-    if (stale.length === 0) return;
-
-    (async () => {
-      for (const goal of stale) {
-        const { viewerUids, editorUids } = buildGoalAccessArrays(
-          profile?.collaborators,
-          goal.id
-        );
-        try {
-          await updateDoc(doc(db, 'goals', goal.id), { viewerUids, editorUids });
-        } catch (err) {
-          console.error('Goal access backfill failed:', err);
-        }
-      }
-    })();
-  }, [isOwner, dataLoading, goals, profile?.collaborators]);
 
   const canEditSubcategoryTasks = (goalId: string, sub?: Subcategory) => {
     if (isOwner) return true;
@@ -1222,7 +1026,7 @@ export default function App() {
     }
   };
 
-  // FIRESTORE / LOCAL GOAL ACTIONS
+  // GOAL AND ACCOUNT ACTIONS
   /**
    * Records the answer to "how will you use Goal Path?".
    * Purely descriptive: it changes what this account sees, not what it may read.
@@ -1233,7 +1037,7 @@ export default function App() {
     setSavingPersona(true);
     try {
       const chosenAt = new Date().toISOString();
-      await updateDoc(doc(db, 'users', user.uid), { persona, personaChosenAt: chosenAt });
+      await appApi.patchMe({ persona, personaChosenAt: chosenAt });
       setProfile((prev) => (prev ? { ...prev, persona, personaChosenAt: chosenAt } : prev));
       setPersonaPromptDismissed(true);
       setPersonaPickerOpen(false);
@@ -1280,11 +1084,11 @@ export default function App() {
         })
       : { subcategories: [] as Subcategory[], tasks: [] as TaskItem[] };
 
-    // A long goal with many routines can outgrow one Firestore document; say so instead of failing at the database.
+    // A long goal with many routines can outgrow what one goal can hold; say so instead of failing at the server.
     if (!fitsInGoalDocument(planned.subcategories, planned.tasks)) return null;
 
-    const docRef = await addDoc(collection(db, 'goals'), {
-      userId: user.uid,
+    overviewPoll.touch();
+    const created = await appApi.createGoal({
       title: plan.title,
       category: plan.category,
       description: plan.description,
@@ -1293,10 +1097,11 @@ export default function App() {
       milestones,
       subcategories: planned.subcategories,
       tasks: planned.tasks,
-      viewerUids: [],
-      editorUids: [],
     });
-    return docRef.id;
+    // Show it straight away, so opening it never finds an empty list.
+    setGoals((prev) => (prev.some((g) => g.id === created.id) ? prev : [normalizeGoal(created), ...prev]));
+    overviewPoll.touch();
+    return created.id;
   };
 
   /**
@@ -1318,7 +1123,7 @@ export default function App() {
       if (id) createdIds.push(id);
     }
 
-    // Firestore rejects undefined, so only answered questions are stored.
+    // Only answered questions are stored.
     const stored: Record<string, unknown> = {
       focus: answers.focus,
       days: answers.days,
@@ -1330,7 +1135,7 @@ export default function App() {
     if (answers.eating) stored.eating = answers.eating;
     if (answers.activity) stored.activity = answers.activity;
 
-    await updateDoc(doc(db, 'users', user.uid), {
+    await appApi.patchMe({
       persona: answers.persona,
       personaChosenAt: chosenAt,
       onboardedAt: chosenAt,
@@ -1384,61 +1189,31 @@ export default function App() {
       completed: false,
     }));
 
-    const newGoalId = `goal-${Date.now()}`;
-    const docData: Goal = {
-      id: newGoalId,
-      userId: user.uid,
-      title: newGoalData.title,
-      category: newGoalData.category || 'General',
-      description: newGoalData.description || '',
-      createdAt: todayDate,
-      targetDate: newGoalData.targetDate,
-      milestones,
-      subcategories: [],
-      tasks: [],
-    };
-
     try {
-      const docRef = await addDoc(collection(db, 'goals'), docData);
-      const createdId = docRef.id;
+      overviewPoll.touch();
+      // Professionals picked while creating start with editing access; the server records it on
+      // the goal and on the owner's roster together.
+      const created = await appApi.createGoal({
+        title: newGoalData.title,
+        category: newGoalData.category || 'General',
+        description: newGoalData.description || '',
+        createdAt: todayDate,
+        targetDate: newGoalData.targetDate,
+        milestones,
+        subcategories: [],
+        tasks: [],
+        assignedProfessionalUids: newGoalData.assignedProfessionalUids || [],
+      });
 
-      // Professionals picked during creation start with editing access. The goal
-      // document gets the access lists Firestore enforces, and the owner's roster
-      // records the same permission so both stay in step.
-      const assignedUids = newGoalData.assignedProfessionalUids || [];
-      if (assignedUids.length > 0) {
-        const userRef = doc(db, 'users', user.uid);
-        const fresh = await getDoc(userRef);
-        const data = fresh.data() || {};
-        const collaborators: Collaborator[] = data.collaborators || [];
-
-        const updatedCollabs: Collaborator[] = collaborators.map((c) =>
-          assignedUids.includes(c.uid)
-            ? {
-                ...c,
-                goalAccess: { ...(c.goalAccess || {}), [createdId]: 'edit' as GoalAccessLevel },
-              }
-            : c
-        );
-
-        await updateDoc(userRef, { collaborators: updatedCollabs });
-
-        const { viewerUids, editorUids } = buildGoalAccessArrays(updatedCollabs, createdId);
-        await updateDoc(doc(db, 'goals', createdId), { viewerUids, editorUids });
-      }
-
-      // Firestore echoes the new document back a moment later. Until it does,
-      // the detail view has nothing to render and the screen would sit blank,
-      // so hand the list the goal we just created straight away.
-      const createdGoal: Goal = { ...docData, id: createdId };
-      setGoals((prev) =>
-        prev.some((g) => g.id === createdId) ? prev : [createdGoal, ...prev]
-      );
-      setSelectedGoalId(createdId);
+      // Show it straight away, so the goal page never finds an empty list.
+      setGoals((prev) => (prev.some((g) => g.id === created.id) ? prev : [normalizeGoal(created), ...prev]));
+      overviewPoll.touch();
+      if ((newGoalData.assignedProfessionalUids || []).length > 0) void overviewPoll.refresh();
+      setSelectedGoalId(created.id);
       setActiveTab('detail');
     } catch (err) {
       console.error('Create Goal error:', err);
-      setErrorMessage('Could not save goal to Firestore. Check permissions.');
+      setErrorMessage(apiProblem(err, 'Could not save the goal. Please try again.'));
     }
   };
 
@@ -1446,8 +1221,7 @@ export default function App() {
     goalId: string,
     updates: { title?: string; category?: string; description?: string }
   ) => {
-    // Title, category and description are owner-only: the security rules never
-    // let a collaborator change them.
+    // Title, category and description are owner-only: the server never lets a collaborator change them.
     if (!isOwner) {
       setErrorMessage('Only the goal owner can change these details.');
       return;
@@ -1456,7 +1230,7 @@ export default function App() {
     if (!targetGoal) return;
 
     try {
-      await updateDoc(doc(db, 'goals', goalId), updates);
+      await saveGoal(goalId, updates);
     } catch (err) {
       console.error('Update goal details error:', err);
       setErrorMessage('Failed to update goal details.');
@@ -1467,7 +1241,10 @@ export default function App() {
     if (!isOwner) return;
 
     try {
-      await deleteDoc(doc(db, 'goals', goalId));
+      overviewPoll.touch();
+      await appApi.deleteGoal(goalId);
+      setGoals((prev) => prev.filter((g) => g.id !== goalId));
+      overviewPoll.touch();
       if (selectedGoalId === goalId) {
         setSelectedGoalId(null);
         setActiveTab('dashboard');
@@ -1504,7 +1281,7 @@ export default function App() {
     const updatedTargetDate = finalTargetDate > targetGoal.targetDate ? finalTargetDate : targetGoal.targetDate;
 
     try {
-      await updateDoc(doc(db, 'goals', goalId), {
+      await saveGoal(goalId, {
         targetDate: updatedTargetDate,
         milestones: updatedMilestones,
       });
@@ -1525,7 +1302,7 @@ export default function App() {
     );
 
     try {
-      await updateDoc(doc(db, 'goals', goalId), {
+      await saveGoal(goalId, {
         milestones: updatedMilestones,
       });
     } catch (err) {
@@ -1544,7 +1321,7 @@ export default function App() {
     );
 
     try {
-      await updateDoc(doc(db, 'goals', goalId), {
+      await saveGoal(goalId, {
         milestones: updatedMilestones,
       });
     } catch (err) {
@@ -1567,7 +1344,7 @@ export default function App() {
     };
 
     try {
-      await updateDoc(doc(db, 'goals', goalId), {
+      await saveGoal(goalId, {
         subcategories: [...(targetGoal.subcategories || []), newSub],
       });
       return newSub.id;
@@ -1579,9 +1356,9 @@ export default function App() {
   };
 
   /**
-   * One goal is one Firestore document, and a weekly routine multiplies the days
+   * One goal is stored as one record, and a weekly routine multiplies the days
    * and tasks in it. A change that would push the plan past the size budget is
-   * refused here, with a plain message, instead of failing at the database.
+   * refused here, with a plain message, instead of failing at the server.
    */
   const fitsInGoalDocument = (subcategories: Subcategory[], tasks: TaskItem[]): boolean => {
     if (estimateBytes({ subcategories, tasks }) <= MAX_GOAL_CONTENT_BYTES) return true;
@@ -1618,7 +1395,7 @@ export default function App() {
     if (!fitsInGoalDocument(created.subcategories, created.tasks)) return null;
 
     try {
-      await updateDoc(doc(db, 'goals', goalId), { subcategories: created.subcategories });
+      await saveGoal(goalId, { subcategories: created.subcategories });
       setSuccessMessage(
         `“${name}” added to ${created.count} ${created.count === 1 ? 'day' : 'days'}: ${describePattern(pattern)}.`
       );
@@ -1660,7 +1437,7 @@ export default function App() {
     if (!fitsInGoalDocument(result.subcategories, result.tasks)) return;
 
     try {
-      await updateDoc(doc(db, 'goals', goalId), {
+      await saveGoal(goalId, {
         subcategories: result.subcategories,
         tasks: result.tasks,
       });
@@ -1686,7 +1463,7 @@ export default function App() {
     const updatedSubcategories = updateFrom(targetGoal.subcategories || [], sub, { name });
 
     try {
-      await updateDoc(doc(db, 'goals', goalId), {
+      await saveGoal(goalId, {
         subcategories: updatedSubcategories,
       });
     } catch (err) {
@@ -1724,7 +1501,7 @@ export default function App() {
     );
 
     try {
-      await updateDoc(doc(db, 'goals', goalId), {
+      await saveGoal(goalId, {
         subcategories: updatedSubcategories,
         tasks: updatedTasks,
       });
@@ -1746,7 +1523,7 @@ export default function App() {
     });
 
     try {
-      await updateDoc(doc(db, 'goals', goalId), {
+      await saveGoal(goalId, {
         subcategories: updatedSubcategories,
       });
     } catch (err) {
@@ -1783,7 +1560,7 @@ export default function App() {
       });
       if (!fitsInGoalDocument(targetGoal.subcategories || [], nextTasks)) return;
       try {
-        await updateDoc(doc(db, 'goals', goalId), { tasks: nextTasks });
+        await saveGoal(goalId, { tasks: nextTasks });
       } catch (err) {
         console.error('Add task error:', err);
         setErrorMessage('Failed to add task.');
@@ -1801,7 +1578,7 @@ export default function App() {
     };
 
     try {
-      await updateDoc(doc(db, 'goals', goalId), {
+      await saveGoal(goalId, {
         tasks: [newTask, ...targetGoal.tasks],
       });
     } catch (err) {
@@ -1824,7 +1601,7 @@ export default function App() {
     );
 
     try {
-      await updateDoc(doc(db, 'goals', goalId), {
+      await saveGoal(goalId, {
         tasks: updatedTasks,
       });
     } catch (err) {
@@ -1845,7 +1622,7 @@ export default function App() {
     const updatedTasks = targetGoal.tasks.filter((t) => t.id !== taskId);
 
     try {
-      await updateDoc(doc(db, 'goals', goalId), {
+      await saveGoal(goalId, {
         tasks: updatedTasks,
       });
     } catch (err) {
@@ -1872,7 +1649,7 @@ export default function App() {
     );
 
     try {
-      await updateDoc(doc(db, 'goals', goalId), {
+      await saveGoal(goalId, {
         tasks: updatedTasks,
       });
     } catch (err) {
@@ -1902,7 +1679,7 @@ export default function App() {
           day: todayDate,
         });
         if (!fitsInGoalDocument(next.subcategories, next.tasks)) return;
-        await updateDoc(doc(db, 'goals', id), { subcategories: next.subcategories, tasks: next.tasks });
+        await saveGoal(id, { subcategories: next.subcategories, tasks: next.tasks });
       }
       setSuccessMessage(picked.length === 1 ? 'Moved to today.' : `${picked.length} tasks moved to today.`);
     } catch (err) {
@@ -1916,7 +1693,7 @@ export default function App() {
     const target = goals.find((g) => g.id === goalId);
     if (!target) return;
     try {
-      await updateDoc(doc(db, 'goals', goalId), { tasks: skipTasks(target.tasks || [], [taskId]) });
+      await saveGoal(goalId, { tasks: skipTasks(target.tasks || [], [taskId]) });
     } catch (err) {
       console.error('Skip missed task error:', err);
       setErrorMessage('Failed to skip the task.');
@@ -1941,103 +1718,30 @@ export default function App() {
     }
 
     try {
-      const codeSnap = await getDoc(doc(db, 'codes', code));
-      if (!codeSnap.exists()) {
-        setConnectNotice({ type: 'error', text: 'No account found for that code.' });
-        return;
-      }
-      const toUid = codeSnap.data().uid;
-      if (toUid === user.uid) {
-        setConnectNotice({ type: 'error', text: 'You cannot connect to your own account.' });
-        return;
-      }
-
-      // Ask with a query rather than reading the request document directly.
-      // Reading a document that does not exist yet is refused by the security
-      // rules, so a first-time request used to fail as "permission denied".
-      const existingSnap = await getDocs(
-        query(
-          collection(db, 'accessRequests'),
-          where('fromUid', '==', user.uid),
-          where('toUid', '==', toUid)
-        )
-      );
-      const existing = existingSnap.docs[0];
-
-      if (existing) {
-        const status = existing.data().status;
-        if (status === 'pending') {
-          setConnectNotice({ type: 'error', text: 'A request is already waiting for this client.' });
-          return;
-        }
-        if (status === 'approved') {
-          setConnectNotice({ type: 'error', text: 'You already have access to this client.' });
-          return;
-        }
-        // Denied or removed before: re-open the existing request. Overwriting it
-        // would count as changing more than the status, which the rules refuse.
-        await updateDoc(existing.ref, {
-          status: 'pending',
-          role,
-          createdAt: new Date().toISOString(),
-        });
-        setConnectNotice({ type: 'ok', text: 'Request sent again. The client must approve it.' });
-        // Asking again clears an earlier removal, so the client comes back into
-        // the list once they approve.
-        await clearWithdrawnClient(toUid);
-        return;
-      }
-
-      await setDoc(doc(db, 'accessRequests', requestDocId(user.uid, toUid)), {
-        fromUid: user.uid,
-        fromName: user.displayName || user.email || 'Professional',
-        fromEmail: user.email || '',
-        fromPhoto: user.photoURL || '',
-        toUid,
-        toCode: code,
-        role,
-        status: 'pending',
-        createdAt: new Date().toISOString(),
+      const { result } = await appApi.requestAccess(code, role);
+      setConnectNotice({
+        type: 'ok',
+        text: result === 'sent_again' ? 'Request sent again. The client must approve it.' : 'Request sent. The client must approve it.',
       });
-      setConnectNotice({ type: 'ok', text: 'Request sent. The client must approve it.' });
-      await clearWithdrawnClient(toUid);
+      void overviewPoll.refresh();
     } catch (err: unknown) {
       console.error('Request access error:', err);
-      const msg = err instanceof Error ? err.message : 'Could not send request. Please try again.';
-      setConnectNotice({
-        type: 'error',
-        text: msg.includes('permission') || msg.includes('PERMISSION')
-          ? 'Permission denied. Please ensure you are signed in and try again.'
-          : msg,
-      });
+      const reasons: Record<string, string> = {
+        not_found: 'No account found for that code.',
+        own_account: 'You cannot connect to your own account.',
+        already_pending: 'A request is already waiting for this client.',
+        already_approved: 'You already have access to this client.',
+      };
+      const code = err instanceof ApiError ? err.code : '';
+      setConnectNotice({ type: 'error', text: reasons[code] ?? apiProblem(err, 'Could not send request. Please try again.') });
     }
   };
 
-  /**
-   * Pushes the owner's collaborator permissions onto the goal documents, which
-   * is what the Firestore rules read. Goals not passed in are left untouched.
-   */
-  const syncGoalAccess = async (
-    collaborations: Collaborator[],
-    goalIds?: string[]
-  ): Promise<void> => {
-    const targets = goalIds ? goals.filter((g) => goalIds.includes(g.id)) : goals;
-
-    for (const goal of targets) {
-      const { viewerUids, editorUids } = buildGoalAccessArrays(collaborations, goal.id);
-      if (
-        (goal.viewerUids || []).join(',') === viewerUids.join(',') &&
-        (goal.editorUids || []).join(',') === editorUids.join(',')
-      ) {
-        continue;
-      }
-      try {
-        await updateDoc(doc(db, 'goals', goal.id), { viewerUids, editorUids });
-      } catch (err) {
-        console.error('Sync goal access error:', err);
-        setErrorMessage('Saved the assignment but could not update goal access.');
-      }
-    }
+  /** Takes an updated account from the server and makes the goals' access lists catch up. */
+  const afterAccessChange = (account?: UserProfile) => {
+    if (account) setProfile(account);
+    overviewPoll.touch();
+    void overviewPoll.refresh();
   };
 
   const handleApproveRequest = async (
@@ -2046,34 +1750,7 @@ export default function App() {
   ) => {
     if (!user) return;
     try {
-      const userRef = doc(db, 'users', user.uid);
-      const fresh = await getDoc(userRef);
-      const data = fresh.data() || {};
-      const collaborators: Collaborator[] = data.collaborators || [];
-      const collaboratorUids: string[] = data.collaboratorUids || [];
-
-      const updatedCollaborators: Collaborator[] = [
-        ...collaborators.filter((c) => c.uid !== request.fromUid),
-        {
-          uid: request.fromUid,
-          role: request.role,
-          addedAt: new Date().toISOString(),
-          name: request.fromName || '',
-          email: request.fromEmail || '',
-          goalAccess,
-        },
-      ];
-
-      const updatedUids = Array.from(new Set([...collaboratorUids, request.fromUid]));
-
-      await updateDoc(userRef, {
-        collaborators: updatedCollaborators,
-        collaboratorUids: updatedUids,
-      });
-
-      await updateDoc(doc(db, 'accessRequests', request.id), { status: 'approved' });
-
-      await syncGoalAccess(updatedCollaborators);
+      afterAccessChange(await appApi.approveRequest(request.id, goalAccess));
     } catch (err) {
       console.error('Approve request error:', err);
       setErrorMessage('Failed to approve request.');
@@ -2085,28 +1762,8 @@ export default function App() {
     goalAccess: Record<string, GoalAccessLevel>
   ) => {
     if (!user) return;
-
-    const applyAccess = (collaborators: Collaborator[]): Collaborator[] =>
-      collaborators.map((c) => {
-        if (c.uid !== professionalUid) return c;
-        const next: Collaborator = { ...c, goalAccess };
-        delete next.assignedGoalIds;
-        return next;
-      });
-
     try {
-      const userRef = doc(db, 'users', user.uid);
-      const fresh = await getDoc(userRef);
-      const data = fresh.data() || {};
-      const collaborators: Collaborator[] = data.collaborators || [];
-
-      const updated = applyAccess(collaborators);
-
-      await updateDoc(userRef, {
-        collaborators: updated,
-      });
-
-      await syncGoalAccess(updated);
+      afterAccessChange(await appApi.setCollaboratorAccess(professionalUid, goalAccess));
     } catch (err) {
       console.error('Update assigned goals error:', err);
       setErrorMessage('Failed to update assigned goals.');
@@ -2118,34 +1775,13 @@ export default function App() {
     assignments: Record<string, GoalAccessLevel>
   ) => {
     if (!user || !isOwner) return;
-
-    const applyAssignments = (collaborators: Collaborator[]): Collaborator[] =>
-      collaborators.map((c) => {
-        const level = assignments[c.uid];
-        const goalAccess = { ...(c.goalAccess || {}) };
-        if (level === 'view' || level === 'edit') {
-          goalAccess[goalId] = level;
-        } else {
-          delete goalAccess[goalId];
-        }
-        const next: Collaborator = { ...c, goalAccess };
-        delete next.assignedGoalIds;
-        return next;
-      });
-
+    // Everyone not listed loses access to this goal.
+    const everyone: Record<string, GoalAccessLevel | null> = {};
+    (profile?.collaborators || []).forEach((c) => {
+      everyone[c.uid] = assignments[c.uid] ?? null;
+    });
     try {
-      const userRef = doc(db, 'users', user.uid);
-      const fresh = await getDoc(userRef);
-      const data = fresh.data() || {};
-      const collaborators: Collaborator[] = data.collaborators || [];
-
-      const updated = applyAssignments(collaborators);
-
-      await updateDoc(userRef, {
-        collaborators: updated,
-      });
-
-      await syncGoalAccess(updated, [goalId]);
+      afterAccessChange(await appApi.setGoalAssignments(goalId, everyone));
     } catch (err) {
       console.error('Update goal collaborator assignments error:', err);
       setErrorMessage('Failed to update assigned professionals for this goal.');
@@ -2154,57 +1790,19 @@ export default function App() {
 
   const handleDenyRequest = async (request: AccessRequest) => {
     try {
-      await updateDoc(doc(db, 'accessRequests', request.id), { status: 'denied' });
+      await appApi.denyRequest(request.id);
+      afterAccessChange();
     } catch (err) {
       console.error('Deny request error:', err);
       setErrorMessage('Failed to deny request.');
     }
   };
 
+  /** The client removes a connected professional; their access ends at once. */
   const handleRemoveCollaborator = async (professionalUid: string) => {
     if (!user) return;
     try {
-      const userRef = doc(db, 'users', user.uid);
-      const fresh = await getDoc(userRef);
-      const data = fresh.data() || {};
-      const nextCollaborators = (data.collaborators || []).filter(
-        (c: { uid: string }) => c.uid !== professionalUid
-      );
-      const nextCollaboratorUids = (data.collaboratorUids || []).filter(
-        (id: string) => id !== professionalUid
-      );
-
-      // Optimistic local state update
-      setProfile((prev) =>
-        prev
-          ? {
-              ...prev,
-              collaborators: nextCollaborators,
-              collaboratorUids: nextCollaboratorUids,
-            }
-          : null
-      );
-
-      await updateDoc(userRef, {
-        collaborators: nextCollaborators,
-        collaboratorUids: nextCollaboratorUids,
-      });
-
-      // Drop the removed professional from every goal's access lists.
-      await syncGoalAccess(nextCollaborators);
-
-      // Mark any matching request docs as removed. Done by query, not by reading
-      // one document, because a read of a document that does not exist is refused
-      // by the rules and used to surface as a failure.
-      const q = query(
-        collection(db, 'accessRequests'),
-        where('fromUid', '==', professionalUid),
-        where('toUid', '==', user.uid)
-      );
-      const snap = await getDocs(q);
-      for (const d of snap.docs) {
-        await updateDoc(d.ref, { status: 'removed' }).catch(() => {});
-      }
+      afterAccessChange(await appApi.removeCollaborator(professionalUid));
     } catch (err) {
       console.error('Remove collaborator error:', err);
       setErrorMessage('Failed to remove access.');
@@ -2217,49 +1815,19 @@ export default function App() {
     setActiveTab(HOME_TAB);
   };
 
-  /** Undoes an earlier removal when the professional asks for that client again. */
-  const clearWithdrawnClient = async (clientId: string) => {
-    if (!user || !clientId || !withdrawnClientIds.includes(clientId)) return;
-    const nextWithdrawn = withdrawnClientIds.filter((id) => id !== clientId);
-    setWithdrawnClientIds(nextWithdrawn);
-    await updateDoc(doc(db, 'users', user.uid), { withdrawnClients: nextWithdrawn }).catch(() => {});
-  };
-
-  /**
-   * Removes a client from this professional's list.
-   *
-   * Access is granted by the client's own account, so the professional cannot
-   * delete it directly. Instead the client id is recorded on the professional's
-   * own profile (which hides the client here, on every device) and the shared
-   * request is marked "removed". The client's account clears the professional's
-   * access the next time it signs in.
-   */
+  /** A professional removes a client from their list; the client's side is cleaned up straight away. */
   const handleRemoveClient = async (clientId: string, clientName: string) => {
     if (!user || !clientId) return;
     try {
-      const nextWithdrawn = Array.from(new Set([...withdrawnClientIds, clientId]));
-      setWithdrawnClientIds(nextWithdrawn);
       if (workspaceUid === clientId) {
         setWorkspaceUid(user.uid);
         setSelectedGoalId(null);
         setActiveTab(HOME_TAB);
       }
-
-      await updateDoc(doc(db, 'users', user.uid), { withdrawnClients: nextWithdrawn });
-
-      const q = query(
-        collection(db, 'accessRequests'),
-        where('fromUid', '==', user.uid),
-        where('toUid', '==', clientId)
-      );
-      const snap = await getDocs(q);
-      for (const d of snap.docs) {
-        await updateDoc(d.ref, { status: 'removed' }).catch(() => {});
-      }
-
-      setSuccessMessage(
-        `${clientName} was removed from your client list. Their account drops your access the next time they sign in.`
-      );
+      await appApi.removeClient(clientId);
+      setClientList((prev) => prev.filter((c) => c.id !== clientId));
+      afterAccessChange();
+      setSuccessMessage(`${clientName} was removed from your client list.`);
     } catch (err) {
       console.error('Remove client error:', err);
       setErrorMessage('Could not remove that client. Please try again.');
@@ -2268,42 +1836,22 @@ export default function App() {
 
   /**
    * Leaving professional mode: disconnect from every client and flip the
-   * account back to a plain client. Each client link is marked "removed" and
-   * recorded as withdrawn, so the client's account drops this access on their
-   * next sign-in, the same as removing one client from the Connect tab.
+   * account back to a plain client.
    */
   const handleLeaveProfessional = async () => {
     if (!user) return;
     setSavingPersona(true);
     try {
-      const clientIds = visibleClients.map((c) => c.id || '').filter(Boolean);
-      if (clientIds.length > 0) {
-        const nextWithdrawn = Array.from(new Set([...withdrawnClientIds, ...clientIds]));
-        setWithdrawnClientIds(nextWithdrawn);
-        await updateDoc(doc(db, 'users', user.uid), { withdrawnClients: nextWithdrawn });
-        for (const clientId of clientIds) {
-          const q = query(
-            collection(db, 'accessRequests'),
-            where('fromUid', '==', user.uid),
-            where('toUid', '==', clientId)
-          );
-          const snap = await getDocs(q);
-          for (const d of snap.docs) {
-            await updateDoc(d.ref, { status: 'removed' }).catch(() => {});
-          }
-        }
-      }
-
+      const { profile: account, disconnected } = await appApi.leaveProfessional();
       setWorkspaceUid(user.uid);
       setSelectedGoalId(null);
-      const chosenAt = new Date().toISOString();
-      await updateDoc(doc(db, 'users', user.uid), { persona: 'client', personaChosenAt: chosenAt });
-      setProfile((prev) => (prev ? { ...prev, persona: 'client', personaChosenAt: chosenAt } : prev));
+      setClientList([]);
+      afterAccessChange(account);
       setActiveTab('professional');
       setSuccessMessage(
-        clientIds.length > 0
-          ? `You've left professional mode and disconnected from ${clientIds.length} client${
-              clientIds.length > 1 ? 's' : ''
+        disconnected > 0
+          ? `You've left professional mode and disconnected from ${disconnected} client${
+              disconnected > 1 ? 's' : ''
             }. You're back to a client account.`
           : "You've left professional mode. You're back to a client account."
       );
@@ -2318,8 +1866,13 @@ export default function App() {
   // LOADING & LOGIN GATES
   if (authLoading || (user && dataLoading)) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
+      <div className="min-h-screen flex flex-col items-center justify-center gap-4">
         <GoalPathLoader />
+        {serverSlow && (
+          <p className="meta max-w-xs px-6 text-center">
+            Waking up the server. This can take up to a minute when it has been idle.
+          </p>
+        )}
       </div>
     );
   }
@@ -2444,7 +1997,7 @@ export default function App() {
                   {workspaceProfile.displayName || workspaceProfile.email || 'Client'}
                 </span>
               </div>
-            ) : visibleClients.length > 0 ? (
+            ) : clientList.length > 0 ? (
               <div className="neu-inset-sm flex items-center gap-1 p-0.5 sm:p-1 text-xs font-semibold min-w-0 shrink">
                 <span className="text-[10px] text-slate-500 font-bold pl-1 hidden md:inline">
                   Workspace
@@ -2456,7 +2009,7 @@ export default function App() {
                   className="neu-sm press px-2.5 py-1.5 rounded-xl text-slate-800 text-[11px] sm:text-xs font-bold w-full min-w-0 max-w-[130px] sm:max-w-[190px]"
                   options={[
                     { value: user.uid, label: 'My Workspace' },
-                    ...visibleClients.map((c) => {
+                    ...clientList.map((c) => {
                       return {
                         value: c.id || '',
                         label: c.displayName || c.email || 'Client',
@@ -2774,7 +2327,7 @@ export default function App() {
 
                 {/* Clients you work with: one row each, and the whole row is the
                     control, so nobody has to guess that a name is clickable. */}
-                {isOwner && visibleClients.length > 0 && (
+                {isOwner && clientList.length > 0 && (
                   <section className="rise rise-2 neu-deep p-4 sm:p-5">
                     <div className="flex items-center justify-between gap-3 mb-3">
                       <div className="flex items-center gap-2.5 min-w-0">
@@ -2791,12 +2344,12 @@ export default function App() {
                         </div>
                       </div>
                       <span className="neu-sm shrink-0 text-[11px] font-bold text-slate-700 px-2.5 py-1 rounded-lg tabular-nums">
-                        {visibleClients.length}
+                        {clientList.length}
                       </span>
                     </div>
 
                     <ul className="space-y-2.5">
-                      {visibleClients.map((client) => {
+                      {clientList.map((client) => {
                         const collab = (client.collaborators || []).find((c) => c.uid === user.uid);
                         // Goals are shared through the client's own records, so the
                         // count has to come from every goal shared with this
@@ -2915,7 +2468,9 @@ export default function App() {
                     >
                       <Target className="w-7 h-7" />
                     </div>
-                    <h3 className="text-base font-semibold text-slate-800">No matching goals found</h3>
+                    <h3 className="text-base font-semibold text-slate-800">
+                      {goals.length === 0 ? 'No goals yet' : 'No matching goals found'}
+                    </h3>
                     <p className="text-slate-600 font-medium text-sm max-w-sm mx-auto mt-1 mb-5">
                       {searchQuery
                         ? 'Try clearing your search query or create a new goal.'
@@ -3463,7 +3018,7 @@ export default function App() {
                 incomingRequests={incomingRequests}
                 incomingError={incomingError}
                 outgoingRequests={outgoingRequests}
-                clientList={visibleClients}
+                clientList={clientList}
                 connectNotice={connectNotice}
                 workspaceUid={workspaceUid}
                 goals={goals}
@@ -3495,7 +3050,7 @@ export default function App() {
           <div className="flex items-center gap-2">
             <span>Goal Path App</span>
             <span>•</span>
-            <span>Firestore Cloud Sync Active</span>
+            <span>Saved to your account</span>
           </div>
           {/* The address is the one thing here worth acting on, so it is a button
               that copies itself rather than a line of text. */}

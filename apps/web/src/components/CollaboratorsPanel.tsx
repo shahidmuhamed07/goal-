@@ -1,8 +1,7 @@
 import React, { useState } from 'react';
 import { LogOut, Check, Target, Eye, Pencil, BadgeCheck, ExternalLink, Trash2, MessageCircle, ArrowRight } from 'lucide-react';
 import { User } from 'firebase/auth';
-import { doc, getDoc } from 'firebase/firestore';
-import { db } from '../firebase';
+import { appApi } from '../api/appApi';
 import {
   UserProfile,
   AccessRequest,
@@ -149,9 +148,8 @@ export const CollaboratorsPanel: React.FC<CollaboratorsPanelProps> = ({
     setCredentialProfile(null);
     setCredentialLoading(true);
     try {
-      const snap = await getDoc(doc(db, 'publicProfiles', collab.uid));
-      if (snap.exists()) {
-        const data = snap.data() as Partial<ProfessionalProfile>;
+      const data = await appApi.getPublicProfile(collab.uid);
+      if (data) {
         setCredentialProfile({
           uid: collab.uid,
           roles: [],

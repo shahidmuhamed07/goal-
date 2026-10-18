@@ -1,11 +1,9 @@
-
-   {
-     "apiKey": "AIzaSyD-8Cl4OGoNvecv-p8p7KlHZgShoFLuN7o",
-     "authDomain": "goal-path-9f4cc.firebaseapp.com",
-     "projectId": "goal-path-9f4cc",
-     "storageBucket": "goal-path-9f4cc.firebasestorage.app",
-     "messagingSenderId": "87360274095",
-     "appId": "1:87360274095:web:e068ad7ad16821eec75e5a",
-     "measurementId": "G-R4YXHYCRD3",
-     "firestoreDatabaseId": "(default)"
-   }
+{
+  "apiKey": "AIzaSyD-8Cl4OGoNvecv-p8p7KlHZgShoFLuN7o",
+  "authDomain": "goal-path-9f4cc.firebaseapp.com",
+  "projectId": "goal-path-9f4cc",
+  "storageBucket": "goal-path-9f4cc.firebasestorage.app",
+  "messagingSenderId": "87360274095",
+  "appId": "1:87360274095:web:e068ad7ad16821eec75e5a",
+  "measurementId": "G-R4YXHYCRD3"
+}

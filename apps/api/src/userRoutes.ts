@@ -94,7 +94,7 @@ export function createUserRoutes(store: ContentStore, options: UserRoutesOptions
     }
   };
   // Only these doors need a login; anything else falls through to the server's own "not found".
-  router.use(['/me', '/clients', '/users', '/public-profiles', '/access-requests', '/collaborators', '/goals', '/chats'], requireUser);
+  router.use(['/me', '/overview', '/clients', '/users', '/public-profiles', '/access-requests', '/collaborators', '/goals', '/chats'], requireUser);
 
   const me = (res: Response) => res.locals.user as Identity;
   const wrap =
@@ -208,6 +208,33 @@ export function createUserRoutes(store: ContentStore, options: UserRoutesOptions
       const updated = { ...profile, ...changes } as UserProfile;
       await saveProfile(updated);
       res.json(updated);
+    }),
+  );
+
+  /**
+   * Everything the app shows, in one answer: my account, my clients, my requests,
+   * my conversations, my goals and the goals shared with me. The app asks for this
+   * every few seconds instead of keeping a live connection open.
+   */
+  router.get(
+    '/overview',
+    wrap(async (_req, res) => {
+      const uid = me(res).uid;
+      const profile = await getProfile(uid);
+      if (!profile) {
+        res.status(404).json({ error: 'no_account' });
+        return;
+      }
+      const [clients, incoming, outgoing, threads, goals, sharedGoals] = await Promise.all([
+        store.find('users', { collaboratorUids: uid }),
+        store.find('accessRequests', { toUid: uid }),
+        store.find('accessRequests', { fromUid: uid }),
+        store.find('chats', { participantUids: uid }),
+        store.find('goals', { userId: uid }),
+        store.find('goals', { viewerUids: uid }),
+      ]);
+      res.set('Cache-Control', 'no-store');
+      res.json({ profile, clients: clients.map(asProfile).map(publicView), incoming, outgoing, threads, goals, sharedGoals });
     }),
   );
 

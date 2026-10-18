@@ -1,12 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { LiveContent, PublicBanner, PublicPage, PublicPopup } from '@goalpath/shared';
 
-/**
- * Where the content API lives. In development it defaults to the local API; in
- * production it must be set at build time (VITE_API_URL), and when it is not
- * set the app simply shows no CMS content.
- */
-const API_URL: string = (import.meta.env.VITE_API_URL as string | undefined) ?? (import.meta.env.DEV ? 'http://localhost:3002' : '');
+import { API_URL } from '../api/config';
 
 /** How often to look for changes while the app stays open. */
 const REFRESH_MS = 60_000;

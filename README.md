@@ -8,7 +8,7 @@ This repository holds everything in one place (a *monorepo*):
 |---|---|---|
 | `apps/web` | The app people use. React + Vite, login with Firebase Auth. | Live |
 | `apps/admin` | The admin dashboard: banners, popups, pages and starter plans. | Working; deploys to its own Firebase Hosting site (see "Going live") |
-| `apps/api` | The backend (Express + MongoDB). Serves live content and the admin routes. | Working; admin routes have no login yet |
+| `apps/api` | The backend (Express + MongoDB). Holds people's data (goals, profiles, connections, chat), serves live content and the admin routes. Checks the Firebase login on every call. | Working |
 | `packages/shared` | Types and rules the three programs above agree on. | Working |
 | `context/` | Project notes: overview, architecture, UI, rules, progress. | Keep updated |
 

@@ -332,6 +332,60 @@ describe('what a connected professional can see and do', () => {
   });
 });
 
+describe('the overview', () => {
+  const { server, call } = start();
+  let goal: Goal;
+  before(async () => {
+    const codes = await signInAll(call);
+    goal = await connect(call, codes, 'edit');
+    await call('bob', 'POST', `/chats/alice__bob/messages`, { text: 'hello' });
+  });
+  after(() => server.close());
+
+  interface Overview {
+    profile: UserProfile;
+    clients: UserProfile[];
+    incoming: AccessRequest[];
+    outgoing: AccessRequest[];
+    threads: ChatThread[];
+    goals: Goal[];
+    sharedGoals: Goal[];
+  }
+
+  it('gives a client their account, goals, requests and conversations', async () => {
+    const res = await call('alice', 'GET', '/overview');
+    assert.equal(res.status, 200);
+    const o = res.body as Overview;
+    assert.equal(o.profile.id, 'alice');
+    assert.deepEqual(o.goals.map((g) => g.id), [goal.id]);
+    assert.equal(o.incoming.length, 1);
+    assert.equal(o.threads.length, 1);
+    assert.deepEqual(o.sharedGoals, []);
+    assert.deepEqual(o.clients, []);
+  });
+
+  it('gives a professional their clients and the goals shared with them, without the client’s code', async () => {
+    const o = (await call('bob', 'GET', '/overview')).body as Overview;
+    assert.deepEqual(o.sharedGoals.map((g) => g.id), [goal.id]);
+    assert.deepEqual(o.goals, []);
+    assert.equal(o.clients.length, 1);
+    assert.equal(o.clients[0].code, undefined);
+    assert.equal(o.outgoing.length, 1);
+  });
+
+  it('gives a stranger nothing of anyone else’s', async () => {
+    const o = (await call('carol', 'GET', '/overview')).body as Overview;
+    assert.deepEqual([o.goals, o.sharedGoals, o.clients, o.incoming, o.outgoing, o.threads], [[], [], [], [], [], []]);
+  });
+
+  it('needs a login and an account', async () => {
+    assert.equal((await call(null, 'GET', '/overview')).status, 401);
+    const fresh = start();
+    assert.equal((await fresh.call('dan', 'GET', '/overview')).status, 404);
+    fresh.server.close();
+  });
+});
+
 describe('view-only access', () => {
   const { server, call } = start();
   let goal: Goal;

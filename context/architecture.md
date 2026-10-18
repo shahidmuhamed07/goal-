@@ -2,42 +2,46 @@
 
 > Read this for: where code lives, how data flows, how permissions/workspaces/navigation work, how to build and deploy.
 > For field-level data model and security rules → [backend-rules.md](backend-rules.md). For look & feel → [ui-context.md](ui-context.md).
-> Last verified against the code: 2026-10-11 (commit `1e75ab7` plus the uncommitted "uniform design + goal editing flow" change).
+> Last verified against the code: 2026-10-18 (branch `feature/mongo-data`: goals, profiles, connections and chat moved from Firestore to our own API + MongoDB).
 > **Repo layout changed on 2026-10-14:** the app now lives in `apps/web/`. A path written here as `src/…` means `apps/web/src/…`. See the root `README.md` for the full layout.
 
 ## 1. System shape
 
 ```
-┌──────────────────────────────── Browser (SPA, no router) ────────────────────────────────┐
+┌──────────────────────────── Browser / phone (SPA, no router) ────────────────────────────┐
 │  main.tsx → App.tsx                                                                      │
-│     ├─ owns ALL state (useState) and ALL Firestore reads/writes for goals, requests,     │
-│     │  profile, clients                                                                  │
+│     ├─ owns ALL state (useState); data comes from one polled answer (`/api/overview`)    │
+│     │  and every change goes through `appApi` (src/api/)                                 │
 │     ├─ renders views by `activeTab`: dashboard | today | detail | connect | professional │
-│     └─ components/*  (mostly presentational; props in, callbacks out)                    │
-│          └─ exceptions that talk to Firestore themselves:                                │
-│             ChatPanel, ProfessionalProfilePanel, CollaboratorsPanel (read-only fetch)    │
+│     └─ components/*  (mostly presentational; props in, callbacks out; ChatPanel and      │
+│        ProfessionalProfilePanel call `appApi` themselves)                                │
 └───────────────┬───────────────────────────────────────────────┬──────────────────────────┘
-                │ firebase/auth                                 │ firebase/firestore (onSnapshot, updateDoc…)
+                │ firebase/auth (sign-in only)                  │ fetch + Bearer <Firebase ID token>
                 ▼                                               ▼
-        Firebase Authentication                       Cloud Firestore  ◄── firestore.rules enforce access
-        (Google, Email/Password)                      (default DB, project goal-path-9f4cc)
+        Firebase Authentication                       API (apps/api, Express on Render)
+        (Google, Email/Password)                         ├─ verifies the token → who is asking
+                                                         ├─ decides who may see/change what
+                                                         └─ MongoDB Atlas (users, goals, requests, chats…)
 
-Static files are served by Firebase Hosting (dist/), deployed by GitHub Actions on push to `main`.
+The admin dashboard (apps/admin, static site) talks to the same API under /api/admin.
+The app's static files are served by Firebase Hosting (apps/web/dist), deployed by GitHub Actions on push to `main`.
 ```
 
-There is **no application server**. Security is enforced only by Firestore rules plus the UI hiding controls. Anything that must be secret or authoritative has to be expressed in `firestore.rules`.
+Firebase is used for **login only**. Everything else is our own API, and **the API is the security**: access is decided in `apps/api/src/userRoutes.ts` and pinned by its tests (see [backend-rules.md](backend-rules.md)). The UI hiding controls is a courtesy, not protection.
 
 ## 2. Source map
 
 | File | Responsibility |
 |---|---|
 | `src/main.tsx` | Mounts `<App />` in `StrictMode`, imports `index.css`. |
-| `src/App.tsx` (~3,600 lines) | Auth listener, profile bootstrap, every realtime listener, every write handler, permission helpers, swipe + back-button navigation, header/tab bars, and the JSX of the Dashboard, Today and Goal-detail views. Also renders the modals. |
-| `src/firebase.ts` | `initializeApp`, `auth`, `db` (Firestore with `experimentalAutoDetectLongPolling`), `googleProvider`. Config comes from `firebase-applet-config.json`. |
-| `src/types.ts` | All shared types: `Goal`, `Milestone`, `Subcategory`, `TaskItem`, `UserProfile`, `Collaborator`, `AccessRequest`, `ProfessionalProfile`, `ChatThread`, `ChatMessage`, `GoalAccessLevel`, `AccountPersona`, `ProfessionalRole`. |
-| `src/utils.ts` | Date/month helpers, `computeStreak`, access helpers (`getGoalAccessLevel`, `buildGoalAccessArrays`), `generateInviteCode`, `requestDocId`, `GOAL_CATEGORIES`, `PROFESSIONAL_ROLES`. |
-| `src/chat.ts` | `chatIdFor(uidA, uidB)` and `threadHasUnread(thread, uid)`. |
-| `src/recurrence.ts` | **Weekly routines**, as pure functions (no React, no Firestore): week/date helpers (`getWeekDates`, `weekdayOf`, `goalEndDate`…), `createSeries`, `applySeriesDays` (also the dry run for previews), `addTaskForward`, `updateFrom`, `removeSubcategories`, `countLater`, and the size guard (`MAX_GOAL_CONTENT_BYTES`, `estimateBytes`). All dates are UTC calendar strings, so a weekday never shifts with the timezone. |
+| `src/App.tsx` (~3,600 lines) | Auth listener, account setup, the overview poll, every write handler, permission helpers, swipe + back-button navigation, header/tab bars, and the JSX of the Dashboard, Today and Goal-detail views. Also renders the modals. |
+| `src/firebase.ts` | `initializeApp`, `auth`, `googleProvider` (sign-in only). Config comes from `firebase-applet-config.json`. |
+| `src/api/` | The app's side of the API. `config.ts` (`API_URL`), `client.ts` (`api()`: adds the login token, renews it once on 401, turns failures into `ApiError`), `appApi.ts` (every call, typed), `usePolling.ts` (keeps data fresh every few seconds, pauses when hidden, refreshes on focus; `touch()` discards answers that predate a local change). |
+| `src/navigation.ts` | The tab order, which tab is home (Goals) and where back goes. Pure, tested. |
+| `src/types.ts` | Re-exports the shared types (they live in `packages/shared/src/app.ts`, which the API uses too): `Goal`, `Milestone`, `Subcategory`, `TaskItem`, `UserProfile`, `Collaborator`, `AccessRequest`, `ProfessionalProfile`, `ChatThread`, `ChatMessage`, `GoalAccessLevel`, `AccountPersona`, `ProfessionalRole`. |
+| `src/utils.ts` | Date/month helpers, `computeStreak`, access helpers re-exported from the shared package (`getGoalAccessLevel`, `buildGoalAccessArrays`), `GOAL_CATEGORIES`, `PROFESSIONAL_ROLES`. |
+| `src/chat.ts` | `chatIdFor(uidA, uidB)` (from the shared package) and `threadHasUnread(thread, uid)`. |
+| `src/recurrence.ts` | **Weekly routines**, as pure functions (no React, no network): week/date helpers (`getWeekDates`, `weekdayOf`, `goalEndDate`…), `createSeries`, `applySeriesDays` (also the dry run for previews), `addTaskForward`, `updateFrom`, `removeSubcategories`, `countLater`, and the size guard (`MAX_GOAL_CONTENT_BYTES`, `estimateBytes`). All dates are UTC calendar strings, so a weekday never shifts with the timezone. |
 | `src/missed.ts` | **Missed tasks**, pure: `findMissedTasks` (unfinished, not skipped, before today, within 14 days), `moveTasksToDay` (into a same-named subcategory on that day, created if missing, never an `undefined` field) and `skipTasks` (`skipped: true`). `App.tsx` handlers write the result. |
 | `src/cms/` | Content from the admin. `useLiveBanners.ts` (`useLiveContent`: banners, popups, pages, refreshed each minute), `CmsBanners.tsx`, `CmsPopups.tsx` (the popup and the page dialog), `links.ts` (`/pages/x` opens a page, https opens a tab, the rest is ignored) and `popupRules.ts` (which popup to show: once / daily / every visit). |
 | `src/categoryPresets.ts` | `CATEGORY_PRESETS` and `getCategoryPresets(category, title)` (direct match → keyword heuristics → "Personal Development" fallback). |
@@ -49,8 +53,8 @@ There is **no application server**. Security is enforced only by Firestore rules
 
 Top to bottom:
 
-1. **Helpers**: `useSegmentedTrack` (measures the active tab to slide the pill), `mapGoalDoc` (Firestore doc → `Goal`), `CATEGORY_ACCENTS` / `categoryAccent`, `ensureUserProfile`.
-2. **State groups**: auth (`user`, `authLoading`, `authError`), data (`goals`, `dataLoading`, banners), UI view state (`activeTab`, `selectedGoalId`, modals, filters, `dailyMasterDate`, `selectedGoalMonth`), workspace/collab (`profile`, `incomingRequests`, `outgoingRequests`, `clientList`, `withdrawnClientIds`, `workspaceUid`, `sharedGoals`, `activeClientProfile`), chat (`chatThreads`, `chatTarget`).
+1. **Helpers**: `useSegmentedTrack` (measures the active tab to slide the pill), `mapGoalDoc` / `normalizeGoal` (fills in anything an older goal lacks), `apiProblem` (a short sentence for a failed call), `CATEGORY_ACCENTS` / `categoryAccent`.
+2. **State groups**: auth (`user`, `authLoading`, `authError`), data (`goals`, `dataLoading`, banners), UI view state (`activeTab`, `selectedGoalId`, modals, filters, `dailyMasterDate`, `selectedGoalMonth`), workspace/collab (`profile`, `incomingRequests`, `outgoingRequests`, `clientList`, `workspaceUid`, `sharedGoals`; `activeClientProfile` is derived from `clientList`), chat (`chatThreads`, `chatTarget`).
 3. **Effects** (the listeners table below).
 4. **Derived values**: `isOwner`, `workspaceProfile`, `professionalRole`, `allTodayTasks`, `streakStats`, `navTabs`, `filteredGoals`, progress counters.
 5. **Permission helpers**: `goalAccessLevel`, `canViewGoal`, `canEditGoal`, `canEditSubcategoryTasks`, `canEditTaskRecord`.
@@ -58,32 +62,30 @@ Top to bottom:
 7. **Write handlers** (`handleCreateGoal`, `handleToggleTask`, `handleApproveRequest`, …) — see §7.
 8. **Render**: loader gate → login gate → shell (professional bar, banners, header, desktop tabs, `<main>` with the active view, footer, modals, exit toast, phone tab bar, persona prompt).
 
-### Realtime listeners
+### Where the data comes from
 
-| Listener (effect) | Query | Feeds | Why this shape |
-|---|---|---|---|
-| Auth | `onAuthStateChanged` | `user` | — |
-| My profile | `doc(users/{me})` | `profile`, `withdrawnClientIds` | — |
-| Access requests | `accessRequests where toUid == me` and `… where fromUid == me` | `incomingRequests`, `outgoingRequests` | Rules allow reading a request only to its two participants. |
-| Chat threads | `chats where participantUids array-contains me` | `chatThreads` → unread badges | Account-wide, not workspace-scoped, so a new message shows anywhere. |
-| Client list | `users where collaboratorUids array-contains me` | `clientList` | Rules let a professional read a client's user doc only while listed in `collaboratorUids`. |
-| Active client profile | `doc(users/{workspaceUid})` (only when not owner) | `activeClientProfile` | — |
-| **Goals for the open workspace** | Own workspace: `goals where userId == workspaceUid`. Client workspace: `goals where viewerUids array-contains me`, then client-side filter to `userId === workspaceUid`. | `goals` | The rules can only *prove* these two query shapes. A professional cannot query "all goals of client X". |
-| Shared goals (professionals only) | `goals where viewerUids array-contains me` | `sharedGoals` (per-client "assigned sessions" counts on the dashboard) | The workspace listener only loads one workspace at a time. |
+| Piece | How | Feeds |
+|---|---|---|
+| Auth | `onAuthStateChanged` | `user` |
+| Account setup | After sign-in, `appApi.sync()` creates the account (and its invite code) if new. A failed try is retried every 4 s, and `serverSlow` shows "Waking up the server…" (a sleeping Render server can take ~50 s). | `profile`, `accountReady` |
+| **Overview poll** | `usePolling(appApi.overview, 10 s)` once the account is ready. One answer holds the account, clients, incoming/outgoing requests, chat threads, own goals and goals shared with me. Pauses while the app is hidden, refreshes when it returns. | `profile`, `incomingRequests`, `outgoingRequests`, `chatThreads` (→ unread badges), `clientList`, `sharedGoals`, and `goals` |
+| Goals for the open workspace | Derived from the overview: my own workspace → `overview.goals`; a client's → `overview.sharedGoals` filtered to that `userId`. Newest first. | `goals` |
+| Chat messages | `ChatPanel` polls `appApi.messages` every 3 s while open; sending adds the message at once and refetches. | the open conversation |
 
-> **Constraint:** if you add a Firestore query, make sure `firestore.rules` can prove it from the query constraints alone, otherwise it fails with `permission-denied` even for legitimate users.
+**Changing data** — `saveGoal(goalId, changes)` shows the change at once, sends `PATCH /api/goals/:id`, and on failure fetches the real state back and rethrows so the handler can say what went wrong. Other handlers call `appApi` then `afterAccessChange()`/`overviewPoll.refresh()`. Any local change calls `overviewPoll.touch()` so an answer that was already on its way cannot undo it.
+
+> **Constraint:** the server decides access. A new read needs a route, a permission check and a test in `userRoutes.test.ts`; the app only ever asks for what the caller may see.
 
 ## 4. Workspace model
 
-- `workspaceUid` starts as the signed-in user's uid. `handleSwitchWorkspace(uid)` changes it; the goals listener re-subscribes.
+- `workspaceUid` starts as the signed-in user's uid. `handleSwitchWorkspace(uid)` changes it; the goals shown are re-derived from the overview.
 - `isOwner = workspaceUid === user.uid`. **Almost every UI difference between "my goals" and "a client's goals" derives from `isOwner`.**
-- A safety effect returns the user to their own workspace if the open client disappears from `visibleClients`.
-- `visibleClients` = `clientList` minus `withdrawnClientIds` (clients this professional removed; stored on their own profile as `withdrawnClients` so it follows them across devices).
+- A safety effect returns the user to their own workspace if the open client disappears from `clientList` (for example after being removed).
 - `isProfessional = clientList.length > 0 || profile.persona === 'professional'`.
 
 ## 5. Permission resolution (UI side)
 
-The UI mirrors the rules so controls only appear when the write will succeed. **The rules are the real enforcement.**
+The UI mirrors the server's rules so controls only appear when a change will succeed. **The server is the real enforcement** (a refused change answers 403/404 and the app fetches the real state back).
 
 ```
 goalAccessLevel(goalId):
@@ -103,18 +105,18 @@ canEditTaskRecord      = canEditSubcategoryTasks for the task's subcategory (tas
 
 What is enforced where:
 
-| Rule | Enforced by Firestore rules | UI only |
+| Rule | Enforced by the API | UI only |
 |---|---|---|
 | Only the owner changes title/category/description/target date/access lists, or deletes a goal | ✅ | also hidden |
-| Editors may only touch `tasks`, `subcategories`, `milestones` | ✅ (`contentOnlyChange`) | — |
+| Editors may only touch `tasks`, `subcategories`, `milestones` | ✅ (editor allow-list in `PATCH /goals/:id`) | — |
 | View-only professionals cannot write | ✅ | also hidden |
-| **Subcategory `editorRole` restriction** (only the matching role edits that routine) | ❌ | ✅ — an *edit*-level professional could still write any task via a crafted request |
+| **Subcategory `editorRole` restriction** (only the matching role edits that routine) | ❌ | ✅ — an *edit*-level professional could still write any task via a crafted request (known gap, [backend-rules.md §7](backend-rules.md)) |
 
 ## 6. Navigation
 
 - **Tabs** (`activeTab`): `dashboard` (labelled *Goals*), `today`, `connect` (*Collaborate*), `professional` (labelled *Profile*, or *Professional* for professionals; **owner workspace only**), plus the pseudo-tab `detail` (a goal opened from the dashboard; highlights *Goals*).
 - `selectTab()` is the helper that keeps slide direction and scroll position consistent; the tab bars and the header logo use it. Many other spots call `setActiveTab()` directly (dashboard stat cards, "View Roadmap" buttons, goal open/close, workspace switch, persona handlers, the back handler, swipe commit) and skip the direction bookkeeping — that is existing behaviour, not a design rule.
-- **Swipe**: a horizontal touch drag on `<main>` moves to the neighbouring tab in `swipeTabs` order (`dashboard → today → connect → professional`). It ignores inputs, `[data-no-swipe]`, and rows that scroll sideways; the content follows the finger and slides out/in.
+- **Swipe**: a horizontal touch drag on `<main>` moves to the neighbouring tab in `swipeTabs` order (`dashboard → today → connect → professional`, from `src/navigation.ts`). It ignores inputs, `[data-no-swipe]`, and rows that scroll sideways; the content follows the finger and slides out/in.
 - **Back button** (`popstate` + a history "trap" entry): closes the top-most layer first (account menu → create modal → assignment modal → give-up modal → persona picker → goal header editing), then detail → Goals, then any tab → Goals, then on Goals shows "Press back again to leave" and lets a second back within 2 s exit.
 - The view switcher pill (`useSegmentedTrack`) measures the live DOM, so new tabs/labels/badges need no width constants.
 
@@ -122,50 +124,46 @@ What is enforced where:
 
 **Sign-in & bootstrap**
 0. *Google sign-in* (`handleGoogleSignIn`): a ref (`googleSignInBusy`) ignores a second click while one attempt is running. `signInWithPopup` first. Only if the popup cannot open (`auth/popup-blocked`, `auth/operation-not-supported-in-this-environment`) does it show a neutral notice and fall back to `signInWithRedirect`. Closing the popup (`auth/popup-closed-by-user`) shows a notice and stays put; `auth/cancelled-popup-request` is ignored. On every page load `getRedirectResult(auth)` runs so a failed redirect sign-in surfaces as an error instead of a silent return to the login page. Email/password sign-in lives in `LoginScreen`.
-1. `onAuthStateChanged` sets `user`. A loader (`GoalPathLoader`) shows until auth *and* the first goals snapshot are ready.
-2. `ensureUserProfile(user)`: if `users/{uid}` exists with a `code`, refresh name/email/photo. Otherwise, up to 10 attempts: generate a 6-char code and in one **transaction** create `codes/{code}` = `{uid}` and `users/{uid}` (code, empty `collaborators`/`collaboratorUids`, `createdAt`). `CODE_TAKEN` → retry.
-3. A brand-new owner account (no `persona`, no `onboardedAt`, no goals) opens the full-screen `Onboarding` questions (skippable; also reachable from the account menu → "Start a guided plan"). `handleFinishOnboarding` creates one goal per chosen focus (max 3, from `buildStarterPlans` in `src/starterPlan.ts`) with starter weekly routines written through `materializePlan`/`createSeries`, then stores `persona`, `personaChosenAt`, `onboardedAt` and the answers (`onboarding`, only answered keys, never `undefined`) on `users/{uid}`. Professionals get just the persona saved.
+1. `onAuthStateChanged` sets `user`. A loader (`GoalPathLoader`) shows until auth *and* the first overview are ready (with a "Waking up the server…" line when the API is slow).
+2. `appApi.sync()` (`POST /api/me/sync`): the API creates the account with a unique 6-character code on first use (the database's unique index on `code` guarantees uniqueness; the server retries on collision) or refreshes name/email/photo from the login token. Then the overview poll starts.
+3. A brand-new owner account (no `persona`, no `onboardedAt`, no goals) opens the full-screen `Onboarding` questions (skippable; also reachable from the account menu → "Start a guided plan"). `handleFinishOnboarding` creates one goal per chosen focus (max 3, from `buildStarterPlans` in `src/starterPlan.ts`) with starter weekly routines written through `materializePlan`/`createSeries`, then stores `persona`, `personaChosenAt`, `onboardedAt` and the answers (`onboarding`, only answered keys) through `PATCH /api/me`. Professionals get just the persona saved.
 
 **Create a goal** (`handleCreateGoal`, owner only)
 1. `CreateGoalModal` returns `{ title, category, description, targetDate, assignedProfessionalUids }`; target = current month + N (1–24).
 2. One milestone is generated for every month from the current month through the target month inclusive (`Checkpoint for <Mon YYYY>`, last is `Final: Complete <title>`).
-3. `addDoc(goals, …)`. If professionals were selected, they get `edit` on the new goal: `users/{me}.collaborators[].goalAccess[goalId] = 'edit'`, then `viewerUids`/`editorUids` are written on the goal.
+3. `appApi.createGoal(...)` (`POST /api/goals`). The server sets the owner and the access lists; professionals picked here get `edit` on the new goal (recorded on the goal and on the owner's roster together).
 4. The new goal is pushed into local state immediately (so the detail view is not blank) and opened.
-5. Goals created before per-goal permissions existed lack `viewerUids`/`editorUids`; an owner-side effect backfills them once.
 
 **Connect a professional**
-1. Professional enters the client's code + role → `handleRequestAccess`: validates length/role/not-own-code, looks up `codes/{code}` → `toUid`, then **queries** `accessRequests` (from me, to them) instead of `getDoc` (reading a non-existent doc is denied by the rules).
-   - none → `setDoc accessRequests/{from_to}` with `status: 'pending'`
-   - `pending`/`approved` → friendly error
-   - `denied`/`removed` → `updateDoc` back to `pending` with new `role`/`createdAt` (rules only allow those keys to change)
-2. Client sees it under *Pending requests*, chooses view/edit per goal (nothing preselected) and approves → `handleApproveRequest`: replace the collaborator entry on `users/{me}` (+ `collaboratorUids`), set request `approved`, then `syncGoalAccess` writes `viewerUids`/`editorUids` on affected goals.
-3. Client can later change levels (`handleUpdateAssignedGoals`, `handleSaveGoalCollaboratorAssignments`) or remove the professional (`handleRemoveCollaborator`: update roster, resync goal lists, mark request `removed`).
+1. Professional enters the client's code + role → `handleRequestAccess` checks length/role/not-own-code, then `POST /api/access-requests`. The server looks the code up and answers `sent`, `sent_again` (a denied or removed request is re-opened) or an error (`not_found`, `own_account`, `already_pending`, `already_approved`).
+2. Client sees it under *Pending requests* (the overview poll brings it within ~10 s), chooses view/edit per goal (nothing preselected) and approves → `POST /api/access-requests/:id/approve`: the server updates the roster, marks the request `approved` and recomputes the goals' access lists.
+3. Client can later change levels (`PUT /api/collaborators/:uid/access`, `PUT /api/goals/:id/assignments`) or remove the professional (`DELETE /api/collaborators/:uid`). Every one of these ends with the server resyncing the access lists.
 
 **Professional removes a client / leaves professional mode**
-A professional cannot edit the client's `users` doc, so removal is cooperative: the professional records the client in their own `withdrawnClients`, marks the request `removed`, and hides the client locally. **The client's app finishes the job** — an effect watches incoming requests with status `removed` whose sender is still a collaborator and runs `handleRemoveCollaborator`. Until the client next opens the app, the professional's Firestore-level access still exists. `handleLeaveProfessional` does this for every client, then sets `persona: 'client'` (the public profile is kept).
+`DELETE /api/clients/:id` removes the professional from the client's roster and goal access lists straight away and marks the request `removed`. `POST /api/me/leave-professional` does this for every client and sets `persona: 'client'` (the public profile is kept). Nothing waits for the client's app any more.
 
 **Chat**
-`chatId = sort([uidA, uidB]).join('__')`. Sending first `setDoc(chats/{id}, { participantUids, updatedAt, lastMessage, lastRead[me] }, merge)` (the message rule reads the parent's member list, so the thread must exist), then `addDoc(chats/{id}/messages, …)`. Opening a thread marks it read via `lastRead[me]`. Unread = last message is from the other user and newer than my `lastRead`. The panel sizes itself to `visualViewport` so the phone keyboard does not push the header off-screen.
+`chatId = sort([uidA, uidB]).join('__')`. Sending is `POST /api/chats/:id/messages` (sender and time come from the server; allowed only while the two are connected); the thread's `lastMessage`/`lastRead` update in the same call. Opening a thread calls `POST /api/chats/:id/read`. Unread = last message is from the other user and newer than my `lastRead`. While a conversation is open it is refreshed every 3 s. The panel sizes itself to `visualViewport` so the phone keyboard does not push the header off-screen.
 
 **Task / milestone / subcategory edits**
-Every edit is read-modify-write of a whole embedded array: copy `goal.tasks` (from local state), change it, `updateDoc(goals/{id}, { tasks })`. The realtime listener then echoes the result back into state.
+Every edit is read-modify-write of a whole embedded array: copy `goal.tasks` (from local state), change it, `saveGoal(id, { tasks })` (shown at once, then `PATCH /api/goals/:id`). The next overview confirms it.
 
 **Opening a goal** — `openGoal(goalId, date?)` in `App.tsx`. From a goal card's body or title it opens on today; from a day on the card's week strip it sets `selectedGoalMonth` to that day's month and `selectedGoalDate` to the day, and `DailyTaskSection` (which owns the selected date) starts on it through its `initialDate` prop. `selectedGoalDate` is cleared whenever the tab is not `detail`, so it only affects the opening.
 
 **Weekly routines** ("Chest day every Tuesday and Thursday")
-A routine is **not a new record**. Planning is date-based (a subcategory and its tasks belong to one `YYYY-MM-DD`), so a routine is the same subcategory *written onto every matching day* from a start date to the end of the goal (the end of its last month), with a shared `repeatId` and the weekday list in `repeatDays`. Today's view, progress, the streak and the Firestore rules keep working without knowing routines exist.
-- **Create** — add form → `handleAddRepeatingSubcategory` → `createSeries` → one `updateDoc` of `subcategories`.
-- **Change days / stop** — block ⋯ → `handleChangeSubcategoryRepeat` → `applySeriesDays`: later days on a dropped weekday are removed with their tasks, missing ones are added (each starting with a copy of the anchor day's tasks, uncompleted), **earlier days are never touched**; `[]` stops the routine after this day. One `updateDoc` of both arrays.
+A routine is **not a new record**. Planning is date-based (a subcategory and its tasks belong to one `YYYY-MM-DD`), so a routine is the same subcategory *written onto every matching day* from a start date to the end of the goal (the end of its last month), with a shared `repeatId` and the weekday list in `repeatDays`. Today's view, progress, the streak and the server rules keep working without knowing routines exist.
+- **Create** — add form → `handleAddRepeatingSubcategory` → `createSeries` → one `saveGoal` of `subcategories`.
+- **Change days / stop** — block ⋯ → `handleChangeSubcategoryRepeat` → `applySeriesDays`: later days on a dropped weekday are removed with their tasks, missing ones are added (each starting with a copy of the anchor day's tasks, uncompleted), **earlier days are never touched**; `[]` stops the routine after this day. One `saveGoal` of both arrays.
 - **Add a task** — `handleAddTask(..., forward)` → `addTaskForward` puts it on this day and every later day of the routine. Completing, editing and deleting a task stay per day.
 - **Rename / re-tag** — `updateFrom` applies to this day and later days of the routine. **Delete** — `handleDeleteSubcategory(..., 'one' | 'future')`.
-- **Size guard** — a goal is one Firestore document (1 MiB). `fitsInGoalDocument` refuses any write that would push subcategories + tasks past `MAX_GOAL_CONTENT_BYTES` (900 KB) with a plain message. Measured: Tue/Thu × 6 tasks × 6 months ≈ 52 KB; Mon/Wed/Fri × 8 tasks × 2 years ≈ 439 KB; every day × 12 tasks × 2 years ≈ 1.5 MB (refused).
+- **Size guard** — a goal is one stored document (the server caps it at about 1 MB). `fitsInGoalDocument` refuses any write that would push subcategories + tasks past `MAX_GOAL_CONTENT_BYTES` (900 KB) with a plain message. Measured: Tue/Thu × 6 tasks × 6 months ≈ 52 KB; Mon/Wed/Fri × 8 tasks × 2 years ≈ 439 KB; every day × 12 tasks × 2 years ≈ 1.5 MB (refused).
 - **Limits** — a routine ends with the goal's last month; extending the goal later (give-up → extend) does **not** extend existing routines. Subcategories saved without a date cannot be repeated.
 
 **Streak** (`computeStreak`)
 A day counts when ≥ 1 task **scheduled on that date** is completed (it uses `task.date`, not a completion timestamp). `current` runs back from today, or from yesterday if today is still empty (then `atRisk`). Computed over whichever workspace's goals are open.
 
 **Give up / extend**
-`GiveUpInterventionModal` (Reflect → Solutions → Confirm). *Extend* → `handleExtendGoalDeadline` appends N `Extended Focus (<Month Year>)` milestones and moves `targetDate`. *Confirm* → `handleGiveUpGoal` → `deleteDoc` (permanent).
+`GiveUpInterventionModal` (Reflect → Solutions → Confirm). *Extend* → `handleExtendGoalDeadline` appends N `Extended Focus (<Month Year>)` milestones and moves `targetDate`. *Confirm* → `handleGiveUpGoal` → `DELETE /api/goals/:id` (permanent).
 
 ## 8. Build, run, deploy
 
@@ -177,15 +175,16 @@ A day counts when ≥ 1 task **scheduled on that date** is completed (it uses `t
 | Production build | `npm run build` → `dist/` |
 | Deploy | Push/merge to `main` → `.github/workflows/firebase-hosting-merge.yml`: Node 20, `npm ci`, `npm run build`, `FirebaseExtended/action-hosting-deploy` to the `live` channel. Secrets: `FIREBASE_SERVICE_ACCOUNT`, `FIREBASE_PROJECT_ID`. |
 | Deploy (admin) | Push/merge to `main` touching `apps/admin`, `packages/shared` or `deploy/admin` → `.github/workflows/firebase-admin-hosting.yml` builds the admin (`VITE_API_URL` = the Render API) and deploys `deploy/admin/firebase.json` to the Hosting site `goal-path-admin`, which must exist first. Also runnable by hand from the Actions tab. |
-| Firestore rules | **Not deployed by the workflow** (hosting only). Deploy manually: `firebase deploy --only firestore:rules`. |
+| API | Render deploys `apps/api` from `main` by itself. Settings are in the Render environment (see [backend-rules.md §1](backend-rules.md)). **Merging a change that needs new API routes deploys the web app within minutes and the API a few minutes later; for a short while the app may show errors.** |
+| Keep the API awake | `.github/workflows/keep-api-awake.yml` pings `/health` every 10 minutes (needs to be on `main`). |
 | Hosting config | SPA rewrite (`** → /index.html`); everything `no-cache` except `/assets/**` (immutable, 1 year). |
 
 **Treat `main` as production.** Merging deploys immediately. Work on a branch (e.g. `Staging/testing`) and merge via PR.
 
 ## 9. Configuration & secrets
 
-- `firebase-applet-config.json` holds the Firebase **web** config (API key, project id, app id…). Firebase web keys are public identifiers, not secrets; real protection is the security rules and the Authorized Domains list in the Firebase console (the login screen detects `unauthorized-domain` errors and shows the hostname to add).
-- `.env*` is git-ignored except `.env.example`. The app reads **no** environment variables at runtime today.
+- `firebase-applet-config.json` holds the Firebase **web** config (API key, project id, app id…). Firebase web keys are public identifiers, not secrets; real protection is the API's checks and the Authorized Domains list in the Firebase console (the login screen detects `unauthorized-domain` errors and shows the hostname to add).
+- `.env*` is git-ignored except `.env.example`. The web app reads one build-time variable, `VITE_API_URL` (set in the GitHub workflow; defaults to the local API in development).
 - A service-account key filename is git-ignored (`*-firebase-adminsdk-*.json`). Never commit credentials.
 - `vite.config.ts` defines the `@` alias (project root) and an AI-Studio-specific `DISABLE_HMR` switch. Leave the HMR comment/logic alone unless you know why it is there.
 
@@ -199,9 +198,9 @@ A day counts when ≥ 1 task **scheduled on that date** is completed (it uses `t
 
 ## 11. Architectural constraints (do not violate without discussing)
 
-1. **No backend code.** Keep logic client-side and enforce access in `firestore.rules`.
-2. **Rules and UI must agree.** Any new permission is added to `firestore.rules` first, then mirrored in the UI helpers.
-3. **Goal content stays embedded** (`tasks`, `subcategories`, `milestones` inside the goal doc) — the editor rule (`contentOnlyChange`) depends on those three keys. Moving them to subcollections requires a rules redesign. This is also why routines are materialised onto days rather than stored as a separate "series" record: a new top-level key would be blocked for editors.
-4. **Queries must be rule-provable** (see the listeners table).
-5. **Writes to goals, access requests and the `users` document live in `App.tsx` handlers**, guarded by a permission check. Components call callbacks; they do not write that data themselves. Routine logic itself lives in `src/recurrence.ts` as pure functions; handlers call it and write the result. (The only component-level writes are chat messages/threads in `ChatPanel` and the `publicProfiles` document in `ProfessionalProfilePanel`.)
+1. **The API is the security.** Every permission lives in `apps/api/src/userRoutes.ts` with a test in `userRoutes.test.ts`. The UI mirrors it for convenience only. Never take "who is asking" from a request body.
+2. **Server and UI must agree.** A new permission is added to the API (and tested) first, then mirrored in the UI helpers.
+3. **Goal content stays embedded** (`tasks`, `subcategories`, `milestones` inside the goal document) — the editor allow-list in `PATCH /goals/:id` depends on those three keys. This is also why routines are materialised onto days rather than stored as a separate "series" record.
+4. **Reads come through the overview** (or a dedicated route) and are decided by the server; the app never asks for something it may not see.
+5. **Writes to goals, requests and accounts live in `App.tsx` handlers** that call `appApi`, guarded by a permission check. Components call callbacks; they do not write that data themselves. Routine logic itself lives in `src/recurrence.ts` as pure functions; handlers call it and write the result. (The only component-level API calls are chat messages in `ChatPanel` and the public profile in `ProfessionalProfilePanel`/`CollaboratorsPanel`.)
 6. **Prefer `selectTab()` for switching between top-level tabs** from the nav bars so the slide animation direction is right.

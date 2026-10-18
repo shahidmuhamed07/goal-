@@ -1,7 +1,6 @@
 import { ConfirmDialog } from './ConfirmDialog';
 import React, { useEffect, useState } from 'react';
 import { User } from 'firebase/auth';
-import { doc, getDoc, setDoc } from 'firebase/firestore';
 import {
   BadgeCheck,
   Briefcase,
@@ -16,7 +15,7 @@ import {
   Trash2,
   X,
 } from 'lucide-react';
-import { db } from '../firebase';
+import { appApi } from '../api/appApi';
 import { Credential, ProfessionalProfile, ProfessionalRole, ShowcaseItem, UserProfile } from '../types';
 import { PROFESSIONAL_ROLES } from '../utils';
 
@@ -248,10 +247,9 @@ export const ProfessionalProfilePanel: React.FC<ProfessionalProfilePanelProps> =
     let cancelled = false;
     (async () => {
       try {
-        const snap = await getDoc(doc(db, 'publicProfiles', user.uid));
+        const data = await appApi.getPublicProfile(user.uid);
         if (cancelled) return;
-        if (snap.exists()) {
-          const data = snap.data() as Partial<ProfessionalProfile>;
+        if (data) {
           setValue({
             ...emptyProfile(user.uid),
             ...data,
@@ -329,8 +327,8 @@ export const ProfessionalProfilePanel: React.FC<ProfessionalProfilePanelProps> =
         showcase: value.showcase.filter((s) => s.title.trim() !== ''),
         updatedAt: new Date().toISOString(),
       };
-      await setDoc(doc(db, 'publicProfiles', user.uid), cleaned, { merge: true });
-      setValue(cleaned);
+      const stored = await appApi.savePublicProfile(cleaned);
+      setValue({ ...cleaned, ...stored });
       setIsEditing(false);
       setSaved(true);
       setTimeout(() => setSaved(false), 2500);

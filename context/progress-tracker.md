@@ -31,8 +31,9 @@
 - The app is a working single-page product: planning, collaboration, chat, streaks, phone-first navigation.
 - Last development activity (2026-09-29) was a UI polish pass: phone tab bar, profile actions, leave-professional flow.
 - Uncommitted on top of `main`: the Google sign-in fix and the **uniform design + goal editing flow + weekly routines** change (see the changelog). Neither has been committed, pushed or deployed.
-- `npm run lint` (`tsc --noEmit`) passes with no errors. There are no automated tests in the repo (the routine logic has 18 checks that live outside it — see the changelog).
-- Production = `main` on Firebase Hosting (auto-deploy). Firestore rules are deployed manually; **whether the deployed rules match `firestore.rules` has not been checked.**
+- **2026-10-18, on branch `feature/mongo-data` (not merged yet):** goals, profiles, connections and chat no longer use Firestore. Firebase is for login only; the app talks to our API and MongoDB (see the changelog). Production `main` still runs the old Firestore version until this is merged.
+- `npm run lint` passes. Tests: API 90 (permission rules for people's data included), web 74 (pure logic).
+- Production = `main` (web on Firebase Hosting, API on Render, both auto-deploy).
 - Unreviewed: remote branch `origin/fix/collaborator-edit-permissions` (name suggests permission work; contents and merge state not examined).
 
 ## Feature status
@@ -59,15 +60,15 @@ Legend: ✅ shipped · 🟡 shipped with caveats · ⬜ not present
 | Collaboration | Connection code, access requests, approve/deny with per-goal view/edit | ✅ | |
 | Collaboration | Professional roster, workspace switcher, client workspace | ✅ | |
 | Collaboration | Per-subcategory role tags | 🟡 | UI-only restriction, not enforced by rules |
-| Collaboration | Remove professional (client) / remove client (professional) / leave professional mode | 🟡 | Professional-initiated removal completes only when the client next opens the app |
+| Collaboration | Remove professional (client) / remove client (professional) / leave professional mode | ✅ | Immediate on both sides since 2026-10-18 (server-side) |
 | Collaboration | Professional public profile (qualifications, work, contact) | ✅ | Links, no file uploads |
-| Collaboration | In-app chat with unread badges | 🟡 | Not restricted to connected pairs by rules; history unpaginated |
+| Collaboration | In-app chat with unread badges | 🟡 | Only between connected people (server-enforced). Refreshes every 3 s while open (polling); history unpaginated |
 | Shell | Phone floating tab bar + centred "+" | ✅ | |
 | Shell | Swipe navigation between tabs | ✅ | |
 | Shell | Back-button handling, double-back to exit | ✅ | |
 | Shell | Branded loader, Lovi-style pastel theme, reduced-motion support | ✅ | |
-| Platform | CI deploy to Firebase Hosting on push to `main` | ✅ | Hosting only |
-| Platform | Automated tests | ⬜ | None exist |
+| Platform | CI deploy to Firebase Hosting on push to `main`; Render deploys the API | ✅ | Keep-awake ping for the free Render plan once merged |
+| Platform | Automated tests | 🟡 | API (permissions, content) and the web app's pure logic; no browser/UI tests |
 | Platform | AI/Gemini features | ⬜ | SDK listed in `package.json`, never used |
 | Platform | Notifications (push/email) | ⬜ | |
 
@@ -79,13 +80,11 @@ Found by reading the code on 2026-10-11; none of these have been reproduced unle
 1. *(Fixed 2026-10-18: `getTodayDateString()` now returns the local date. See the changelog.)*
 2. **Streak semantics.** `computeStreak` counts `task.date` of completed tasks; tasks have no completion timestamp. Checking off yesterday's task today credits yesterday.
 3. **Concurrent edits overwrite.** Tasks/milestones/subcategories are written as whole arrays from local state; a client and a professional editing the same goal at once can lose changes.
-4. **Possible lossy legacy-access migration** in `handleSaveGoalCollaboratorAssignments` (details: [backend-rules.md §7](backend-rules.md)).
 
 **Security (details in [backend-rules.md §7](backend-rules.md))**
-5. `accessRequests` create is loosely validated (status / doc id not pinned).
-6. Chat threads can be created with any uid; the connected-pair limit is UI-only.
-7. Subcategory `editorRole` is not enforced by rules.
-8. Professional removal depends on the client's browser.
+5. Subcategory `editorRole` is not enforced by the server (UI-only).
+6. The app now polls `/overview` every 10 s with whole goals; a "what changed" answer (ETag or `since`) will be needed for large accounts.
+7. The API's per-user limits are in memory (single instance).
 
 **Maintainability**
 9. `App.tsx` is ~3,550 lines (state, listeners, 28 `handle…` functions, three full views). Natural extraction points: Goals/Today/Detail views, a `useGoals`/`useCollaboration` hook layer, the navigation/swipe logic.
@@ -99,7 +98,7 @@ Found by reading the code on 2026-10-11; none of these have been reproduced unle
 14. `.env.example` and `metadata.json` describe the AI Studio origin (Gemini) — unused.
 15. `bun.lock` alongside `package-lock.json` (CI uses npm).
 16. `.claude/shahid.js/bro`, `bro2` are junk files from PR experiments; `assets/.aistudio/.gitignore` is an AI Studio artifact.
-17. `firebase-blueprint.json` is stale (missing `publicProfiles`, `chats`, several fields).
+17. *(Fixed 2026-10-18: `firebase-blueprint.json` and `firestore.rules` were removed with Firestore.)*
 18. `.vscode/launch.json` (untracked) points Chrome at port 8080; the dev server runs on 3000.
 
 **UI polish**
@@ -112,7 +111,7 @@ Found by reading the code on 2026-10-11; none of these have been reproduced unle
 
 (Not decisions — things the docs could not determine from the code.)
 
-- Are the deployed Firestore rules identical to `firestore.rules`? When were they last deployed?
+- Delete the now-unused Firestore database in the Firebase console (Build → Firestore → Delete database) once the new version is live and working.
 - Is anything planned for the Gemini/AI dependency, or should it be removed?
 - Should `Staging/testing` be a formal staging channel (separate Hosting channel/project) or just a working branch?
 - Should the leftover template files/dependencies (items 13–16) be cleaned up?
@@ -121,6 +120,14 @@ Found by reading the code on 2026-10-11; none of these have been reproduced unle
 ---
 
 ## Changelog
+
+### 2026-10-18 — Move to MongoDB, stages 2–4: the app now uses the API; Firestore removed  (branch `feature/mongo-data`)
+- **Type:** feature + refactor (data layer) + docs
+- **What & why:** Goals, profiles, connections and chat now live in MongoDB behind our API; Firebase is for **login only**. The app (`apps/web`) no longer imports Firestore at all (`firebase.ts` exports only `auth` and the Google provider). New `src/api/` (`client.ts` adds the login token and renews it once, `appApi.ts` holds every call, `usePolling.ts` keeps data fresh). **One answer, `GET /api/overview`** (account, clients, requests, chat threads, own goals, shared goals), is asked every 10 s while the app is visible and again when you come back to it; an open chat is asked every 3 s. `saveGoal()` shows a change at once, sends `PATCH /api/goals/:id`, and on failure fetches the real state back. Handlers for connecting people were rewritten around the server's semantic routes and got simpler: approve/deny/remove are single calls; removing a client or leaving professional mode is **immediate on both sides** (the `withdrawnClients` list, the "client's browser finishes the job" effect and the goal-access backfill effect are gone). The server hides a client's invite code and first-run answers from their professional, requires a connection to chat, validates every body, and rate-limits code guessing. Because a sleeping Render server can take ~50 s, sign-in retries every 4 s and the loader says "Waking up the server…"; `.github/workflows/keep-api-awake.yml` pings `/health` every 10 minutes once merged. Removed: `firestore.rules`, `firebase-blueprint.json`, the Firestore block of `firebase.json`, `firestoreDatabaseId`, unused helpers. **Fresh start: nothing was migrated from Firestore, so existing accounts' goals are not carried over.** Small UI fix: an empty Goals list says "No goals yet" instead of "No matching goals found".
+- **Files:** `apps/web/src/{App,firebase,types,utils,chat}.ts(x)`, `apps/web/src/api/*`, `apps/web/src/components/{ChatPanel,CollaboratorsPanel,ProfessionalProfilePanel}.tsx`, `apps/api/src/userRoutes.ts` (+ `/overview`), `.github/workflows/keep-api-awake.yml`, `firebase.json`, removed `firestore.rules` / `firebase-blueprint.json`.
+- **Data/rules impact:** all people-data permissions are now the API's (tested). The old Firestore database is simply unused; delete it in the Firebase console after the switch. On merge, Render redeploys the API and creates the new collections and indexes on first start. CORS and the web build already point at the Render API.
+- **Verified:** lint ✓ · build ✓ · API tests 90/90 ✓ · web tests ✓ · **end to end in a throwaway harness** (the real app in a phone-sized browser, the real API with an in-memory store, made-up login tokens in place of Firebase; all deleted afterwards): new account created, goal created, subcategory and task saved and still there after a reload, a second person's request appeared on the first person's Connect tab by polling, approving with edit access showed the goal in the professional's "Clients you work with" and their workspace ("Can edit · Trainer"), a chat message arrived by polling, raised the unread badge, and a reply showed at once. **Not verified:** against a real MongoDB (in-memory store only), with real Firebase login tokens and the deployed API, the cold-start path (a sleeping Render server), on a real phone, and the desktop layout of the changed screens.
+- **Docs updated:** `context/backend-rules.md` (rewritten for the API), `architecture.md`, `coding-guidelines.md`, `project-overview.md`, this file, `README.md`.
 
 ### 2026-10-18 — Move to MongoDB, stage 1 of 4: the API for people's own data  (branch `feature/mongo-data`)
 - **Type:** feature (backend)

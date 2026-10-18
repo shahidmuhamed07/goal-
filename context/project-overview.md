@@ -1,13 +1,13 @@
 # Project Overview
 
 > **Read this file first.** It tells you what Goal Path is, the vocabulary the rest of the docs use, and which file to open for which kind of task.
-> Last verified against the code: 2026-10-11 (commit `1e75ab7`).
+> Last verified against the code: 2026-10-18 (branch `feature/mongo-data`).
 
 ## One-paragraph summary
 
 **Goal Path** is a mobile-first web app for planning and tracking long-term goals. A person ("client") defines a goal with a target month; the app turns it into **monthly milestones** and lets them plan **daily tasks** grouped into **subcategories** (routines). On top of that sits a collaboration layer: a client can approve a **professional** (Trainer, Dietitian or Doctor) who then sees — and, if allowed, edits — specific goals. The two sides can chat inside the app. A daily **streak** and a motivational "don't give up" flow keep the user engaged.
 
-It is a single-page React app talking directly to Firebase (Auth + Firestore). There is no custom backend.
+It is a single-page React app. **Firebase handles sign-in only**; everything else (goals, profiles, connections, chat) goes through our own API (`apps/api`, Express on Render) into MongoDB Atlas, and the API decides who may see or change what.
 
 
 ## Repository layout (monorepo, since 2026-10-14)
@@ -17,16 +17,16 @@ goal-/
 ├── apps/
 │   ├── web/        the app people use (everything described in this file lives here: src/, index.html, vite config)
 │   ├── admin/      admin dashboard: banners, popups, pages, starter plans (React + Vite, plain CSS)
-│   └── api/        backend, not built yet (Express + MongoDB planned)
+│   └── api/        the backend: Express + MongoDB. People's data (goals, profiles, connections, chat) and the admin content
 ├── packages/
 │   └── shared/     @goalpath/shared: content types and the "is it live?" rules used by all apps
 ├── context/        these notes
-├── firebase.json, firestore.rules, .firebaserc   Firebase config (hosting now serves apps/web/dist)
+├── firebase.json, .firebaserc   Firebase config (hosting serves apps/web/dist)
 ├── package.json    npm workspaces + root scripts (dev, dev:admin, build, lint)
 └── tsconfig.base.json, .editorconfig, .nvmrc
 ```
 
-**Direction:** Firebase stays for login only. Content and goals move to MongoDB behind `apps/api`; the admin is built first, against a practice data layer.
+**Direction (done 2026-10-18):** Firebase is for login only. Content, goals, profiles, connections and chat live in MongoDB behind `apps/api`. Firestore is no longer used.
 
 ## How to use this context folder
 
@@ -37,7 +37,7 @@ Every file here is meant to be read by both humans and AI agents. Open only what
 | What the product is, who uses it, vocabulary | this file |
 | Where code lives, how data flows, how screens/permissions/navigation work, build & deploy | [architecture.md](architecture.md) |
 | Look, feel, colours, components, animations, responsive behaviour, copy | [ui-context.md](ui-context.md) |
-| Firestore collections, fields, security rules, auth, access control, sync rules | [backend-rules.md](backend-rules.md) |
+| Collections, API routes, auth, who may see/change what, access control | [backend-rules.md](backend-rules.md) |
 | How to write code here, naming, patterns, do/don't, definition of done | [coding-guidelines.md](coding-guidelines.md) |
 | What has shipped, what is in flight, known issues, change history | [progress-tracker.md](progress-tracker.md) |
 
@@ -109,11 +109,11 @@ One account can be both: a professional keeps their own personal goals and switc
 These are verified absences — do not assume them:
 
 - **No AI features.** `@google/genai` is in `package.json` and `.env.example` mentions `GEMINI_API_KEY`, but no code uses either (see [architecture.md](architecture.md) → *Template leftovers*).
-- **No custom server / API.** The `express`, `dotenv` and `tsx` dependencies are unused. All data access is client → Firestore under security rules.
+- **No direct database access from the app.** Everything goes through the API, which checks the Firebase login token and the permissions on every call.
 - **No router.** Views are switched with an `activeTab` state variable.
 - **No file uploads / Firebase Storage.** Credentials are links to verifiable sources, by design.
 - **No off-app contact channel.** A professional's profile exposes only an email and a reference link; chat stays inside the app.
-- **No automated tests** exist in the repo.
+- **Tests:** the API's permission rules are covered by automated tests (`apps/api`), as are the app's pure logic modules (`apps/web`). There are no browser/UI tests.
 - **No push notifications / email notifications.**
 
 ## Tech stack at a glance
@@ -125,7 +125,7 @@ These are verified absences — do not assume them:
 | Icons | `lucide-react` |
 | Build | Vite 6 |
 | Auth | Firebase Authentication (Google, Email/Password) |
-| Database | Cloud Firestore, realtime `onSnapshot` listeners |
+| Data | Own API (Express + zod) on Render, MongoDB Atlas; the app polls every few seconds instead of keeping a live connection |
 | Hosting / CI | Firebase Hosting, deployed by GitHub Actions on push to `main` |
 | Package manager | npm (`package-lock.json` is what CI uses); a stale `bun.lock` also exists |
 
@@ -136,7 +136,7 @@ These are verified absences — do not assume them:
 | Product name | Goal Path |
 | Repository | https://github.com/shahidmuhamed07/goal- |
 | Firebase project id | `goal-path-9f4cc` (see `.firebaserc`) |
-| Firestore database | `(default)` |
+| API | `https://goal-tcrb.onrender.com` (Render), database `goalpath` on MongoDB Atlas |
 | Branches | `main` (auto-deploys to production), `Staging/testing`, plus short-lived feature branches |
 | Origin | Started from a Google AI Studio applet ("Remix goal-path" in `metadata.json`) |
 
@@ -146,10 +146,11 @@ These are verified absences — do not assume them:
 goal-/
 ├── context/                 ← these docs
 ├── src/
-│   ├── App.tsx              ← the app: state, Firestore listeners, all write handlers, all top-level views
+│   ├── App.tsx              ← the app: state, the overview poll, all write handlers, all top-level views
 │   ├── main.tsx             ← React entry
-│   ├── firebase.ts          ← Firebase init (auth, db, Google provider)
-│   ├── types.ts             ← shared TypeScript types (data model)
+│   ├── firebase.ts          ← Firebase init (sign-in only: auth, Google provider)
+│   ├── api/                 ← the app's calls to the API, token handling, polling hook
+│   ├── types.ts             ← re-exports the shared types (packages/shared/src/app.ts)
 │   ├── utils.ts             ← dates, streak, access-list helpers, invite codes
 │   ├── chat.ts              ← chat id + unread helpers
 │   ├── categoryPresets.ts   ← suggested routines per category (the quick picks)
@@ -157,10 +158,8 @@ goal-/
 │   ├── index.css            ← theme tokens, pastel surface classes, animations
 │   ├── loader-demo.tsx      ← dev-only loader preview entry
 │   └── components/          ← screens' building blocks (see ui-context.md)
-├── firestore.rules          ← Firestore security rules (source of truth for access)
-├── firebase.json            ← Hosting + rules config
+├── firebase.json            ← Hosting config
 ├── firebase-applet-config.json  ← Firebase web config (public by design)
-├── firebase-blueprint.json  ← AI Studio data blueprint (partly stale — see backend-rules.md)
 ├── .github/workflows/       ← deploy-on-merge workflow
 ├── index.html, loader-demo.html, vite.config.ts, tsconfig.json
 └── package.json, package-lock.json, bun.lock

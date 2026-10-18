@@ -1,16 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import {
-  collection,
-  query,
-  orderBy,
-  onSnapshot,
-  addDoc,
-  doc,
-  setDoc,
-} from 'firebase/firestore';
 import { Send, X, MessageCircle } from 'lucide-react';
-import { db } from '../firebase';
-import { ChatMessage } from '../types';
+import { appApi } from '../api/appApi';
+import { usePolling } from '../api/usePolling';
 import { chatIdFor } from '../chat';
 
 interface ChatPanelProps {
@@ -44,8 +35,6 @@ const formatDayLabel = (iso: string): string => {
 
 export const ChatPanel: React.FC<ChatPanelProps> = ({ me, other, onClose }) => {
   const chatId = useMemo(() => chatIdFor(me.uid, other.uid), [me.uid, other.uid]);
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
-  const [loading, setLoading] = useState(true);
   const [draft, setDraft] = useState('');
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -73,37 +62,26 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ me, other, onClose }) => {
     };
   }, []);
 
-  // Marks the thread read for this user without clobbering the other side's
-  // fields. Also creates the thread doc the first time it is opened.
-  const markRead = () => {
-    setDoc(
-      doc(db, 'chats', chatId),
-      {
-        participantUids: [me.uid, other.uid].sort(),
-        lastRead: { [me.uid]: new Date().toISOString() },
-      },
-      { merge: true }
-    ).catch((err) => console.error('Chat markRead:', err));
-  };
+  // The conversation is asked for every few seconds while it is open: new messages from the
+  // other person show up within moments, with no live connection to keep running.
+  const poll = usePolling((signal) => appApi.messages(chatId, signal), {
+    enabled: true,
+    intervalMs: 3000,
+    resetKey: chatId,
+  });
+  const messages = poll.data ?? [];
+  const loading = !poll.loaded;
 
   useEffect(() => {
-    const messagesRef = collection(db, 'chats', chatId, 'messages');
-    const unsub = onSnapshot(
-      query(messagesRef, orderBy('createdAt')),
-      (snap) => {
-        setMessages(snap.docs.map((d) => ({ id: d.id, ...d.data() } as ChatMessage)));
-        setLoading(false);
-        markRead();
-      },
-      (err) => {
-        console.error('Chat messages listener:', err);
-        setError('Could not load this conversation.');
-        setLoading(false);
-      }
-    );
-    return () => unsub();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [chatId]);
+    if (poll.error && !poll.data) setError('Could not load this conversation.');
+  }, [poll.error, poll.data]);
+
+  // Tell the server the thread has been seen whenever it shows something new.
+  const lastMessageId = messages.length > 0 ? messages[messages.length - 1].id : '';
+  useEffect(() => {
+    if (!poll.loaded || !lastMessageId) return;
+    appApi.markRead(chatId).catch((err) => console.error('Chat markRead:', err));
+  }, [chatId, lastMessageId, poll.loaded]);
 
   // Keep the newest message in view as the thread grows, on open, and when the
   // keyboard opens or closes (which changes the visible height).
@@ -123,26 +101,10 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ me, other, onClose }) => {
     if (!text || sending) return;
     setSending(true);
     setError(null);
-    const now = new Date().toISOString();
     try {
-      // Thread first: the message security rule reads the parent's member list,
-      // so the thread document must exist before the first message is written.
-      await setDoc(
-        doc(db, 'chats', chatId),
-        {
-          participantUids: [me.uid, other.uid].sort(),
-          updatedAt: now,
-          lastMessage: { text, senderUid: me.uid, createdAt: now },
-          lastRead: { [me.uid]: now },
-        },
-        { merge: true }
-      );
-      await addDoc(collection(db, 'chats', chatId, 'messages'), {
-        senderUid: me.uid,
-        senderName: me.name,
-        text,
-        createdAt: now,
-      });
+      const sent = await appApi.sendMessage(chatId, text);
+      poll.setData((prev) => [...(prev ?? []), sent]);
+      void poll.refresh();
       setDraft('');
       const input = inputRef.current;
       if (input) input.style.height = 'auto';

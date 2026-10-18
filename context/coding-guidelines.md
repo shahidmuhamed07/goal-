@@ -9,17 +9,17 @@
 **MUST**
 1. Read [project-overview.md](project-overview.md) and the file(s) relevant to the task before editing.
 2. Keep changes minimal and scoped to what was asked; match existing patterns instead of introducing new ones.
-3. Guard every goal/task write with a permission check (`canEditGoal`, `canEditTaskRecord`, `isOwner`) **and** make sure `firestore.rules` allows it.
+3. Guard every goal/task write with a permission check (`canEditGoal`, `canEditTaskRecord`, `isOwner`) **and** make sure the API route allows it (`apps/api/src/userRoutes.ts`, with a test).
 4. After a change that is observable (feature, fix, data-model, UI, config), append an entry to [progress-tracker.md](progress-tracker.md) and update any context file whose statements are now untrue.
 5. Run `npm run lint` (must pass) and, for anything touching build/config, `npm run build`.
-6. Say plainly what you did **not** verify (e.g. "not tested against live Firestore").
+6. Say plainly what you did **not** verify (e.g. "not tested against a real MongoDB").
 
 **MUST NOT**
 1. Don't commit, push, merge or deploy unless explicitly asked. `main` auto-deploys to production.
-2. Don't add dependencies, a server, Cloud Functions, a router, or a state/CSS library without explicit agreement.
-3. Don't weaken `firestore.rules`, and don't change them without flagging it (they must be deployed manually).
+2. Don't add dependencies, a router, or a state/CSS library without explicit agreement.
+3. Don't weaken a permission check in `userRoutes.ts`, and don't change one without a test and flagging it.
 4. Don't commit secrets or `.env*` files; don't paste real user data into code, tests or docs.
-5. Don't write Firestore data from presentational components (see §4).
+5. Don't call the API for goals, requests or accounts from presentational components (see §4).
 6. Don't use raw hex colours or assume stock Tailwind colours (see [ui-context.md](ui-context.md#tailwind-colour-names-are-remapped-important)). Don't build cards-in-cards, buttons, badges or headings out of `bg-white` / `bg-slate-50` / `border-slate-200` utilities — use the shared parts (`.chip`, `.btn-tone`, `.btn-danger`, `.badge`, `.card-title`, `.neu-inset-sm`, `.menu`).
 7. Don't leave `console.log` debugging behind (there is one stray log in `SubcategoryBlock.tsx` — treat it as a bug, not a pattern).
 8. Don't "clean up" unrelated code in the same change.
@@ -39,7 +39,7 @@
 | A reusable component | `src/components/PascalCase.tsx`, one exported component per file (small helper components may share a file) |
 | Category-specific suggestions | `src/categoryPresets.ts` |
 | Theme token, surface or animation | `src/index.css` |
-| A Firestore write for goals/requests/user doc | a handler in `src/App.tsx` |
+| A change to goals/requests/accounts | a handler in `src/App.tsx` calling `appApi` (`src/api/appApi.ts`), and a route + test in `apps/api/src/userRoutes.ts` |
 
 ## 3. Naming
 
@@ -85,12 +85,12 @@ const handleToggleTask = async (goalId: string, taskId: string) => {
 
 - State is updated by the realtime listener echoing the write; don't also `setGoals` unless the UI would otherwise show a blank screen (the one existing exception is goal creation).
 - Owner-only operations start with `if (!isOwner) return;`.
-- Anything that changes `collaborators` must end with `syncGoalAccess(...)` ([backend-rules.md §3](backend-rules.md)).
+- Anything that changes the roster is a server route that ends with `syncGoalAccess(...)` ([backend-rules.md §4](backend-rules.md)); the app never writes access lists.
 
 ### 4.2 Components
 
 - Typed props, named export: `export const Foo: React.FC<FooProps> = ({ … }) => { … }`. Default values in the destructuring.
-- Presentational: data in via props, changes out via `on…` callbacks. Only `ChatPanel`, `ProfessionalProfilePanel` and the credentials fetch in `CollaboratorsPanel` touch Firestore directly — don't add more without reason.
+- Presentational: data in via props, changes out via `on…` callbacks. Only `ChatPanel`, `ProfessionalProfilePanel` and the credentials fetch in `CollaboratorsPanel` call the API directly — don't add more without reason.
 - **Colour for owner vs professional comes from the tone**, not from `isOwner` ternaries: the app root carries `data-role="owner|pro"`, and the shared parts and `--tone-*` variables follow it. Use `.chip`, `.btn-tone`, `.badge`, `GlassIconButton variant="tone"`. Use `isOwner` only for *behaviour* (what is allowed or shown). Older components still contain colour ternaries; don't copy them.
 - Reuse components instead of copying their markup: a subcategory with tasks is always `SubcategoryBlock` (the goal page and Today both use it); a ⋯ menu is `MenuButton`; a weekday choice is `WeekdayPicker`.
 - Early-return `null` for closed modals (`if (!isOpen) return null;`) after all hooks.
@@ -108,7 +108,7 @@ const handleToggleTask = async (goalId: string, taskId: string) => {
 
 ### 4.5 Errors and messages
 
-- `console.error('<Action> error:', err)` plus a short, human message via `setErrorMessage(...)` (rose banner) or `setSuccessMessage(...)`. Messages say what happened and, where useful, what to do. Never show raw Firebase error text unless it is the only useful clue (the login screen maps codes with `friendlyAuthError`).
+- `console.error('<Action> error:', err)` plus a short, human message via `setErrorMessage(...)` (rose banner) or `setSuccessMessage(...)`. Messages say what happened and, where useful, what to do. Never show raw error text unless it is the only useful clue (the login screen maps Firebase codes with `friendlyAuthError`; failed API calls go through `apiProblem`).
 - Don't swallow errors silently, except best-effort cleanup that already uses `.catch(() => {})` for non-critical writes.
 
 ### 4.6 Styling
@@ -131,15 +131,15 @@ The codebase uses **prose comments that explain why**, typically a `/** … */` 
 
 **Add a goal category** — update all four: `GOAL_CATEGORIES` (`utils.ts`), `CATEGORY_ICONS` (`CreateGoalModal.tsx`), `CATEGORY_ACCENTS` (`App.tsx`), `CATEGORY_PRESETS` and optionally the keyword heuristics in `getCategoryPresets` (`categoryPresets.ts`). Update [ui-context.md](ui-context.md).
 
-**Add a field to a goal** — `Goal` in `types.ts` → `mapGoalDoc` in `App.tsx` → write it where it is created/edited → decide who may edit it: owner-only (no rule change) or editor-writable (add to `contentOnlyChange` in `firestore.rules` and redeploy) → update [backend-rules.md](backend-rules.md) and `firebase-blueprint.json`.
+**Add a field to a goal** — `Goal` in `packages/shared/src/app.ts` → `userSchemas.ts` (or it is dropped) → `mapGoalDoc` in `App.tsx` → write it where it is created/edited → decide who may edit it: owner-only (nothing more) or editor-writable (add it to the editor allow-list in `PATCH /goals/:id`, with a test) → update [backend-rules.md](backend-rules.md).
 
-**Change how routines work** — the rules live in `src/recurrence.ts` as pure functions; change them there, then call them from the handler. Keep them pure (arrays in, arrays out), UTC-date based, and free of `undefined` values (Firestore rejects them). Re-run the logic checks (see §6) and mind the size budget.
+**Change how routines work** — the rules live in `src/recurrence.ts` as pure functions; change them there, then call them from the handler. Keep them pure (arrays in, arrays out), UTC-date based, and free of `undefined` values. Re-run the logic checks (see §6) and mind the size budget.
 
 **Add a top-level tab** — extend the `activeTab` union and `navTabs`/`swipeTabs`/`NavTab['key']` in `App.tsx`, render the view in `<main>`, add it to the back-button logic if it needs special handling, mention it in [ui-context.md](ui-context.md) and [architecture.md](architecture.md).
 
-**Add a new Firestore collection/query** — rules first (and deploy), then the listener/handler, then the docs. Confirm the query is rule-provable.
+**Add a new kind of stored data** — a store collection (and index) and a route with its permission test first, then an `appApi` call and handler, then the docs.
 
-**Change what a professional can do** — change `firestore.rules`, then `goalAccessLevel`/`canEdit…` helpers, then the UI affordances, then the docs. Test as owner, edit-pro, view-pro and an unrelated user.
+**Change what a professional can do** — change the route and its test in `userRoutes.ts`, then `goalAccessLevel`/`canEdit…` helpers, then the UI affordances, then the docs. Test as owner, edit-pro, view-pro and an unrelated user.
 
 ## 6. Verification (there are no automated tests)
 
