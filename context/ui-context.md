@@ -137,6 +137,8 @@ Spacing, text sizes, dialogs and controls are decided **once**, in shared parts.
 
 ### Overlays
 
+> A dialog's header and footer stay fixed; only its body scrolls. Never leave a finished animation holding a `transform` on an ancestor of a dialog (it breaks `position: fixed`): panel animations use `backwards` fill.
+
 One look: a light dim (`rgb(26 25 39 / 0.32)`), **no blur**, a white panel with a stronger shadow so it stands out without muddying the page behind. If you think a dialog needs a different overlay, change the shared `.scrim` rule so every dialog changes together.
 
 ### Before you finish a UI change

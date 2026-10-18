@@ -120,6 +120,14 @@ Found by reading the code on 2026-10-11; none of these have been reproduced unle
 
 ## Changelog
 
+### 2026-10-18 — Fix: dialogs on phone were cut off at the top  (branch `feature/phone-compact`)
+- **Type:** fix + ui
+- **What & why:** On the Connect tab (phone), the professional-profile dialog appeared scrolled and cut off at the top. Cause: the tab panels keep a `transform` after their slide-in animation (`animation-fill-mode: both`), and a transformed parent makes `position: fixed` children (every dialog's dimmed layer) position against the long page content instead of the screen. Fixed by letting the animation fill backwards only, so the screen-fixed layer is really screen-fixed again. Also, a tall dialog now keeps its **title and close button on top and its buttons at the bottom** while only the middle scrolls (`.dialog` is a flex column, `.dialog-body` scrolls), and uses `dvh` so phone browser bars don't push it off screen.
+- **Files:** `apps/web/src/index.css` (`.tab-panel`, `.dialog*`).
+- **Data/rules impact:** none.
+- **Verified:** build ✓ · tests ✓ · throwaway 400×691 sandbox (deleted): a dialog inside a tab panel on a long scrolled page stays fully inside the screen (top 34px, bottom 35px gap), and the header and footer stay visible while the body scrolls. **Not verified:** the real Connect screen after sign-in.
+- **Docs updated:** `context/ui-context.md` (Overlays note).
+
 ### 2026-10-18 — Phone first: Goals opens first, and the phone screens are compact  (branch `feature/phone-compact`)
 - **Type:** ui
 - **What & why:** The phone is the main target (APK), but the phone layout felt oversized and card-heavy. **Goals stays the first tab and the home screen** (order Goals, Today, Connect, Profile; first built Today-first, then switched at the user's request); back from Today/Connect/Profile/a goal goes to Goals, and on Goals "press back again" leaves. An empty Today and an empty Goals list both invite "Create your first goal" (which still offers the optional Help me plan). **Phone-only compaction** (desktop keeps its layout): Goals keeps its top card ("Your goals", the streak and the three stat keys) exactly as before, above the goal list, because the user wants the streak seen first; search is an icon that opens the box; categories are one scrolling row; goal cards show a title, one line of routine names and seven dots instead of the full week and brief (about 3 cards per screen); Today drops the mascot, shows the streak chip, and goal blocks are tighter ("Open" instead of "View Roadmap", no category badge). A phone type/radius scale lives in `index.css` (`page-title` 22px, smaller radii), and the floating tab bar is shorter and more opaque (the + is a little smaller). Navigation rules are a pure module, `navigation.ts`, with tests.

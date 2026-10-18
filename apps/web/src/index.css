@@ -952,8 +952,13 @@ input[type="radio"] {
   width: 100%;
   max-width: 28rem;
   max-height: min(90vh, 52rem);
+  max-height: min(92dvh, 52rem);
   margin: auto;
-  overflow-y: auto;
+  /* Header and footer stay put; only the body scrolls, so the title, the close
+     button and the main action are never scrolled out of reach. */
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
   padding: 1.5rem;
   border-radius: 28px;
   background: #fff;
@@ -965,9 +970,10 @@ input[type="radio"] {
 .dialog[data-size="xl"] { max-width: 40rem; }
 
 /* Header, body and footer share one rhythm: 1rem between parts, a hairline above the footer. */
-.dialog-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 0.75rem; }
-.dialog-body { display: grid; gap: 1rem; margin-top: 1rem; }
+.dialog-head { display: flex; flex-shrink: 0; align-items: flex-start; justify-content: space-between; gap: 0.75rem; }
+.dialog-body { display: grid; align-content: start; gap: 1rem; margin-top: 1rem; flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
 .dialog-foot {
+  flex-shrink: 0;
   display: flex;
   flex-wrap: wrap;
   align-items: center;
@@ -1188,7 +1194,7 @@ input[type="radio"] {
 }
 
 .tab-panel {
-  animation: gp-panel-in-right 0.42s var(--ease-glide) both;
+  animation: gp-panel-in-right 0.42s var(--ease-glide) backwards;
 }
 
 .tab-panel[data-dir="-1"] {
