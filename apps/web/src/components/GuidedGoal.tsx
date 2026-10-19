@@ -1,6 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  Apple,
   Briefcase,
   Building2,
   ChevronLeft,
@@ -8,12 +7,13 @@ import {
   Coins,
   Dumbbell,
   GraduationCap,
+  Plus,
   Sparkles,
   X,
 } from 'lucide-react';
 import { AskBubble, OptionRow } from './Onboarding';
 import type { AiBrief, AiFollowUp, AiProgramDraft } from '../api/appApi';
-import { fitnessInputs } from '../fitnessPlan';
+import { adviseFitnessWeek, fitnessInputs, weekdaysFor, type WeekAdvice } from '../fitnessPlan';
 import { menuFor } from '../exerciseMenu';
 import { dayNames, decorateFitness, totalWeeksFor } from '../program';
 import {
@@ -38,12 +38,20 @@ import { WEEKDAY_LETTER, WEEKDAY_LONG, WEEK_ORDER, describeDays } from '../recur
 const NICHE_ICONS: Record<NicheKey, React.ElementType> = {
   career: Briefcase,
   business: Building2,
-  health: Apple,
   fitness: Dumbbell,
   money: Coins,
   learning: GraduationCap,
   custom: Sparkles,
 };
+
+/** The three day-counts offered next to a suggestion: a little lighter, the suggestion, and a little more. */
+const presetCounts = (suggested: number): Array<{ label: string; count: number }> => [
+  ...(suggested > 2 ? [{ label: 'Lighter', count: suggested - 1 }] : []),
+  { label: 'Recommended', count: suggested },
+  ...(suggested < 6 ? [{ label: 'More', count: suggested + 1 }] : []),
+];
+
+const sameDays = (a: number[], b: number[]) => a.length === b.length && [...a].sort().join() === [...b].sort().join();
 
 interface GuidedGoalProps {
   /** Leave the flow. When a goal was just created, its id is passed so the app can open it. */
@@ -84,6 +92,12 @@ export const GuidedGoal: React.FC<GuidedGoalProps> = ({ onClose, onCreate, makeP
   const [days, setDays] = useState<number[]>([1, 3, 5]);
   // The time for each session is optional: nothing is asked or assumed until the person adds it.
   const [minutes, setMinutes] = useState<number | null>(null);
+  // True once the person has changed the days themselves, so a suggestion never overwrites their choice.
+  const [daysChosen, setDaysChosen] = useState(false);
+  // Fitness only, and only if the person wants to add them.
+  const [bodyOpen, setBodyOpen] = useState(false);
+  const [height, setHeight] = useState('');
+  const [weight, setWeight] = useState('');
   const [months, setMonths] = useState(3);
 
   const [plan, setPlan] = useState<StarterPlan | null>(null);
@@ -102,7 +116,15 @@ export const GuidedGoal: React.FC<GuidedGoalProps> = ({ onClose, onCreate, makeP
   const questions = useMemo(() => (niche ? visibleQuestions(niche, answers) : []), [niche, answers]);
   // The AI's questions look and answer exactly like ours: tap one, or "Something else".
   const followQuestions: GuidedQuestion[] = useMemo(
-    () => followUps.map((f) => ({ id: `ai:${f.id}`, title: f.title, kind: 'single', options: f.options, allowOther: true })),
+    () =>
+      followUps.map((f) => ({
+        id: `ai:${f.id}`,
+        title: f.title,
+        kind: 'single' as const,
+        options: f.options,
+        allowOther: true,
+        why: 'We ask this to fit the plan to your earlier answers.',
+      })),
     [followUps]
   );
   const allQuestions = useMemo(() => [...questions, ...followQuestions], [questions, followQuestions]);
@@ -146,11 +168,30 @@ export const GuidedGoal: React.FC<GuidedGoalProps> = ({ onClose, onCreate, makeP
       return { ...prev, [id]: exclusive(value) ? [value] : [...current.filter((v) => !exclusive(v)), value] };
     });
   };
-  const toggleDay = (day: number) => setDays((prev) => (prev.includes(day) ? prev.filter((d) => d !== day) : [...prev, day]));
+  const toggleDay = (day: number) => {
+    setDaysChosen(true);
+    setDays((prev) => (prev.includes(day) ? prev.filter((d) => d !== day) : [...prev, day]));
+  };
+  /** What the niche suggests for the week once it knows the person. */
+  const advice: WeekAdvice | undefined = useMemo(
+    () => (niche?.key === 'fitness' ? adviseFitnessWeek(new AnswerReader(niche.questions, answers)) : undefined),
+    [niche, answers]
+  );
+  // Arriving at the week screen with a suggestion: start from it, unless the person already chose days.
+  useEffect(() => {
+    if (step === 'week' && advice && !daysChosen) setDays(advice.days);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [step]);
 
   /** What the AI is told about this goal so far. */
   const briefFor = (withWeek: boolean): AiBrief => {
     const described = describeForAi(nicheKey!, answers, followUps);
+    if (nicheKey === 'fitness') {
+      const h = Number(height);
+      const w = Number(weight);
+      if (h >= 100 && h <= 230) described.answers.push({ q: 'Height.', a: `${Math.round(h)} cm` });
+      if (w >= 25 && w <= 300) described.answers.push({ q: 'Weight.', a: `${Math.round(w)} kg` });
+    }
     if (!withWeek) return described;
     const menu = nicheKey === 'fitness' ? fitnessMenu() : undefined;
     return { ...described, week: { days: dayNames(days), minutes, months }, ...(menu ? { menu } : {}) };
@@ -305,20 +346,30 @@ export const GuidedGoal: React.FC<GuidedGoalProps> = ({ onClose, onCreate, makeP
             ))}
             {question.allowOther && (
               <>
-                <OptionRow label="Something else" selected={picked === 'other'} onClick={() => setAnswer(question.id, 'other')} />
-                {picked === 'other' && (
+                {/* Tapping it again takes it back, so a typed answer is never a trap */}
+                <OptionRow
+                  label={question.otherLabel ?? 'Something else'}
+                  selected={question.kind === 'multi' ? many.includes('other') : picked === 'other'}
+                  onClick={() => {
+                    if (question.kind === 'multi') toggleMulti(question.id, 'other');
+                    else if (picked === 'other') setAnswer(question.id, '');
+                    else setAnswer(question.id, 'other');
+                  }}
+                />
+                {(question.kind === 'multi' ? many.includes('other') : picked === 'other') && (
                   <input
                     type="text"
                     maxLength={70}
                     value={typeof answers[`${question.id}_other`] === 'string' ? (answers[`${question.id}_other`] as string) : ''}
                     onChange={(e) => setAnswer(`${question.id}_other`, e.target.value)}
-                    placeholder="Type it if you like (optional)"
-                    aria-label="Name your own (optional)"
+                    placeholder={question.kind === 'multi' ? 'For example: sore left knee' : 'Type it if you like (optional)'}
+                    aria-label="Say it in your own words (optional)"
                     className="w-full text-base rounded-2xl px-4 py-3.5"
                   />
                 )}
               </>
             )}
+            <p className="px-2 pt-1 text-center text-xs leading-snug text-slate-500">{question.why}</p>
           </div>
         </>
       );
@@ -327,7 +378,30 @@ export const GuidedGoal: React.FC<GuidedGoalProps> = ({ onClose, onCreate, makeP
     if (step === 'week') {
       return (
         <>
-          <AskBubble title="Plan your week" sub="Pick your days and how long it runs. You can change all of it later." />
+          <AskBubble title="Plan your week" sub="We start from what you told us. Change anything you like." />
+
+          {advice && (
+            <div className="neu-inset-sm mt-5 space-y-2.5 p-3.5">
+              <p className="text-xs font-bold text-[color:var(--tone-700)]">Recommended for you</p>
+              <p className="text-sm leading-snug text-slate-700">{advice.note}</p>
+              <div className="flex flex-wrap gap-2" role="group" aria-label="Days a week">
+                {presetCounts(advice.days.length).map((preset) => (
+                  <button
+                    key={preset.label}
+                    type="button"
+                    className="chip px-3 py-1.5 text-xs"
+                    data-active={sameDays(days, weekdaysFor(preset.count))}
+                    onClick={() => {
+                      setDaysChosen(true);
+                      setDays(weekdaysFor(preset.count));
+                    }}
+                  >
+                    {preset.label} · {preset.count} days
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
 
           <p className="section-label mt-6 mb-2">Which days?</p>
           <div className="grid grid-cols-7 gap-2" role="group" aria-label="Days of the week">
@@ -348,7 +422,7 @@ export const GuidedGoal: React.FC<GuidedGoalProps> = ({ onClose, onCreate, makeP
           <p className="mt-2 text-xs font-medium text-slate-500">{days.length === 0 ? 'Pick at least one day' : `Every ${describeDays(days)}`}</p>
 
           {minutes === null ? (
-            <button type="button" className="chip mt-6 inline-flex items-center gap-2 px-4 py-2.5 text-sm" onClick={() => setMinutes(30)}>
+            <button type="button" className="chip mt-6 inline-flex items-center gap-2 px-4 py-2.5 text-sm" onClick={() => setMinutes(advice?.minutes ?? 30)}>
               <Clock className="h-4 w-4" />
               Add a time for each session
               <span className="font-medium text-slate-500">(optional)</span>
@@ -379,6 +453,47 @@ export const GuidedGoal: React.FC<GuidedGoalProps> = ({ onClose, onCreate, makeP
               </button>
             ))}
           </div>
+
+          {niche?.key === 'fitness' && (
+            <div className="mt-6">
+              {!bodyOpen ? (
+                <button type="button" className="chip inline-flex items-center gap-2 px-4 py-2.5 text-sm" onClick={() => setBodyOpen(true)}>
+                  <Plus className="h-4 w-4" />
+                  Add your height and weight
+                  <span className="font-medium text-slate-500">(optional)</span>
+                </button>
+              ) : (
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="section-label">Height and weight</p>
+                    <button
+                      type="button"
+                      className="text-xs font-semibold text-[color:var(--tone-700)] cursor-pointer"
+                      data-plain
+                      onClick={() => {
+                        setBodyOpen(false);
+                        setHeight('');
+                        setWeight('');
+                      }}
+                    >
+                      Remove
+                    </button>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <label className="block text-xs font-semibold text-slate-600">
+                      Height (cm)
+                      <input id="guided-height" type="number" inputMode="numeric" min={100} max={230} value={height} onChange={(e) => setHeight(e.target.value)} className="mt-1 w-full rounded-2xl px-4 py-3 text-base" />
+                    </label>
+                    <label className="block text-xs font-semibold text-slate-600">
+                      Weight (kg)
+                      <input id="guided-weight" type="number" inputMode="numeric" min={25} max={300} value={weight} onChange={(e) => setWeight(e.target.value)} className="mt-1 w-full rounded-2xl px-4 py-3 text-base" />
+                    </label>
+                  </div>
+                  <p className="text-xs leading-snug text-slate-500">We use these only to suit the exercises and how hard to start. Skip them if you like.</p>
+                </div>
+              )}
+            </div>
+          )}
         </>
       );
     }

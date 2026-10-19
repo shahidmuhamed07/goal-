@@ -1,8 +1,6 @@
 import React, { useState } from 'react';
 import {
   Briefcase,
-  Building2,
-  Heart,
   Dumbbell,
   Coins,
   GraduationCap,
@@ -41,10 +39,8 @@ interface CreateGoalModalProps {
 }
 
 const CATEGORY_ICONS: Record<string, React.FC<{ className?: string }>> = {
-  'Career': Briefcase,
-  'Business': Building2,
-  'Health': Heart,
-  'Fitness': Dumbbell,
+  'Health & Fitness': Dumbbell,
+  'Business & Career': Briefcase,
   'Finance & Wealth': Coins,
   'Learning & Skills': GraduationCap,
 };
@@ -62,7 +58,7 @@ export const CreateGoalModal: React.FC<CreateGoalModalProps> = ({
   const currentMonthKey = getCurrentMonthKey();
 
   const [title, setTitle] = useState('');
-  const [category, setCategory] = useState<string>('Career');
+  const [category, setCategory] = useState<string>('Health & Fitness');
   const [customCategory, setCustomCategory] = useState('');
   const [isCustomCategory, setIsCustomCategory] = useState(false);
   const [description, setDescription] = useState('');
@@ -154,19 +150,24 @@ export const CreateGoalModal: React.FC<CreateGoalModalProps> = ({
       }
     >
         {onHelpMeChoose && (
-          <div className="neu-inset-sm flex items-center justify-between gap-3 px-3.5 py-2.5">
-            <div className="min-w-0">
-              <p className="text-xs font-bold text-slate-800">Not sure where to start?</p>
-              <p className="text-[11px] text-slate-500">A few quick taps and we suggest a plan. Totally optional.</p>
-            </div>
+          <div className="space-y-3">
+            {/* The main way to start: the AI asks a few taps of questions and writes the plan */}
             <button
               type="button"
-              className="chip inline-flex items-center gap-1.5 px-3 py-1.5 text-xs shrink-0"
               onClick={onHelpMeChoose}
+              className="neu lift flex w-full cursor-pointer items-center gap-4 p-4 text-left sm:p-5"
+              data-plain
             >
-              <Sparkles className="w-3.5 h-3.5" />
-              Help me plan
+              <span className="orb grid h-12 w-12 shrink-0 place-items-center rounded-full" aria-hidden="true">
+                <Sparkles className="h-5 w-5 text-[color:var(--tone-700)]" />
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="block font-display text-lg font-semibold text-slate-900">Plan it with me</span>
+                <span className="block text-sm leading-snug text-slate-500">A few quick taps, and we write your plan week by week.</span>
+              </span>
+              <span className="btn-tone shrink-0 px-4 py-2 text-sm">Start</span>
             </button>
+            <p className="divider-label">or set it up yourself</p>
           </div>
         )}
 
@@ -190,12 +191,8 @@ export const CreateGoalModal: React.FC<CreateGoalModalProps> = ({
 
           {/* Category: pick a preset or write your own */}
           <div>
-            <div className="flex items-center justify-between mb-2">
-              <span className="section-label">Category</span>
-              <span className="badge">Selected: {activeCategory || 'Custom'}</span>
-            </div>
-
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
+            <div className="sr-only" id="category-label">Area of the goal</div>
+            <div className="grid grid-cols-2 gap-2.5" role="group" aria-labelledby="category-label">
               {GOAL_CATEGORIES.map((cat) => {
                 const IconComponent = CATEGORY_ICONS[cat] || Target;
                 const isSelected = !isCustomCategory && category === cat;
@@ -212,7 +209,7 @@ export const CreateGoalModal: React.FC<CreateGoalModalProps> = ({
                     aria-pressed={isSelected}
                   >
                     <IconComponent className="w-3.5 h-3.5 flex-shrink-0" />
-                    <span className="truncate">{cat}</span>
+                    <span className="min-w-0 leading-tight">{cat}</span>
                   </button>
                 );
               })}

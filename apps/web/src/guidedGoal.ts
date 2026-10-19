@@ -32,8 +32,12 @@ export interface GuidedQuestion {
   /** `single`: tap one. `multi`: tap any (none is fine). Nothing here ever has to be typed. */
   kind: 'single' | 'multi';
   options: GuidedOption[];
-  /** Adds a "Something else" choice. Typing a name for it is optional. */
+  /** Adds a "Something else" choice (pick-any questions too). Typing a name for it is optional. */
   allowOther?: boolean;
+  /** What that extra choice says, when "Something else" does not fit (for example "I have a pain or limit"). */
+  otherLabel?: string;
+  /** One short line shown under the choices: why we ask. Every question has one. */
+  why: string;
   /** Ask this question only when it applies to the answers so far. */
   showIf?: (answers: Answers) => boolean;
 }
@@ -54,7 +58,7 @@ export interface RoutineDraft {
 }
 
 /** The niches people can start from. `custom` is "Something else": a generic starting point for any goal. */
-export type NicheKey = 'career' | 'business' | 'health' | 'fitness' | 'money' | 'learning' | 'custom';
+export type NicheKey = 'career' | 'business' | 'fitness' | 'money' | 'learning' | 'custom';
 
 export interface Niche {
   key: NicheKey;
@@ -134,13 +138,14 @@ const or = (value: string, fallback: string) => (value ? value : fallback);
 
 const career: Niche = {
   key: 'career',
-  label: 'Career',
-  tagline: 'A new job, a promotion or a new direction',
-  category: 'Career',
+  label: 'Business & Career',
+  tagline: 'A job, a promotion, or growing a business',
+  category: 'Business & Career',
   questions: [
     {
       id: 'aim',
       title: 'What is your main aim?',
+      why: 'Your aim decides which weekly steps we start with.',
       kind: 'single',
       allowOther: true,
       options: [
@@ -148,22 +153,25 @@ const career: Niche = {
         opt('promo', 'Get promoted'),
         opt('switch', 'Switch to a new field'),
         opt('grow', 'Grow my skills and profile'),
+        opt('business', 'Start or grow a business'),
       ],
     },
     {
       id: 'level',
       title: 'Where are you right now?',
+      why: 'We match the steps to how far along you are.',
       kind: 'single',
       options: [
         opt('early', 'Early in my career', '0 to 2 years'),
         opt('mid', 'Some experience', '2 to 6 years'),
         opt('senior', 'Very experienced', 'More than 6 years'),
-        opt('between', 'Between jobs'),
+        opt('between', 'Between jobs', 'Looking for the next role'),
       ],
     },
     {
       id: 'focus',
       title: 'What would help you most?',
+      why: 'We add routines for the things you pick.',
       hint: 'Pick as many as you like, or none.',
       kind: 'multi',
       options: [
@@ -174,8 +182,10 @@ const career: Niche = {
       ],
     },
   ],
-  plan: (r) => {
+  plan: (r, common) => {
     const aim = r.one('aim');
+    // Growing a business has its own starting plan.
+    if (aim === 'business') return business.plan(r, common);
     const focus = r.many('focus');
     const searching = aim === 'job' || aim === 'switch' || r.has('level', 'between');
 
@@ -274,15 +284,17 @@ const career: Niche = {
 
 /* -------------------------------------------------------------- business */
 
+/** Not offered on its own: "Start or grow a business" is one of the aims under Business & Career. */
 const business: Niche = {
   key: 'business',
   label: 'Business',
   tagline: 'Launch, get customers or grow sales',
-  category: 'Business',
+  category: 'Business & Career',
   questions: [
     {
       id: 'aim',
       title: 'What do you want most?',
+      why: 'Your aim decides which weekly steps we start with.',
       kind: 'single',
       allowOther: true,
       options: [opt('customers', 'My first customers'), opt('sales', 'More sales'), opt('systems', 'To get organised'), opt('launch', 'To launch my product')],
@@ -290,12 +302,14 @@ const business: Niche = {
     {
       id: 'stage',
       title: 'Where is your business?',
+      why: 'We start from where the business is today.',
       kind: 'single',
       options: [opt('idea', 'Just an idea'), opt('started', 'Started, no sales yet'), opt('selling', 'Making some sales'), opt('growing', 'Growing steadily')],
     },
     {
       id: 'focus',
       title: 'Where do you need the most help?',
+      why: 'We add routines for the things you pick.',
       hint: 'Pick as many as you like, or none.',
       kind: 'multi',
       options: [opt('marketing', 'Getting seen'), opt('outreach', 'Talking to customers'), opt('product', 'The product or service'), opt('money', 'Money and admin')],
@@ -356,155 +370,58 @@ const business: Niche = {
   },
 };
 
-/* ---------------------------------------------------------------- health */
-
-const notEating = (a: Answers) => a.aim !== 'eat';
-const eating = (a: Answers) => a.aim === 'eat';
-
-const health: Niche = {
-  key: 'health',
-  label: 'Health',
-  tagline: 'Eating, sleep, stress and energy',
-  category: 'Health',
-  questions: [
-    {
-      id: 'aim',
-      title: 'What do you want to improve?',
-      kind: 'single',
-      allowOther: true,
-      options: [opt('eat', 'Eat better'), opt('sleep', 'Sleep better'), opt('stress', 'Feel less stressed'), opt('energy', 'Have more energy')],
-    },
-    {
-      id: 'style',
-      title: 'Do you follow an eating style?',
-      kind: 'single',
-      showIf: eating,
-      options: [opt('any', 'No particular style'), opt('vegetarian', 'Vegetarian'), opt('vegan', 'Vegan'), opt('protein', 'High-protein'), opt('lowcarb', 'Low-carb')],
-    },
-    {
-      id: 'meals',
-      title: 'Where do most meals come from?',
-      kind: 'single',
-      showIf: eating,
-      options: [opt('home', 'I cook at home'), opt('mixed', 'A mix of both'), opt('out', 'Mostly eating out or ordering')],
-    },
-    {
-      id: 'issues',
-      title: 'What gets in the way?',
-      hint: 'Pick as many as you like, or none.',
-      kind: 'multi',
-      showIf: notEating,
-      options: [opt('phone', 'Phone late at night'), opt('caffeine', 'Too much caffeine'), opt('schedule', 'An uneven schedule'), opt('mind', 'A busy mind'), opt('movement', 'Not enough movement')],
-    },
-    {
-      id: 'day',
-      title: 'What is your day like?',
-      kind: 'single',
-      showIf: notEating,
-      options: [opt('early', 'I start early'), opt('regular', 'Fairly regular hours'), opt('late', 'I go to bed late'), opt('irregular', 'It changes a lot')],
-    },
-  ],
-  plan: (r) => {
-    const aim = r.one('aim');
-
-    if (aim === 'eat') {
-      const style = r.one('style') ?? 'any';
-      const meals = r.one('meals') ?? 'mixed';
-      const protein: Record<string, string> = {
-        any: 'Protein with every meal',
-        vegetarian: 'Protein with every meal (eggs, paneer, lentils)',
-        vegan: 'Protein with every meal (tofu, beans, lentils)',
-        protein: 'Aim for 30 g of protein at every meal',
-        lowcarb: 'Protein and vegetables at every meal',
-      };
-      const routines: RoutineDraft[] = [];
-      if (meals !== 'home') {
-        routines.push({ name: 'Eating out, smartly', tasks: ['Check the menu before you go', 'Choose a protein and a vegetable', 'Skip the sugary drink', 'Stop when you feel 80% full', 'Share a dessert instead of ordering your own'] });
-      }
-      if (meals !== 'out') {
-        routines.push({ name: 'Plan and prep', tasks: ['Plan the week’s meals', 'Grocery shop for fresh food', 'Batch-cook lunches for the week', 'Wash and chop vegetables', 'Portion out healthy snacks'] });
-      }
-      routines.push({ name: 'High-protein day', tasks: [protein[style] ?? protein.any, 'A protein-rich snack', 'Drink 2 to 3 litres of water', 'Log what you ate', 'Take a 10-minute walk after dinner'] });
-      routines.push({ name: 'Veggie-forward day', tasks: ['Half of every plate is vegetables', 'No sugary drinks', 'Try one new vegetable', 'Eat slowly, away from screens', 'Go for an evening walk'] });
-      return { title: 'Eat well, feel great', description: 'Simple weekly habits for steady, healthy eating.', routines };
-    }
-
-    const issues = r.many('issues');
-    const routines: RoutineDraft[] = [];
-    if (aim === 'sleep' || issues.includes('phone') || issues.includes('schedule') || r.has('day', 'late')) {
-      routines.push({ name: 'Wind-down', tasks: ['Screens off 30 minutes before bed', 'Dim the lights in the evening', 'Write tomorrow’s top 3 tasks', 'Go to bed at the same time', 'Read a few pages'] });
-    }
-    if (aim === 'stress' || issues.includes('mind')) {
-      routines.push({ name: 'Stress break', tasks: ['Breathe slowly for 5 minutes', 'Take a short walk outside', 'Write down what is on your mind', 'Stretch your neck and shoulders', 'Do one thing just for fun'] });
-    }
-    if (aim === 'energy' || issues.includes('caffeine') || issues.includes('movement')) {
-      routines.push({ name: 'Energy boost', tasks: ['Drink a glass of water first thing', 'No caffeine after lunch', 'Move for 10 minutes', 'Eat something with protein', 'Stand up every hour'] });
-    }
-    routines.push({ name: 'Morning reset', tasks: ['Get 10 minutes of daylight', 'Drink water', 'Stretch for 3 minutes', 'Pick one thing that matters today', 'No phone for the first 15 minutes'] });
-
-    const titles: Record<string, string> = { sleep: 'Sleep better, wake up rested', stress: 'Feel calmer day to day', energy: 'Have steady energy all day' };
-    return {
-      title: aim === 'other' ? or(r.other('aim', 70), 'Feel better every day') : titles[aim ?? 'energy'] ?? 'Feel better every day',
-      description: 'Gentle daily routines for rest and energy. Keep what helps and drop the rest.',
-      routines: ensure(routines, [
-        { name: 'Wind-down', tasks: ['Screens off before bed', 'Dim the lights', 'Plan tomorrow', 'Same bedtime', 'Read a little'] },
-        { name: 'Stress break', tasks: ['Breathe for 5 minutes', 'Short walk', 'Write down worries', 'Stretch', 'Do something fun'] },
-        { name: 'Energy boost', tasks: ['Drink water first', 'Less caffeine', 'Move for 10 minutes', 'Eat protein', 'Stand every hour'] },
-      ]),
-    };
-  },
-};
-
 /* --------------------------------------------------------------- fitness */
 
 const fitness: Niche = {
   key: 'fitness',
-  label: 'Fitness',
-  tagline: 'Build strength, stamina or both',
-  category: 'Fitness',
+  label: 'Health & Fitness',
+  tagline: 'Build muscle, lose fat, stamina or flexibility',
+  category: 'Health & Fitness',
   questions: [
     {
       id: 'aim',
       title: 'What is your main aim?',
+      why: 'Your aim decides the kind of workouts and how hard to push.',
       kind: 'single',
       allowOther: true,
       options: [
         opt('muscle', 'Build muscle', 'Bigger, stronger muscles'),
-        opt('strength', 'Get stronger', 'Lift heavier over time'),
         opt('fat', 'Lose fat', 'Burn more and feel lighter'),
         opt('stamina', 'Build stamina', 'Run, ride or swim for longer'),
-        opt('mobility', 'Move better', 'Loosen up, fix stiffness'),
-        opt('active', 'Stay active and healthy'),
+        opt('mobility', 'Stretch and move better', 'Loosen up, fix stiffness'),
       ],
     },
     {
       id: 'where',
       title: 'Where will you train?',
+      why: 'We only use exercises you can do where you train.',
       kind: 'single',
       options: [
         opt('gym', 'At a gym', 'Machines and weights'),
         opt('home', 'At home, no equipment', 'Just your body'),
-        opt('homegear', 'At home with dumbbells or bands'),
+        opt('homegear', 'At home with weights', 'Dumbbells or bands'),
         opt('outdoors', 'Outdoors', 'A park, track or playground'),
       ],
     },
     {
       id: 'level',
       title: 'How experienced are you?',
+      why: 'It sets how many sets, how heavy and how fast we build up.',
       kind: 'single',
       options: [
         opt('beginner', 'Beginner', 'New to training'),
         opt('returning', 'Coming back', 'After a long break'),
-        opt('some', 'Some experience'),
-        opt('experienced', 'Experienced'),
+        opt('some', 'Some experience', 'You know the basic lifts'),
+        opt('experienced', 'Experienced', 'You train regularly'),
       ],
     },
     {
       id: 'split',
       title: 'How do you like to split your training?',
+      why: 'It decides what each day trains, so no day repeats the last.',
       hint: 'This shapes what each day trains.',
       kind: 'single',
-      showIf: (answers) => ['muscle', 'strength', 'fat', 'active'].includes(String(answers.aim)),
+      showIf: (answers) => ['muscle', 'fat'].includes(String(answers.aim)),
       options: [
         opt('auto', 'You decide for me', 'We pick what suits your days'),
         opt('full', 'Full body each time', 'A bit of everything, every session'),
@@ -515,15 +432,12 @@ const fitness: Niche = {
     {
       id: 'limits',
       title: 'Any pain or limits to be careful with?',
-      hint: 'Pick any that apply. We will choose gentler exercises for them.',
+      hint: 'If you have one, tell us what it is.',
+      why: 'We pick gentler exercises around anything that hurts.',
       kind: 'multi',
-      options: [
-        nothing('No pain or limits', 'I feel fine, go ahead'),
-        opt('knees', 'Sore or weak knees'),
-        opt('back', 'Lower back trouble'),
-        opt('shoulders', 'Shoulder trouble'),
-        opt('breath', 'Easily out of breath', 'We will keep it easy and build up'),
-      ],
+      allowOther: true,
+      otherLabel: 'I have a pain or limit',
+      options: [nothing('No pain or limits', 'I feel fine, go ahead')],
     },
   ],
   // The framework lives in fitnessPlan.ts: the number of training days, the place, the level, the
@@ -542,6 +456,7 @@ const money: Niche = {
     {
       id: 'aim',
       title: 'What is your money goal?',
+      why: 'Your goal decides which money habits we start with.',
       kind: 'single',
       allowOther: true,
       options: [opt('save', 'Save more'), opt('debt', 'Pay off debt'), opt('invest', 'Start investing'), opt('track', 'Know where my money goes')],
@@ -549,12 +464,14 @@ const money: Niche = {
     {
       id: 'now',
       title: 'How do you handle money today?',
+      why: 'We start from where you are, not from scratch.',
       kind: 'single',
       options: [opt('none', 'No real system'), opt('loose', 'I keep a rough eye on it'), opt('budget', 'I already use a budget')],
     },
     {
       id: 'focus',
       title: 'What do you want to work on?',
+      why: 'We add routines for the things you pick.',
       hint: 'Pick as many as you like, or none.',
       kind: 'multi',
       options: [opt('budget', 'A simple budget'), opt('spending', 'Cutting spending'), opt('income', 'Earning more'), opt('learn', 'Learning the basics')],
@@ -608,6 +525,7 @@ const learning: Niche = {
     {
       id: 'what',
       title: 'What do you want to learn?',
+      why: 'We shape the practice around what you want to learn.',
       kind: 'single',
       allowOther: true,
       options: [
@@ -621,12 +539,14 @@ const learning: Niche = {
     {
       id: 'level',
       title: 'Where are you starting from?',
+      why: 'Beginners and learners with some basics need different first steps.',
       kind: 'single',
       options: [opt('none', 'Complete beginner'), opt('basics', 'I know the basics'), opt('mid', 'Intermediate')],
     },
     {
       id: 'style',
       title: 'How do you like to learn?',
+      why: 'We build the week around how you like to learn.',
       hint: 'Pick as many as you like, or none.',
       kind: 'multi',
       options: [opt('read', 'Reading'), opt('watch', 'Videos and courses'), opt('practice', 'Practising and projects'), opt('teach', 'Explaining it to others')],
@@ -689,6 +609,7 @@ const custom: Niche = {
     {
       id: 'kind',
       title: 'What kind of goal is it?',
+      why: 'The kind of goal decides the shape of the plan.',
       kind: 'single',
       allowOther: true,
       options: [opt('habit', 'Build a habit'), opt('finish', 'Finish something'), opt('learn', 'Learn something'), opt('improve', 'Get better at something')],
@@ -696,6 +617,7 @@ const custom: Niche = {
     {
       id: 'help',
       title: 'What would help you most?',
+      why: 'We add the support you pick to the plan.',
       hint: 'Pick as many as you like, or none.',
       kind: 'multi',
       options: [opt('steps', 'Breaking it into small steps'), opt('checkin', 'A daily nudge to keep going'), opt('review', 'A weekly look at my progress')],
@@ -738,7 +660,7 @@ const custom: Niche = {
 /* ---------------------------------------------------------------- engine */
 
 /** The niches in the order they are offered. They match the categories in the plain form. */
-export const NICHES: Niche[] = [career, business, health, fitness, money, learning, custom];
+export const NICHES: Niche[] = [fitness, career, money, learning, custom];
 
 export const nicheByKey = (key: NicheKey): Niche => NICHES.find((n) => n.key === key) ?? NICHES[0];
 

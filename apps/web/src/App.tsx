@@ -3046,6 +3046,7 @@ export default function App() {
                       ) : (
                         <>
                           <BackButton
+                            compact
                             label="All goals"
                             onClick={() => {
                               setSelectedGoalId(null);

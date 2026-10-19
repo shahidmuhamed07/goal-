@@ -11,6 +11,8 @@ import { WEEKDAY_LETTER, goalEndDate, goalStartDate, weekdayOf } from '../recurr
  * makes each one scannable.
  */
 const CATEGORY_ACCENTS: Record<string, string> = {
+  'Health & Fitness': 'from-violet-400 to-violet-600',
+  'Business & Career': 'from-blue-400 to-blue-600',
   Career: 'from-blue-400 to-blue-600',
   Business: 'from-violet-500 to-violet-700',
   Health: 'from-emerald-300 to-emerald-500',

@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import {
+  AnswerReader,
   NICHES,
   buildGuidedPlan,
   cleanText,
@@ -13,6 +14,7 @@ import {
   type NicheKey,
 } from './guidedGoal';
 import { GOAL_CATEGORIES } from './utils';
+import { adviseFitnessWeek, limitsFrom, weekdaysFor } from './fitnessPlan';
 import { materializePlan, tasksForMinutes } from './starterPlan';
 
 const common = (over: Partial<CommonAnswers> = {}): CommonAnswers => ({ days: [1, 3, 5], minutes: 30, months: 3, ...over });
@@ -29,11 +31,11 @@ const firstChoices = (key: NicheKey): Answers => {
 };
 
 describe('the niches', () => {
-  it('are the six categories of the plain form, plus "Something else"', () => {
+  it('are the four areas of the plain form, plus "Something else"', () => {
     const real = NICHES.filter((n) => n.key !== 'custom');
     assert.deepEqual(real.map((n) => n.category), [...GOAL_CATEGORIES]);
     assert.equal(NICHES[NICHES.length - 1].key, 'custom');
-    assert.equal(NICHES.length, 7);
+    assert.equal(NICHES.length, 5);
   });
 
   it('have no Creative Writing, in the plain form or the guided flow', () => {
@@ -47,7 +49,7 @@ describe('the niches', () => {
       assert.equal(new Set(n.questions.map((q) => q.id)).size, n.questions.length, `${n.key} repeats a question id`);
       for (const q of n.questions) {
         assert.ok(q.kind === 'single' || q.kind === 'multi', `${n.key}.${q.id}`);
-        assert.ok(q.options.length >= 2, `${n.key}.${q.id} needs choices`);
+        assert.ok(q.options.length + (q.allowOther ? 1 : 0) >= 2, `${n.key}.${q.id} needs choices`);
       }
     }
   });
@@ -149,9 +151,11 @@ describe('answers change what is offered, without forcing anything', () => {
     assert.ok(names.includes('Networking') && names.includes('Profile and portfolio'));
   });
 
-  it('business: an idea gets a "test the idea" routine first', () => {
-    const plan = buildGuidedPlan('business', { stage: 'idea', aim: 'launch' }, common());
-    assert.equal(plan.routines[0].name, 'Test the idea');
+  it('business and career are one area: "Start or grow a business" gets a business plan', () => {
+    const plan = buildGuidedPlan('career', { aim: 'business' }, common({ days: [1, 2, 3, 4, 5] }));
+    assert.equal(plan.category, 'Business & Career');
+    assert.ok(plan.routines.length >= 3);
+    assert.ok(plan.routines.every((r) => r.tasks.length > 0));
   });
 
   it('"Something else" uses what was typed, and works fine if nothing was typed', () => {
@@ -186,36 +190,6 @@ describe('answers change what is offered, without forcing anything', () => {
     assert.equal(plan.category, 'General');
     assert.equal(plan.focus, 'custom');
     assert.ok(plan.routines.some((r) => r.name === 'Daily check-in'));
-  });
-});
-
-describe('health asks about eating or about rest, never both', () => {
-  const health = NICHES.find((n) => n.key === 'health')!;
-
-  it('eating: asks about style and meals', () => {
-    assert.deepEqual(visibleQuestions(health, { aim: 'eat' }).map((q) => q.id), ['aim', 'style', 'meals']);
-  });
-
-  it('sleep, stress and energy: ask what gets in the way and what the day is like', () => {
-    for (const aim of ['sleep', 'stress', 'energy']) {
-      assert.deepEqual(visibleQuestions(health, { aim }).map((q) => q.id), ['aim', 'issues', 'day']);
-    }
-  });
-
-  it('eating: the style changes the protein task and eating out adds a routine for it', () => {
-    const veg = buildGuidedPlan('health', { aim: 'eat', style: 'vegetarian', meals: 'home' }, common({ days: [1, 2, 3, 4, 5], minutes: 60 }));
-    assert.equal(veg.title, 'Eat well, feel great');
-    assert.ok(veg.routines.flatMap((r) => r.tasks).some((t) => t.includes('paneer')));
-    const vegan = buildGuidedPlan('health', { aim: 'eat', style: 'vegan', meals: 'home' }, common({ days: [1, 2, 3, 4, 5], minutes: 60 }));
-    assert.ok(vegan.routines.flatMap((r) => r.tasks).some((t) => t.includes('tofu')));
-    const out = buildGuidedPlan('health', { aim: 'eat', meals: 'out' }, common({ days: [1, 2, 3, 4] }));
-    assert.equal(out.routines[0].name, 'Eating out, smartly');
-  });
-
-  it('sleep: gets a wind-down routine', () => {
-    const plan = buildGuidedPlan('health', { aim: 'sleep' }, common());
-    assert.equal(plan.title, 'Sleep better, wake up rested');
-    assert.ok(plan.routines.some((r) => r.name === 'Wind-down'));
   });
 });
 
@@ -318,7 +292,7 @@ describe('it plugs into the calendar', () => {
 describe('working with the AI planner', () => {
   it('tells the AI the area and each choice as plain question and answer text', () => {
     const described = describeForAi('career', { aim: 'switch' });
-    assert.equal(described.niche, 'Career');
+    assert.equal(described.niche, 'Business & Career');
     assert.ok(described.answers.length >= 1);
     assert.ok(described.answers.every((a) => a.q.length > 0 && a.a.length > 0));
     assert.ok(!JSON.stringify(described).includes('"switch"'), 'shows the label, not the internal value');
@@ -355,5 +329,68 @@ describe('the "no pain or limits" choice', () => {
     const none = buildGuidedPlan('fitness', { ...base, limits: ['none'] }, common());
     const empty = buildGuidedPlan('fitness', { ...base, limits: [] }, common());
     assert.deepEqual(none, empty);
+  });
+});
+
+describe('every question reads the same', () => {
+  it('explains why it is asked, in one short line', () => {
+    for (const n of NICHES) {
+      for (const q of n.questions) {
+        assert.ok(q.why.length >= 10 && q.why.length <= 90, `${n.key}.${q.id}: "${q.why}"`);
+      }
+    }
+  });
+
+  it('gives every choice of a question a hint, or none of them (never just some)', () => {
+    for (const n of NICHES) {
+      for (const q of n.questions) {
+        const hinted = q.options.filter((o) => !!o.hint).length;
+        assert.ok(hinted === 0 || hinted === q.options.length, `${n.key}.${q.id} has hints on ${hinted} of ${q.options.length} choices`);
+      }
+    }
+  });
+
+  it('fitness lets the person describe a pain in their own words, and reads it', () => {
+    const limits = NICHES.find((n) => n.key === 'fitness')!.questions.find((q) => q.id === 'limits')!;
+    assert.equal(limits.allowOther, true);
+    assert.equal(limits.options.length, 1, 'only "No pain or limits" is listed; the rest is typed');
+    const reader = (answers: Answers) => new AnswerReader(NICHES.find((n) => n.key === 'fitness')!.questions, answers);
+    assert.deepEqual(limitsFrom(reader({ limits: ['none'] })), []);
+    assert.deepEqual(limitsFrom(reader({ limits: ['other'], limits_other: 'sore left knee, and a bad back' })), ['knees', 'back']);
+    assert.deepEqual(limitsFrom(reader({ limits: ['other'], limits_other: 'tennis elbow' })), [], 'unknown pains are only passed to the AI as text');
+  });
+});
+
+describe('the week we recommend for fitness', () => {
+  const advise = (answers: Answers) => adviseFitnessWeek(new AnswerReader(NICHES.find((n) => n.key === 'fitness')!.questions, answers));
+
+  it('suggests fewer days for a beginner than for an experienced person', () => {
+    assert.equal(advise({ aim: 'muscle', level: 'beginner' }).days.length, 3);
+    assert.equal(advise({ aim: 'muscle', level: 'experienced' }).days.length, 5);
+  });
+
+  it('follows the training split the person chose', () => {
+    assert.equal(advise({ aim: 'muscle', level: 'some', split: 'upperlower' }).days.length, 4);
+    assert.equal(advise({ aim: 'muscle', level: 'beginner', split: 'ppl' }).days.length, 3);
+    assert.equal(advise({ aim: 'muscle', level: 'experienced', split: 'ppl' }).days.length, 6);
+  });
+
+  it('takes a day off when there is a pain or limit, but not from a beginner who has only three', () => {
+    assert.equal(advise({ aim: 'muscle', level: 'some', limits: ['other'], limits_other: 'sore knee' }).days.length, 3);
+    assert.equal(advise({ aim: 'muscle', level: 'beginner', limits: ['other'], limits_other: 'bad back' }).days.length, 3);
+  });
+
+  it('says why in one sentence and suggests a time the app offers', () => {
+    const advice = advise({ aim: 'fat', level: 'returning' });
+    assert.match(advice.note, /^We suggest \d days a week, about \d+ minutes each time, because /);
+    assert.ok([15, 30, 45, 60].includes(advice.minutes));
+  });
+
+  it('spreads the days with rest between and never repeats a day', () => {
+    for (let n = 1; n <= 7; n += 1) {
+      const days = weekdaysFor(n);
+      assert.equal(days.length, n);
+      assert.equal(new Set(days).size, n);
+    }
   });
 });

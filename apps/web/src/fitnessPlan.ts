@@ -194,11 +194,26 @@ const FUN_MOVEMENT = mobility('Fun movement', ['Dance, swim, cycle or play a spo
 /** The names of the sessions in a week for this aim and number of training days, most important first. */
 type Slot = { kind: 'strength'; session: string; name: string } | { kind: 'other'; make: () => RoutineDraft };
 
+/**
+ * The limits a person named. They pick "No pain or limits" or describe their own in a few words;
+ * the words are read for the usual suspects (knee, back, shoulder, breathing) so exercises that hurt
+ * them can be left out. Anything else is still passed to the AI as text.
+ */
+export const limitsFrom = (r: AnswerReader): Limit[] => {
+  const found: Limit[] = r.many('limits').filter((l): l is Limit => l === 'knees' || l === 'back' || l === 'shoulders' || l === 'breath');
+  const typed = r.other('limits', 120).toLowerCase();
+  if (/knee|\bleg\b|ankle|hip/.test(typed)) found.push('knees');
+  if (/back|spine|disc|sciatica/.test(typed)) found.push('back');
+  if (/shoulder|rotator|neck/.test(typed)) found.push('shoulders');
+  if (/breath|asthma|heart|lung|blood pressure/.test(typed)) found.push('breath');
+  return Array.from(new Set(found));
+};
+
 /** The choices that decide which exercises the AI may use: where, how experienced, and what to work around. */
 export const fitnessInputs = (r: AnswerReader): { place: Place; level: Level; limits: Limit[] } => ({
   place: asPlace(r.one('where')),
   level: asLevel(r.one('level')),
-  limits: r.many('limits').filter((l): l is Limit => l === 'knees' || l === 'back' || l === 'shoulders' || l === 'breath'),
+  limits: limitsFrom(r),
 });
 
 /**
@@ -209,7 +224,7 @@ export const buildFitnessPlan = (r: AnswerReader, common: CommonAnswers): { titl
   const aim = asAim(r.one('aim'));
   const place = asPlace(r.one('where'));
   const level = asLevel(r.one('level'));
-  const limits = r.many('limits').filter((l): l is Limit => l === 'knees' || l === 'back' || l === 'shoulders' || l === 'breath');
+  const limits = limitsFrom(r);
   const days = common.days.length > 0 ? common.days : [1, 3, 5];
   const n = days.length;
   const minutes = common.minutes ?? 30;
@@ -293,5 +308,54 @@ export const buildFitnessPlan = (r: AnswerReader, common: CommonAnswers): { titl
     description: `${n} training ${n === 1 ? 'day' : 'days'} a week, ${placeText[place]}. ${trainText}${rest}${time} Swap exercises freely.`.slice(0, 600),
     routines,
     sized: true,
+  };
+};
+
+
+/* ------------------------------------------------------------ the week */
+
+/** Which weekdays (0 = Sunday) to train on for a number of days a week, spread so rest days fall between. */
+export const weekdaysFor = (count: number): number[] => {
+  const table: Record<number, number[]> = { 1: [3], 2: [2, 4], 3: [1, 3, 5], 4: [1, 2, 4, 5], 5: [1, 2, 3, 4, 5], 6: [1, 2, 3, 4, 5, 6], 7: [0, 1, 2, 3, 4, 5, 6] };
+  return table[Math.min(7, Math.max(1, Math.round(count)))];
+};
+
+export interface WeekAdvice {
+  days: number[];
+  minutes: number;
+  /** One plain sentence saying why. */
+  note: string;
+}
+
+const LEVEL_WORDS: Record<Level, string> = { beginner: 'you are new to training', returning: 'you are coming back after a break', some: 'you have some experience', experienced: 'you are experienced' };
+const AIM_WORDS: Record<Aim, string> = { muscle: 'build muscle', strength: 'get stronger', fat: 'lose fat', stamina: 'build stamina', mobility: 'move better', active: 'stay active' };
+
+/**
+ * How many days a week and how long each time suits this person, from what they told us.
+ * It is only a suggestion: the person can change the days and the time.
+ */
+export const adviseFitnessWeek = (r: AnswerReader): WeekAdvice => {
+  const level = asLevel(r.one('level'));
+  const aim = asAim(r.one('aim'));
+  const limits = limitsFrom(r);
+  const split = r.one('split');
+  const hasLimit = limits.length > 0 || r.other('limits').length > 0;
+
+  let count = level === 'beginner' || level === 'returning' ? 3 : level === 'some' ? 4 : 5;
+  if (aim === 'mobility') count = Math.max(count, 4);
+  if (aim === 'fat' && level !== 'beginner') count += 1;
+  if (split === 'ppl') count = level === 'experienced' ? 6 : 3;
+  if (split === 'upperlower') count = Math.max(4, Math.min(count, 4));
+  // A pain or limit means one day less, but a beginner is never pushed below three days a week on that account.
+  if (hasLimit && count > 3) count -= 1;
+  count = Math.min(6, Math.max(2, count));
+
+  const minutes = aim === 'mobility' ? 30 : level === 'beginner' || level === 'returning' ? 30 : level === 'some' ? 45 : aim === 'stamina' ? 45 : 60;
+  const because = [LEVEL_WORDS[level], aim ? `you want to ${AIM_WORDS[aim]}` : '', hasLimit ? 'you have something to be careful with' : ''].filter(Boolean);
+  const list = because.length > 1 ? `${because.slice(0, -1).join(', ')} and ${because[because.length - 1]}` : because[0];
+  return {
+    days: weekdaysFor(count),
+    minutes,
+    note: `We suggest ${count} days a week, about ${minutes} minutes each time, because ${list}.`,
   };
 };

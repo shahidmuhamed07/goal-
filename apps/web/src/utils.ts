@@ -116,14 +116,8 @@ export const generateMonthRange = (startKey: string, targetKey: string): string[
   return months;
 };
 
-export const GOAL_CATEGORIES = [
-  'Career',
-  'Business',
-  'Health',
-  'Fitness',
-  'Finance & Wealth',
-  'Learning & Skills',
-] as const;
+/** The areas offered for a new goal. Goals made earlier may still carry the older names (Career, Fitness…). */
+export const GOAL_CATEGORIES = ['Health & Fitness', 'Business & Career', 'Finance & Wealth', 'Learning & Skills'] as const;
 
 export type GoalCategory = (typeof GOAL_CATEGORIES)[number];
 
