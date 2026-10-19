@@ -109,6 +109,9 @@ describe('the common answers shape the plan', () => {
 
   it('fewer minutes mean fewer tasks per routine', () => {
     for (const n of NICHES) {
+      // Fitness sizes each session to the time itself, with a warm up and a stretch around the exercises:
+      // its own rules are tested in fitnessPlan.test.ts.
+      if (n.key === 'fitness') continue;
       const short = buildGuidedPlan(n.key, firstChoices(n.key), common({ minutes: 15 }));
       const long = buildGuidedPlan(n.key, firstChoices(n.key), common({ minutes: 60 }));
       assert.ok(short.routines.every((r) => r.tasks.length <= tasksForMinutes(15)), n.key);

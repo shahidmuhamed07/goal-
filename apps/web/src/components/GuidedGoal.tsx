@@ -310,6 +310,7 @@ export const GuidedGoal: React.FC<GuidedGoalProps> = ({ onClose, onCreate, makeP
               <p className="mt-1.5 text-xs text-slate-500">
                 {plan.category} · {plan.months} {plan.months === 1 ? 'month' : 'months'}
               </p>
+              {plan.description && <p className="mt-1.5 text-xs leading-relaxed text-slate-600">{plan.description}</p>}
             </div>
 
             <ul className="space-y-3" aria-label="Routines in this plan">

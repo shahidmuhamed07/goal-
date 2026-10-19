@@ -1,3 +1,4 @@
+import { buildFitnessPlan } from './fitnessPlan';
 import { spreadOverDays, tasksForMinutes, type StarterPlan } from './starterPlan';
 
 /**
@@ -60,8 +61,12 @@ export interface Niche {
   /** The goal category the app files it under. */
   category: string;
   questions: GuidedQuestion[];
-  /** Turns the answers into a title, a description and routines in order of importance. */
-  plan: (answers: AnswerReader) => { title: string; description: string; routines: RoutineDraft[] };
+  /**
+   * Turns the answers into a title, a description and routines in order of importance.
+   * The common answers (days and time) are passed too, for a niche that shapes its plan by them.
+   * A niche that already sized each routine to the time (`sized`) keeps all its tasks.
+   */
+  plan: (answers: AnswerReader, common: CommonAnswers) => { title: string; description: string; routines: RoutineDraft[]; sized?: boolean };
 }
 
 /** Typed text is shortened and stripped of control characters before it goes into a title or task. */
@@ -459,63 +464,53 @@ const fitness: Niche = {
       title: 'What is your main aim?',
       kind: 'single',
       allowOther: true,
-      options: [opt('muscle', 'Build muscle'), opt('fat', 'Lose fat'), opt('stamina', 'Get fitter and faster'), opt('active', 'Stay active and healthy')],
+      options: [
+        opt('muscle', 'Build muscle', 'Bigger, stronger muscles'),
+        opt('strength', 'Get stronger', 'Lift heavier over time'),
+        opt('fat', 'Lose fat', 'Burn more and feel lighter'),
+        opt('stamina', 'Build stamina', 'Run, ride or swim for longer'),
+        opt('mobility', 'Move better', 'Loosen up, fix stiffness'),
+        opt('active', 'Stay active and healthy'),
+      ],
     },
-    { id: 'where', title: 'Where will you train?', kind: 'single', options: [opt('gym', 'At a gym'), opt('home', 'At home'), opt('outdoors', 'Outdoors')] },
+    {
+      id: 'where',
+      title: 'Where will you train?',
+      kind: 'single',
+      options: [
+        opt('gym', 'At a gym', 'Machines and weights'),
+        opt('home', 'At home, no equipment', 'Just your body'),
+        opt('homegear', 'At home with dumbbells or bands'),
+        opt('outdoors', 'Outdoors', 'A park, track or playground'),
+      ],
+    },
     {
       id: 'level',
       title: 'How experienced are you?',
       kind: 'single',
-      options: [opt('beginner', 'Beginner', 'New or coming back'), opt('some', 'Some experience'), opt('experienced', 'Experienced')],
+      options: [
+        opt('beginner', 'Beginner', 'New to training'),
+        opt('returning', 'Coming back', 'After a long break'),
+        opt('some', 'Some experience'),
+        opt('experienced', 'Experienced'),
+      ],
+    },
+    {
+      id: 'limits',
+      title: 'Anything we should work around?',
+      hint: 'Pick any that apply, or none. We will choose gentler exercises.',
+      kind: 'multi',
+      options: [
+        opt('knees', 'Sore or weak knees'),
+        opt('back', 'Lower back trouble'),
+        opt('shoulders', 'Shoulder trouble'),
+        opt('breath', 'Easily out of breath', 'We will keep it easy and build up'),
+      ],
     },
   ],
-  plan: (r) => {
-    const aim = r.one('aim');
-    const where = r.one('where') ?? 'gym';
-    const level = r.one('level') ?? 'beginner';
-    const sets = level === 'beginner' ? '3 sets of 8' : level === 'some' ? '4 sets of 8' : '4 sets of 6 to 10';
-    const warm = 'Warm up for 5 minutes';
-
-    const lifts: Record<string, { push: string[]; pull: string[]; legs: string[] }> = {
-      gym: {
-        push: [`Bench press: ${sets}`, `Shoulder press: ${sets}`, 'Triceps pushdowns: 3 sets', 'Cool down and stretch'],
-        pull: [`Rows: ${sets}`, `Lat pulldown: ${sets}`, 'Biceps curls: 3 sets', 'Cool down and stretch'],
-        legs: [`Squats: ${sets}`, `Romanian deadlift: ${sets}`, 'Lunges: 3 sets', 'Cool down and stretch'],
-      },
-      home: {
-        push: [`Push-ups: ${sets}`, 'Pike push-ups: 3 sets', 'Chair dips: 3 sets', 'Cool down and stretch'],
-        pull: ['Backpack or towel rows: 4 sets', 'Superman holds: 3 sets', 'Biceps curls with a bag: 3 sets', 'Cool down and stretch'],
-        legs: [`Bodyweight squats: ${sets}`, 'Split squats: 3 sets', 'Glute bridges: 3 sets', 'Cool down and stretch'],
-      },
-      outdoors: {
-        push: [`Push-ups: ${sets}`, 'Bench dips: 3 sets', 'Plank: 3 holds', 'Cool down and stretch'],
-        pull: ['Pull-ups or bar hangs: 4 sets', 'Inverted rows if you can: 3 sets', 'Farmer carry: 3 rounds', 'Cool down and stretch'],
-        legs: ['Hill or stair walking: 10 minutes', `Squats: ${sets}`, 'Step-ups: 3 sets', 'Cool down and stretch'],
-      },
-    };
-    const set = lifts[where] ?? lifts.gym;
-    const withWarm = (tasks: string[]) => [warm, ...tasks];
-
-    const cardio: RoutineDraft = {
-      name: 'Cardio',
-      tasks: ['Easy 5-minute warm up', level === 'beginner' ? 'Brisk walk or light jog: 20 minutes' : 'Steady run, ride or swim: 30 minutes', 'Finish with a slow 3 minutes', 'Stretch your legs', 'Drink water'],
-    };
-    const mobility: RoutineDraft = { name: 'Mobility', tasks: ['Hip and hamstring stretches', 'Shoulder and chest opener', 'Gentle spine twists', 'Foam roll or self-massage', 'Walk for 10 minutes'] };
-
-    const routines: RoutineDraft[] =
-      aim === 'stamina' || aim === 'active'
-        ? [cardio, { name: 'Strength: legs', tasks: withWarm(set.legs) }, { name: 'Strength: upper body', tasks: withWarm(set.push) }, mobility]
-        : aim === 'fat'
-        ? [{ name: 'Strength: push', tasks: withWarm(set.push) }, cardio, { name: 'Strength: pull', tasks: withWarm(set.pull) }, { name: 'Strength: legs', tasks: withWarm(set.legs) }]
-        : [{ name: 'Strength: push', tasks: withWarm(set.push) }, { name: 'Strength: pull', tasks: withWarm(set.pull) }, { name: 'Strength: legs', tasks: withWarm(set.legs) }, cardio];
-
-    const titles: Record<string, string> = { muscle: 'Build strength and muscle', fat: 'Lose fat and feel strong', stamina: 'Get fitter and faster', active: 'Stay active and healthy' };
-    return {
-      title: aim === 'other' ? or(r.other('aim', 70), 'Get stronger and fitter') : titles[aim ?? 'active'] ?? 'Get stronger and fitter',
-      description: 'A weekly training split you can keep up. Swap exercises freely.',
-      routines: ensure(routines, [mobility]),
-    };
-  },
+  // The framework lives in fitnessPlan.ts: the number of training days, the place, the level, the
+  // limits and the time for each session shape the week, the exercises and the doses.
+  plan: (r, common) => buildFitnessPlan(r, common),
 };
 
 /* ----------------------------------------------------------------- money */
@@ -734,7 +729,7 @@ export const visibleQuestions = (niche: Niche, answers: Answers): GuidedQuestion
   niche.questions.filter((q) => !q.showIf || q.showIf(answers));
 
 /** The most routines a single goal starts with: enough to cover the week, not so many it overwhelms. */
-const MAX_ROUTINES = 4;
+const MAX_ROUTINES = 6;
 
 /** Whether a question has been answered well enough to move on. Typing is never needed. */
 export const isAnswered = (question: GuidedQuestion, answers: Answers): boolean => {
@@ -756,8 +751,8 @@ export const MONTH_CHOICES = [1, 3, 6, 12];
  */
 export const buildGuidedPlan = (key: NicheKey, answers: Answers, common: CommonAnswers): StarterPlan => {
   const niche = nicheByKey(key);
-  const drafted = niche.plan(new AnswerReader(niche.questions, answers));
   const days = common.days.length > 0 ? common.days : [1, 3, 5];
+  const drafted = niche.plan(new AnswerReader(niche.questions, answers), { ...common, days });
   const count = Math.max(1, Math.min(MAX_ROUTINES, drafted.routines.length, days.length));
   const chosen = drafted.routines.slice(0, count);
   const spread = spreadOverDays(chosen.length, days);
@@ -772,7 +767,7 @@ export const buildGuidedPlan = (key: NicheKey, answers: Answers, common: CommonA
     routines: chosen.map((routine, index) => ({
       name: routine.name,
       weekdays: spread[index],
-      tasks: routine.tasks.map((t) => cleanText(t, 160)).filter(Boolean).slice(0, perRoutine),
+      tasks: routine.tasks.map((t) => cleanText(t, 160)).filter(Boolean).slice(0, drafted.sized ? routine.tasks.length : perRoutine),
     })),
   };
 };
