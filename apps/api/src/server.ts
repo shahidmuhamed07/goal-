@@ -42,6 +42,17 @@ async function main() {
     console.log(`API ready on http://localhost:${env.PORT}  (store: ${env.STORE}${env.STORE === 'mongo' ? `, database: ${env.MONGODB_DB}` : ', nothing is saved'}, admin login: ${adminAuth ? `on, ${ownerEmails.length} owner(s)` : 'off'})`);
   });
 
+  // The most common start-up problem on a developer's computer: the API is already running somewhere else.
+  server.on('error', (error: NodeJS.ErrnoException) => {
+    if (error.code === 'EADDRINUSE') {
+      console.error(`\nPort ${env.PORT} is already in use: another copy of the API is probably running.`);
+      console.error(`Stop it, or start this one on another port (for example PORT=${env.PORT + 1}), then try again.\n`);
+    } else {
+      console.error(error.message);
+    }
+    process.exit(1);
+  });
+
   const stop = async () => {
     server.close();
     await store.close();
