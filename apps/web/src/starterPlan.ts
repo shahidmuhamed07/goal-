@@ -41,14 +41,6 @@ export interface ChoiceOption {
   hint?: string;
 }
 
-export const AGE_OPTIONS: ChoiceOption[] = [
-  { value: 'under-25', label: 'Under 25' },
-  { value: '25-34', label: '25 - 34' },
-  { value: '35-44', label: '35 - 44' },
-  { value: '45-60', label: '45 - 60' },
-  { value: 'over-60', label: 'Over 60' },
-];
-
 export const EATING_OPTIONS: ChoiceOption[] = [
   { value: 'any', label: 'No particular style', hint: 'I eat a bit of everything' },
   { value: 'vegetarian', label: 'Vegetarian' },
@@ -81,7 +73,6 @@ export const LENGTH_OPTIONS: { months: number; label: string }[] = [
 export interface OnboardingAnswers {
   persona: 'client' | 'professional';
   focus: Focus[];
-  age?: string;
   eating?: string;
   activity?: string;
   /** Weekdays the person can train or work on their goals, 0 = Sunday. */
@@ -498,7 +489,22 @@ export const buildStarterPlans = (answers: OnboardingAnswers): StarterPlan[] => 
  */
 export const materializePlan = (
   plan: StarterPlan,
-  { fromDate, endDate, seed = Date.now() }: { fromDate: string; endDate: string; seed?: number }
+  {
+    fromDate,
+    endDate,
+    seed = Date.now(),
+    startToday = false,
+  }: {
+    fromDate: string;
+    endDate: string;
+    seed?: number;
+    /**
+     * Make sure the first day has something to do. When the plan starts on a day that is not one of
+     * the chosen weekdays, the first routine is also placed on that day (once, not repeated), so a
+     * new plan never opens on an empty Today.
+     */
+    startToday?: boolean;
+  }
 ): { subcategories: Subcategory[]; tasks: TaskItem[] } => {
   let subcategories: Subcategory[] = [];
   const tasks: TaskItem[] = [];
@@ -535,6 +541,24 @@ export const materializePlan = (
     });
     subcategories = created.subcategories;
   });
+
+  if (startToday && fromDate <= endDate && !subcategories.some((s) => s.date === fromDate)) {
+    const first = plan.routines.find((r) => r.tasks.length > 0);
+    if (first) {
+      const id = `sc-${seed}-start`;
+      subcategories = [...subcategories, { id, name: first.name, order: subcategories.length, date: fromDate, editorRole: null }];
+      first.tasks.forEach((text, taskIndex) => {
+        tasks.push({
+          id: `t-${seed}-start-${taskIndex}`,
+          text,
+          priority: taskIndex === 0 ? 'high' : 'medium',
+          completed: false,
+          date: fromDate,
+          subcategoryId: id,
+        });
+      });
+    }
+  }
 
   return { subcategories, tasks };
 };

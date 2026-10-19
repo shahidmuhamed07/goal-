@@ -1129,6 +1129,7 @@ export default function App() {
           fromDate: todayDate,
           endDate: goalEndDate({ targetDate, milestones }),
           seed: Date.now() + index * 1000,
+          startToday: true,
         })
       : { subcategories: [] as Subcategory[], tasks: [] as TaskItem[] };
 
@@ -1179,7 +1180,6 @@ export default function App() {
       months: answers.months,
       starter: answers.starter,
     };
-    if (answers.age) stored.age = answers.age;
     if (answers.eating) stored.eating = answers.eating;
     if (answers.activity) stored.activity = answers.activity;
 

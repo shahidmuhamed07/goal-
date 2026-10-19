@@ -29,7 +29,6 @@ import { Orb } from './Orb';
 import { WEEK_ORDER, WEEKDAY_LETTER, WEEKDAY_LONG, describeDays } from '../recurrence';
 import {
   ACTIVITY_OPTIONS,
-  AGE_OPTIONS,
   EATING_OPTIONS,
   FOCUS_OPTIONS,
   LENGTH_OPTIONS,
@@ -45,7 +44,6 @@ type StepId =
   | 'welcome'
   | 'persona'
   | 'focus'
-  | 'age'
   | 'eating'
   | 'activity'
   | 'days'
@@ -256,7 +254,6 @@ export const Onboarding: React.FC<OnboardingProps> = ({ isOpen, name, onFinish, 
 
   const [persona, setPersona] = useState<'client' | 'professional'>('client');
   const [focus, setFocus] = useState<Focus[]>([]);
-  const [age, setAge] = useState<string | undefined>();
   const [eating, setEating] = useState<string | undefined>();
   const [activity, setActivity] = useState<string | undefined>();
   const [days, setDays] = useState<number[]>([]);
@@ -273,7 +270,7 @@ export const Onboarding: React.FC<OnboardingProps> = ({ isOpen, name, onFinish, 
 
   const flow: StepId[] = useMemo(() => {
     if (persona === 'professional') return ['welcome', 'persona', 'building', 'ready'];
-    const steps: StepId[] = ['welcome', 'persona', 'focus', 'age'];
+    const steps: StepId[] = ['welcome', 'persona', 'focus'];
     if (focus.includes('diet')) steps.push('eating');
     steps.push('activity', 'days', 'time', 'length', 'starter', 'commit', 'building', 'ready');
     return steps;
@@ -285,7 +282,6 @@ export const Onboarding: React.FC<OnboardingProps> = ({ isOpen, name, onFinish, 
   const answers: OnboardingAnswers = {
     persona,
     focus,
-    age,
     eating,
     activity,
     days: days.length > 0 ? days : defaultDays(activity),
@@ -300,8 +296,8 @@ export const Onboarding: React.FC<OnboardingProps> = ({ isOpen, name, onFinish, 
   };
 
   // Landing on a step that has nothing chosen yet should not carry a stale pick.
-  const toggleFocus = (key: Focus) =>
-    setFocus((prev) => (prev.includes(key) ? prev.filter((f) => f !== key) : [...prev, key]));
+  // One goal at a time: choosing another replaces the choice. More goals can be added later.
+  const chooseFocus = (key: Focus) => setFocus([key]);
   const toggleDay = (day: number) =>
     setDays((prev) => (prev.includes(day) ? prev.filter((d) => d !== day) : [...prev, day]));
 
@@ -342,8 +338,6 @@ export const Onboarding: React.FC<OnboardingProps> = ({ isOpen, name, onFinish, 
     switch (step) {
       case 'focus':
         return focus.length > 0;
-      case 'age':
-        return !!age;
       case 'eating':
         return !!eating;
       case 'activity':
@@ -407,22 +401,10 @@ export const Onboarding: React.FC<OnboardingProps> = ({ isOpen, name, onFinish, 
       case 'focus':
         return (
           <>
-            <AskBubble title="What do you want to work on?" sub="Pick as many as you like. You can add more later." />
+            <AskBubble title="What do you want to work on?" sub="Pick one to start. You can add more goals later." />
             <div className="mt-6 space-y-3">
               {FOCUS_OPTIONS.map((o) => (
-                <OptionRow key={o.key} icon={FOCUS_ICONS[o.key]} label={o.label} selected={focus.includes(o.key)} onClick={() => toggleFocus(o.key)} />
-              ))}
-            </div>
-          </>
-        );
-
-      case 'age':
-        return (
-          <>
-            <AskBubble title="How old are you?" sub="At different ages, healthy routines look different." />
-            <div className="mt-6 space-y-3">
-              {AGE_OPTIONS.map((o) => (
-                <OptionRow key={o.value} label={o.label} selected={age === o.value} onClick={() => setAge(o.value)} />
+                <OptionRow key={o.key} icon={FOCUS_ICONS[o.key]} label={o.label} selected={focus.includes(o.key)} onClick={() => chooseFocus(o.key)} />
               ))}
             </div>
           </>

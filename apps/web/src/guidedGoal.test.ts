@@ -272,6 +272,42 @@ describe('it plugs into the calendar', () => {
     assert.equal(weekly.subcategories.some((s) => 'repeatEvery' in s), false);
   });
 
+  describe('the first day of a new plan', () => {
+    const base = { focus: 'custom' as const, title: 'T', category: 'Health', description: '', months: 2 };
+    // Sunday 18 October 2026: the routines below run Monday, Wednesday and Friday only.
+    const plan = { ...base, routines: [{ name: 'Strength', weekdays: [1, 3, 5], tasks: ['Warm up', 'Lift'] }, { name: 'Cardio', weekdays: [2], tasks: ['Run'] }] };
+
+    it('shows work on a day that is not one of the chosen weekdays, when asked to', () => {
+      const without = materializePlan(plan, { fromDate: '2026-10-18', endDate: '2026-12-31', seed: 7 });
+      assert.equal(without.subcategories.some((s) => s.date === '2026-10-18'), false);
+      const withStart = materializePlan(plan, { fromDate: '2026-10-18', endDate: '2026-12-31', seed: 7, startToday: true });
+      const today = withStart.subcategories.filter((s) => s.date === '2026-10-18');
+      assert.equal(today.length, 1);
+      assert.equal(today[0].name, 'Strength');
+      assert.equal('repeatId' in today[0], false, 'a one-off day, not a new routine');
+      assert.deepEqual(withStart.tasks.filter((t) => t.subcategoryId === today[0].id).map((t) => t.text), ['Warm up', 'Lift']);
+      assert.ok(withStart.tasks.filter((t) => t.subcategoryId === today[0].id).every((t) => t.date === '2026-10-18' && !t.completed));
+    });
+
+    it('adds nothing when the first day is already a chosen weekday', () => {
+      const monday = materializePlan(plan, { fromDate: '2026-10-19', endDate: '2026-12-31', seed: 7, startToday: true });
+      assert.equal(monday.subcategories.filter((s) => s.date === '2026-10-19').length, 1);
+      assert.equal(monday.subcategories.filter((s) => s.id.endsWith('-start')).length, 0);
+    });
+
+    it('keeps every task attached to a day that exists, with unique ids', () => {
+      const result = materializePlan(plan, { fromDate: '2026-10-18', endDate: '2026-12-31', seed: 7, startToday: true });
+      assert.ok(result.tasks.every((t) => result.subcategories.some((s) => s.id === t.subcategoryId)));
+      assert.equal(new Set(result.tasks.map((t) => t.id)).size, result.tasks.length);
+      assert.equal(new Set(result.subcategories.map((s) => s.id)).size, result.subcategories.length);
+    });
+
+    it('does nothing for a plan with no routines', () => {
+      const empty = materializePlan({ ...base, routines: [] }, { fromDate: '2026-10-18', endDate: '2026-12-31', startToday: true });
+      assert.deepEqual(empty, { subcategories: [], tasks: [] });
+    });
+  });
+
   it('the AI-ready seam: the rules plan maker returns the same plan', async () => {
     const answers = firstChoices('career');
     assert.deepEqual(await makePlanWithRules('career', answers, common()), buildGuidedPlan('career', answers, common()));
