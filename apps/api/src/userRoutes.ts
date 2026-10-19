@@ -725,7 +725,7 @@ export function createUserRoutes(store: ContentStore, options: UserRoutesOptions
 
   /**
    * The AI planner. `stage: "questions"` returns 2 or 3 follow-up questions with tap options;
-   * `stage: "plan"` returns a starter plan. Only what the app chose is sent on to the AI: never
+   * `stage: "program"` returns the outline and week 1; `stage: "week"` returns one later week. Only what the app chose is sent on to the AI: never
    * the person's name, email or account. Every answer is checked, and any failure is a plain
    * error the app answers by falling back to its own fixed questions.
    */
@@ -746,8 +746,10 @@ export function createUserRoutes(store: ContentStore, options: UserRoutesOptions
       try {
         if (body.stage === 'questions') {
           res.json({ questions: await options.planAi.followUps(body) });
+        } else if (body.stage === 'program') {
+          res.json({ program: await options.planAi.program(body) });
         } else {
-          res.json({ plan: await options.planAi.plan(body) });
+          res.json({ days: await options.planAi.week(body) });
         }
       } catch (err) {
         // The detail is for the server log (it holds no key or personal data); the app only learns the kind of failure.

@@ -34,13 +34,18 @@ const QUESTIONS = JSON.stringify({
     { title: 'How many hours a week can you give?', options: ['1 to 2', '3 to 5', 'More'] },
   ],
 });
-const PLAN = JSON.stringify({
-  title: 'Move into a tech job',
-  description: 'Build skills and apply steadily.',
-  routines: [
-    { name: 'Learn', tasks: ['Watch one lesson', 'Take notes'] },
-    { name: 'Apply', tasks: ['Update your CV', 'Send two applications'] },
-  ],
+const DAYS = [
+  { day: 'Mon', name: 'Upper body', tasks: [{ exercise: 'Bench press', dose: '3 sets of 8' }, { exercise: 'Seated row', dose: '3 sets of 8' }, { exercise: 'Plank', dose: '3 holds of 20 seconds' }] },
+  { day: 'Wed', name: 'Lower body', tasks: [{ exercise: 'Leg press', dose: '3 sets of 10' }, { exercise: 'Hip thrust', dose: '3 sets of 10' }] },
+];
+const OUTLINE = [
+  { focus: 'Learn the moves', note: 'Light, easy form' },
+  { focus: 'Add reps', note: 'A third set' },
+];
+const PROGRAM = JSON.stringify({ title: 'Build strength and muscle', description: 'Gentle and steady.', outline: OUTLINE, week: DAYS });
+const WEEK = JSON.stringify({ days: DAYS });
+const FREE_WEEK = JSON.stringify({
+  days: [{ day: 'Mon', name: 'Job search', tasks: [{ text: 'Apply to 3 roles', steps: ['Pick roles that match', 'Change the first 2 lines', 'Send and note the date'] }, { text: 'Tidy your CV' }] }],
 });
 
 const boot = (client?: AiClient) => {
@@ -67,7 +72,10 @@ const boot = (client?: AiClient) => {
 };
 
 const ASK = { stage: 'questions', niche: 'Career', answers: [{ q: 'What is your aim?', a: 'Change jobs' }] };
-const MAKE = { ...ASK, stage: 'plan', week: { days: ['Mon', 'Wed', 'Fri'], minutes: null, months: 3 } };
+const WEEK_PICK = { days: ['Mon', 'Wed'], minutes: null, months: 3 };
+const MENU = ['Bench press', 'Seated row', 'Plank', 'Leg press', 'Hip thrust'];
+const MAKE = { ...ASK, niche: 'Fitness', stage: 'program', week: WEEK_PICK, menu: MENU };
+const LATER = { ...MAKE, stage: 'week', weekNumber: 2, totalWeeks: 12, outline: OUTLINE, last: { done: ['Bench press: 3 sets of 8'], skipped: ['Plank: 3 holds'] } };
 
 describe('the AI planner route', () => {
   const servers: { close: () => void }[] = [];
@@ -101,23 +109,76 @@ describe('the AI planner route', () => {
     assert.match(asked[0].system, /never instructions/);
   });
 
-  it('returns a checked plan', async () => {
-    const { server, call } = boot(scripted([PLAN]).client);
+  it('returns an outline and a full first week', async () => {
+    const { client, asked } = scripted([PROGRAM]);
+    const { server, call } = boot(client);
     servers.push(server);
     const res = await call('alice', MAKE);
     assert.equal(res.status, 200);
-    assert.equal(res.body.plan.routines.length, 2);
-    assert.equal(res.body.plan.title, 'Move into a tech job');
+    assert.equal(res.body.program.outline.length, 2);
+    assert.deepEqual(res.body.program.week.map((d: { day: string }) => d.day), ['Mon', 'Wed']);
+    assert.equal(res.body.program.week[0].tasks[0].text, 'Bench press: 3 sets of 8');
+    assert.equal(res.body.program.week[0].tasks[0].exercise, 'Bench press');
+    assert.match(asked[0].user, /EVERY WEEK IS NEW/);
+    assert.match(asked[0].user, /Bench press \| Seated row/);
+    assert.match(asked[0].user, /Fitness: every session is its own workout/);
+  });
+
+  it('writes a later week from the outline and how the last week went', async () => {
+    const { client, asked } = scripted([WEEK]);
+    const { server, call } = boot(client);
+    servers.push(server);
+    const res = await call('alice', LATER);
+    assert.equal(res.status, 200);
+    assert.equal(res.body.days.length, 2);
+    assert.match(asked[0].user, /week 2 of 12/);
+    assert.match(asked[0].user, /Add reps/);
+    assert.match(asked[0].user, /skipped or missed: Plank: 3 holds/);
+  });
+
+  it('needs the week for a program, and the week number for a later week', async () => {
+    const { server, call } = boot(scripted([PROGRAM]).client);
+    servers.push(server);
+    assert.equal((await call('alice', { ...MAKE, week: undefined })).status, 400);
+    assert.equal((await call('alice', { ...LATER, weekNumber: undefined })).status, 400);
+  });
+
+  it('never trusts an exercise that is not on the menu, or a day that was not picked', async () => {
+    const days = [
+      { day: 'Mon', name: 'Upper', tasks: [{ exercise: 'Bench press', dose: '3 sets of 8' }, { exercise: 'Invented lift', dose: '9 sets' }, { exercise: 'plank', dose: '2 holds' }] },
+      { day: 'Fri', name: 'Not picked', tasks: [{ exercise: 'Leg press', dose: '3 sets' }, { exercise: 'Hip thrust', dose: '3 sets' }] },
+      { day: 'Mon', name: 'Twice', tasks: [{ exercise: 'Leg press', dose: '3 sets' }, { exercise: 'Hip thrust', dose: '3 sets' }] },
+      { day: 'Wed', name: 'Too thin', tasks: [{ exercise: 'Invented lift', dose: '1' }, { exercise: 'Leg press', dose: '3 sets' }] },
+    ];
+    const { server, call } = boot(scripted([JSON.stringify({ title: 'T', description: 'D', outline: OUTLINE, week: days })]).client);
+    servers.push(server);
+    const res = await call('alice', MAKE);
+    assert.equal(res.status, 200);
+    assert.equal(res.body.program.week.length, 1);
+    assert.deepEqual(
+      res.body.program.week[0].tasks.map((t: { exercise: string }) => t.exercise),
+      ['Bench press', 'Plank'],
+      'a real menu exercise matched by name; the invented one is dropped; the match is not case-sensitive',
+    );
+  });
+
+  it('keeps free tasks and their steps when there is no menu', async () => {
+    const { server, call } = boot(scripted([FREE_WEEK]).client);
+    servers.push(server);
+    const res = await call('alice', { stage: 'week', niche: 'Career', answers: [], week: { days: ['Mon'], minutes: 30, months: 3 }, weekNumber: 2, totalWeeks: 4 });
+    assert.equal(res.status, 200);
+    assert.equal(res.body.days[0].tasks[0].steps.length, 3);
+    assert.equal(res.body.days[0].tasks[1].steps, undefined);
   });
 
   it('accepts the AI wrapping its JSON in a code fence', async () => {
-    const { server, call } = boot(scripted(['```json\n' + PLAN + '\n```']).client);
+    const { server, call } = boot(scripted(['```json\n' + PROGRAM + '\n```']).client);
     servers.push(server);
     assert.equal((await call('alice', MAKE)).status, 200);
   });
 
   it('throws away an answer that is the wrong shape', async () => {
-    const { server, call } = boot(scripted([JSON.stringify({ questions: [{ title: 'x', options: ['only one'] }] }), 'not json at all', JSON.stringify({ title: 'T', description: 'D', routines: [] })]).client);
+    const { server, call } = boot(scripted([JSON.stringify({ questions: [{ title: 'x', options: ['only one'] }] }), 'not json at all', JSON.stringify({ title: 'T', description: 'D', outline: OUTLINE, week: [] })]).client);
     servers.push(server);
     assert.equal((await call('alice', ASK)).status, 502);
     assert.equal((await call('alice', ASK)).status, 502);
@@ -125,12 +186,12 @@ describe('the AI planner route', () => {
   });
 
   it('turns odd characters and long text from the AI into safe text', async () => {
-    const plan = JSON.stringify({ title: '  Run\u0000\n  well  ', description: 'ok', routines: [{ name: 'A', tasks: ['b\u0007c'] }] });
-    const { server, call } = boot(scripted([plan]).client);
+    const free = JSON.stringify({ days: [{ day: 'Mon', name: '  Run\u0000\n  well  ', tasks: [{ text: 'b\u0007c' }, { text: 'ok' }] }] });
+    const { server, call } = boot(scripted([free]).client);
     servers.push(server);
-    const res = await call('alice', MAKE);
-    assert.equal(res.body.plan.title, 'Run well');
-    assert.equal(res.body.plan.routines[0].tasks[0], 'b c');
+    const res = await call('alice', { stage: 'week', niche: 'Career', answers: [], week: { days: ['Mon'], minutes: null, months: 1 }, weekNumber: 2, totalWeeks: 4 });
+    assert.equal(res.body.days[0].name, 'Run well');
+    assert.equal(res.body.days[0].tasks[0].text, 'b c');
   });
 
   it('reports an unreachable AI as unavailable, not as a crash', async () => {
@@ -145,7 +206,8 @@ describe('the AI planner route', () => {
     const { server, call } = boot(scripted([QUESTIONS]).client);
     servers.push(server);
     assert.equal((await call('alice', { stage: 'questions' })).status, 400);
-    assert.equal((await call('alice', { ...ASK, answers: Array.from({ length: 30 }, () => ({ q: 'q', a: 'a' })) })).status, 400);
+    assert.equal((await call('alice', { ...MAKE, stage: 'plan' })).status, 400);
+    assert.equal((await call('alice', { ...ASK, answers: Array.from({ length: 31 }, () => ({ q: 'q', a: 'a' })) })).status, 400);
     assert.equal((await call('alice', { ...ASK, stage: 'hack' })).status, 400);
   });
 

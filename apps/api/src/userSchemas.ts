@@ -38,6 +38,25 @@ const task = z.object({
   skipped: z.boolean().optional(),
   date: day,
   subcategoryId: z.string().max(120).optional(),
+  steps: z.array(z.string().max(120)).max(6).optional(),
+});
+
+const short = (max: number) => z.string().max(max);
+
+/** What the AI needs to write the next week of a goal. Checked like everything else, so it cannot grow without limit. */
+const program = z.object({
+  startDate: day,
+  totalWeeks: z.number().int().min(1).max(60),
+  plannedWeeks: z.number().int().min(0).max(60),
+  outline: z.array(z.object({ focus: short(100), note: short(160) })).max(14),
+  brief: z.object({
+    niche: short(40),
+    answers: z.array(z.object({ q: short(200), a: short(300) })).max(30),
+    days: z.array(short(12)).max(7),
+    minutes: z.number().int().min(5).max(240).nullable(),
+    months: z.number().int().min(1).max(24),
+  }),
+  fitness: z.object({ place: short(20), level: short(20), limits: z.array(short(20)).max(6) }).optional(),
 });
 
 /** One goal is one stored document, so its plan has a hard ceiling well under the database's own. */
@@ -51,6 +70,7 @@ export const goalContent = {
   milestones: z.array(milestone).max(120),
   subcategories: z.array(subcategory),
   tasks: z.array(task),
+  program: program.optional(),
 };
 
 export const createGoalBody = z.object({

@@ -57,6 +57,33 @@ export interface TaskItem {
   goalTitle?: string;
   subcategoryName?: string;
   editorRole?: string | null;
+  /** A few short lines on how to do it (for example the parts of a warm up). Shown under the task, closed until asked. */
+  steps?: string[];
+}
+
+/**
+ * A goal written week by week by the AI: every week is new work, not a repeat.
+ * It keeps what the AI needs to write the next week (the area, the person's
+ * choices as text, and the outline). Week n covers the 7 days from
+ * `startDate + 7 * (n - 1)`.
+ */
+export interface GoalProgram {
+  startDate: string;
+  totalWeeks: number;
+  /** How many weeks are written so far. */
+  plannedWeeks: number;
+  /** One line for each of the first weeks: what that week is about. */
+  outline: { focus: string; note: string }[];
+  brief: {
+    niche: string;
+    answers: { q: string; a: string }[];
+    /** Weekday names the person picked, for example "Mon". */
+    days: string[];
+    minutes: number | null;
+    months: number;
+  };
+  /** Fitness only: the choices that decide which exercises may be used. */
+  fitness?: { place: string; level: string; limits: string[] };
 }
 
 export interface Goal {
@@ -70,6 +97,8 @@ export interface Goal {
   milestones: Milestone[];
   subcategories: Subcategory[];
   tasks: TaskItem[];
+  /** Set when the AI writes this goal week by week. */
+  program?: GoalProgram;
   /** Read-only members of this goal. */
   viewerUids?: string[];
   /** Members allowed to change tasks, milestones and subcategories. */
