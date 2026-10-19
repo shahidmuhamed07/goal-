@@ -264,7 +264,7 @@ const questionsPrompt = (body: PlanBody) =>
   [
     ...personBlock(body),
     '',
-    'Ask 2 or 3 short follow-up questions that would make this person\'s plan clearly better.',
+    'Ask 1 to 3 short follow-up questions, only ones that would clearly make this person\'s plan better (for example which body parts to bring up, or what has got in the way before).',
     'Do not repeat anything already answered. Each question must be answerable by tapping one of 2 to 5 short options.',
     'Make the options specific to this person\'s answers, not generic.',
     areaNote(body.niche),

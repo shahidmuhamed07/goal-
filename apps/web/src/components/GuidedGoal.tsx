@@ -12,8 +12,12 @@ import {
   X,
 } from 'lucide-react';
 import { AskBubble, OptionRow } from './Onboarding';
-import type { AiBrief, AiFollowUp, AiPlanDraft } from '../api/appApi';
+import type { AiBrief, AiFollowUp, AiProgramDraft } from '../api/appApi';
+import { fitnessInputs } from '../fitnessPlan';
+import { menuFor } from '../exerciseMenu';
+import { dayNames, decorateFitness, totalWeeksFor } from '../program';
 import {
+  AnswerReader,
   MINUTE_CHOICES,
   MONTH_CHOICES,
   NICHES,
@@ -22,7 +26,6 @@ import {
   isAnswered,
   makePlanWithRules,
   nicheByKey,
-  planFromAi,
   visibleQuestions,
   type Answers,
   type GuidedQuestion,
@@ -50,17 +53,19 @@ interface GuidedGoalProps {
   /** Turns answers into a plan. Defaults to the built-in rules; used whenever the AI is missing or fails. */
   makePlan?: PlanMaker;
   /**
-   * The AI that asks follow-up questions and writes the plan. Optional: without it, or when a call
+   * The AI that asks follow-up questions and writes the plan as a program (every week new). Optional: without it, or when a call
    * fails (offline, busy, out of free quota), the flow carries on with its own fixed questions and rules.
    */
   ai?: {
     followUps: (brief: AiBrief, signal?: AbortSignal) => Promise<AiFollowUp[]>;
-    plan: (brief: AiBrief, signal?: AbortSignal) => Promise<AiPlanDraft>;
+    program: (brief: AiBrief, signal?: AbortSignal) => Promise<AiProgramDraft>;
   };
 }
 
 /** How long to wait for the AI before carrying on without it. */
 const AI_WAIT_MS = 22_000;
+/** Writing the outline and a full first week takes longer than a few questions. */
+const AI_PROGRAM_WAIT_MS = 45_000;
 
 /**
  * An optional helper for someone who is not sure how to set up a goal.
@@ -146,9 +151,38 @@ export const GuidedGoal: React.FC<GuidedGoalProps> = ({ onClose, onCreate, makeP
   /** What the AI is told about this goal so far. */
   const briefFor = (withWeek: boolean): AiBrief => {
     const described = describeForAi(nicheKey!, answers, followUps);
-    return withWeek ? { ...described, week: { days: sortedDays.map((d) => WEEKDAY_LONG[d]), minutes, months } } : described;
+    if (!withWeek) return described;
+    const menu = nicheKey === 'fitness' ? fitnessMenu() : undefined;
+    return { ...described, week: { days: dayNames(days), minutes, months }, ...(menu ? { menu } : {}) };
   };
-  const sortedDays = useMemo(() => WEEK_ORDER.filter((d) => days.includes(d)), [days]);
+  /** Fitness: the exercises that suit this person's place, level and limits. The AI may use only these. */
+  const fitnessMenu = () => {
+    if (!niche) return undefined;
+    const { place, level, limits } = fitnessInputs(new AnswerReader(niche.questions, answers));
+    return menuFor(place, level, limits);
+  };
+
+  /** The AI's program as a starter plan: no repeating routines, but an outline and a written first week. */
+  const programPlan = (drafted: AiProgramDraft, common: { days: number[]; minutes: number | null; months: number }): StarterPlan => {
+    const isFitness = nicheKey === 'fitness';
+    const brief = briefFor(true);
+    const fitness = isFitness && niche ? fitnessInputs(new AnswerReader(niche.questions, answers)) : undefined;
+    return {
+      focus: niche!.key === 'custom' ? 'custom' : niche!.key,
+      title: cleanText(drafted.title, 100) || niche!.label,
+      category: niche!.category,
+      description: cleanText(drafted.description, 300),
+      months: common.months,
+      routines: [],
+      program: {
+        outline: drafted.outline,
+        week1: isFitness ? decorateFitness(drafted.week) : drafted.week,
+        brief: { niche: brief.niche, answers: brief.answers, days: dayNames(common.days), minutes: common.minutes, months: common.months },
+        ...(fitness ? { fitness: { place: fitness.place, level: fitness.level, limits: fitness.limits } } : {}),
+        totalWeeks: totalWeeksFor(common.months),
+      },
+    };
+  };
 
   // Make the sample plan when the person reaches the last step, and again if anything it depends on changes.
   // The AI writes it when it can; if it cannot, our own rules do, so there is always a plan.
@@ -180,8 +214,8 @@ export const GuidedGoal: React.FC<GuidedGoalProps> = ({ onClose, onCreate, makeP
     if (!ai) {
       void byRules();
     } else {
-      ai.plan(briefFor(true), AbortSignal.timeout(AI_WAIT_MS))
-        .then((drafted) => show(planFromAi(nicheKey, drafted, common), true))
+      ai.program(briefFor(true), AbortSignal.timeout(AI_PROGRAM_WAIT_MS))
+        .then((drafted) => show(programPlan(drafted, common), true))
         .catch(() => byRules());
     }
     return () => {
@@ -194,7 +228,7 @@ export const GuidedGoal: React.FC<GuidedGoalProps> = ({ onClose, onCreate, makeP
     if (step === 'niche') return !!nicheKey;
     if (question) return isAnswered(question, answers);
     if (step === 'week') return days.length > 0;
-    if (step === 'preview') return !!plan && plan.routines.length > 0 && cleanText(titleDraft, 100).length > 0 && !creating;
+    if (step === 'preview') return !!plan && (plan.routines.length > 0 || !!plan.program) && cleanText(titleDraft, 100).length > 0 && !creating;
     return true;
   };
 
@@ -372,6 +406,47 @@ export const GuidedGoal: React.FC<GuidedGoalProps> = ({ onClose, onCreate, makeP
               {plan.description && <p className="mt-1.5 text-xs leading-relaxed text-slate-600">{plan.description}</p>}
             </div>
 
+            {plan.program && (
+              <>
+                <div>
+                  <p className="section-label mb-2">The month in brief</p>
+                  <ol className="space-y-1.5" aria-label="Outline of the first weeks">
+                    {plan.program.outline.slice(0, 4).map((w, i) => (
+                      <li key={i} className="flex items-baseline gap-3 text-sm">
+                        <span className="w-14 shrink-0 text-xs font-bold text-[color:var(--tone-700)]">Week {i + 1}</span>
+                        <span className="min-w-0 text-slate-700">
+                          <strong className="font-semibold text-slate-900">{w.focus}</strong>
+                          {w.note ? ` · ${w.note}` : ''}
+                        </span>
+                      </li>
+                    ))}
+                  </ol>
+                  {plan.program.totalWeeks > 4 && (
+                    <p className="mt-1.5 text-xs text-slate-500">
+                      {plan.program.totalWeeks} weeks in all. Each next week is written when it comes, from how the last one went.
+                    </p>
+                  )}
+                </div>
+                <p className="section-label">Week 1</p>
+                <ul className="space-y-3" aria-label="Sessions in week 1">
+                  {plan.program.week1.map((session) => (
+                    <li key={session.day} className="neu p-4">
+                      <div className="flex items-baseline justify-between gap-3">
+                        <h3 className="font-display text-base font-semibold text-slate-900">{session.name}</h3>
+                        <span className="shrink-0 text-xs font-bold text-[color:var(--tone-700)]">{session.day}</span>
+                      </div>
+                      <ul className="mt-2 space-y-1">
+                        {session.tasks.map((task, i) => (
+                          <li key={i} className="text-sm leading-snug text-slate-600">
+                            {task.text}
+                          </li>
+                        ))}
+                      </ul>
+                    </li>
+                  ))}
+                </ul>
+              </>
+            )}
             <ul className="space-y-3" aria-label="Routines in this plan">
               {plan.routines.map((routine) => (
                 <li key={routine.name} className="neu p-4">

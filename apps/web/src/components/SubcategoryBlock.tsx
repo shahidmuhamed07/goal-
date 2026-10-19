@@ -106,6 +106,14 @@ export const SubcategoryBlock: React.FC<SubcategoryBlockProps> = ({
   const [repeatDraft, setRepeatDraft] = useState<number[]>([]);
   const [everyDraft, setEveryDraft] = useState(1);
   const [confirm, setConfirm] = useState<Confirm | null>(null);
+  // Tasks whose "How" lines are open. Closed until asked, so the list stays easy to scan.
+  const [openSteps, setOpenSteps] = useState<Set<string>>(new Set());
+  const toggleSteps = (id: string) =>
+    setOpenSteps((prev) => {
+      const next = new Set(prev);
+      if (!next.delete(id)) next.add(id);
+      return next;
+    });
 
   const [text, setText] = useState('');
   const [priority, setPriority] = useState<Priority>('medium');
@@ -469,7 +477,7 @@ export const SubcategoryBlock: React.FC<SubcategoryBlockProps> = ({
                 return (
                   <li
                     key={t.id}
-                    className="group flex items-start gap-3 rounded-xl px-2.5 py-2 transition-colors hover:bg-white/45"
+                    className="group flex flex-wrap items-start gap-x-3 gap-y-1 rounded-xl px-2.5 py-2 transition-colors hover:bg-white/45"
                   >
                     <label
                       className={`flex items-start gap-3 flex-1 min-w-0 ${
@@ -491,6 +499,19 @@ export const SubcategoryBlock: React.FC<SubcategoryBlockProps> = ({
                         {t.text}
                       </span>
                     </label>
+
+                    {t.steps && t.steps.length > 0 && (
+                      <button
+                        type="button"
+                        className="chip inline-flex shrink-0 items-center gap-1 px-2.5 py-1 text-xs"
+                        aria-expanded={openSteps.has(t.id)}
+                        aria-label={`How to do: ${t.text}`}
+                        onClick={() => toggleSteps(t.id)}
+                      >
+                        How
+                        <ChevronDown className={`h-3 w-3 transition-transform ${openSteps.has(t.id) ? 'rotate-180' : ''}`} />
+                      </button>
+                    )}
 
                     <span
                       className={`mt-1.5 w-2 h-2 rounded-full shrink-0 ${PRIORITY_DOT[level]}`}
@@ -519,6 +540,16 @@ export const SubcategoryBlock: React.FC<SubcategoryBlockProps> = ({
                           </GlassIconButton>
                         )}
                       </div>
+                    )}
+
+                    {t.steps && t.steps.length > 0 && openSteps.has(t.id) && (
+                      <ul className="basis-full space-y-1 pb-1 pl-7 text-sm leading-snug text-slate-600" aria-label={`How to do: ${t.text}`}>
+                        {t.steps.map((line, i) => (
+                          <li key={i} className="relative pl-3.5 before:absolute before:left-0 before:top-[0.55em] before:h-1.5 before:w-1.5 before:rounded-full before:bg-[color:var(--tone-500)]">
+                            {line}
+                          </li>
+                        ))}
+                      </ul>
                     )}
                   </li>
                 );

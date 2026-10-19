@@ -7,7 +7,6 @@ import {
   describeForAi,
   isAnswered,
   makePlanWithRules,
-  planFromAi,
   visibleQuestions,
   type Answers,
   type CommonAnswers,
@@ -53,14 +52,14 @@ describe('the niches', () => {
     }
   });
 
-  it('ask at most four questions on any path, so it stays quick', () => {
+  it('ask at most five questions on any path, so it stays quick (the AI adds a few more after)', () => {
     for (const n of NICHES) {
       const worst = Math.max(
         visibleQuestions(n, {}).length,
         visibleQuestions(n, firstChoices(n.key)).length,
         ...n.questions.flatMap((q) => q.options.map((o) => visibleQuestions(n, { [q.id]: o.value }).length)),
       );
-      assert.ok(worst <= 4, `${n.key} asks ${worst} questions`);
+      assert.ok(worst <= 5, `${n.key} asks ${worst} questions`);
     }
   });
 });
@@ -337,27 +336,6 @@ describe('working with the AI planner', () => {
       { q: 'Which field?', a: 'Tech' },
       { q: 'When?', a: 'Evenings' },
     ]);
-  });
-
-  it('shapes an AI plan like one made by the rules: spread over the chosen days, tasks sized to the time', () => {
-    const plan = planFromAi(
-      'learning',
-      {
-        title: 'Learn guitar',
-        description: 'Start gently.',
-        routines: [
-          { name: 'Chords', tasks: ['One', 'Two', 'Three', 'Four', 'Five'] },
-          { name: 'Songs', tasks: ['One', 'Two', 'Three', 'Four', 'Five'] },
-          { name: 'Extra', tasks: ['One'] },
-        ],
-      },
-      { days: [1, 3], minutes: 15, months: 3 }
-    );
-    assert.equal(plan.routines.length, 2, 'never more routines than days');
-    assert.deepEqual(plan.routines.map((r) => r.weekdays), [[1], [3]]);
-    assert.equal(plan.routines[0].tasks.length, 2, '15 minutes means 2 tasks');
-    assert.equal(plan.category, 'Learning & Skills');
-    assert.equal(plan.months, 3);
   });
 });
 

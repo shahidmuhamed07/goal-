@@ -500,6 +500,19 @@ const fitness: Niche = {
       ],
     },
     {
+      id: 'split',
+      title: 'How do you like to split your training?',
+      hint: 'This shapes what each day trains.',
+      kind: 'single',
+      showIf: (answers) => ['muscle', 'strength', 'fat', 'active'].includes(String(answers.aim)),
+      options: [
+        opt('auto', 'You decide for me', 'We pick what suits your days'),
+        opt('full', 'Full body each time', 'A bit of everything, every session'),
+        opt('upperlower', 'Upper body and lower body', 'Alternate the two'),
+        opt('ppl', 'Push, pull and legs', 'Three kinds of day, repeated'),
+      ],
+    },
+    {
       id: 'limits',
       title: 'Any pain or limits to be careful with?',
       hint: 'Pick any that apply. We will choose gentler exercises for them.',
@@ -791,13 +804,6 @@ const shapePlan = (
     })),
   };
 };
-
-/** A plan the AI wrote, shaped exactly like one the rules wrote. */
-export const planFromAi = (
-  key: NicheKey,
-  drafted: { title: string; description: string; routines: RoutineDraft[] },
-  common: CommonAnswers
-): StarterPlan => shapePlan(nicheByKey(key), drafted, common);
 
 /**
  * What is sent to the AI: the area and every choice so far as plain question and

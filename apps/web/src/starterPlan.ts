@@ -1,5 +1,6 @@
 import { Subcategory, TaskItem } from './types';
 import { createSeries, sortWeekdays } from './recurrence';
+import type { ProgramSeed } from './program';
 
 /**
  * The first-run questions, and the plan they build.
@@ -99,6 +100,8 @@ export interface StarterPlan {
   description: string;
   months: number;
   routines: StarterRoutine[];
+  /** Set when the AI wrote this goal as a program (every week new): the routines are then empty. */
+  program?: ProgramSeed;
 }
 
 interface Template {

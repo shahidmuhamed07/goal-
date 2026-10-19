@@ -194,6 +194,13 @@ const FUN_MOVEMENT = mobility('Fun movement', ['Dance, swim, cycle or play a spo
 /** The names of the sessions in a week for this aim and number of training days, most important first. */
 type Slot = { kind: 'strength'; session: string; name: string } | { kind: 'other'; make: () => RoutineDraft };
 
+/** The choices that decide which exercises the AI may use: where, how experienced, and what to work around. */
+export const fitnessInputs = (r: AnswerReader): { place: Place; level: Level; limits: Limit[] } => ({
+  place: asPlace(r.one('where')),
+  level: asLevel(r.one('level')),
+  limits: r.many('limits').filter((l): l is Limit => l === 'knees' || l === 'back' || l === 'shoulders' || l === 'breath'),
+});
+
 /**
  * Builds a fitness plan from the answers and the common answers (days and time).
  * Every routine gets the weekdays the engine spreads over the chosen days.

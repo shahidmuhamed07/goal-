@@ -9,22 +9,34 @@ import type {
   UserProfile,
 } from '../types';
 import { ApiError, api } from './client';
+import type { SessionDraft } from '../program';
 
 /** What the app tells the AI planner: the area and what was chosen, as plain question and answer text. */
 export interface AiBrief {
   niche: string;
   answers: { q: string; a: string }[];
   week?: { days: string[]; minutes: number | null; months: number };
+  /** Fitness: the only exercises the AI may use. */
+  menu?: string[];
+}
+/** What the AI sends back for a new goal: the outline of the whole program and the full first week. */
+export interface AiProgramDraft {
+  title: string;
+  description: string;
+  outline: { focus: string; note: string }[];
+  week: SessionDraft[];
+}
+/** What the AI needs to write one later week. */
+export interface AiWeekRequest extends AiBrief {
+  weekNumber: number;
+  totalWeeks: number;
+  outline: { focus: string; note: string }[];
+  last: { done: string[]; skipped: string[] };
 }
 export interface AiFollowUp {
   id: string;
   title: string;
   options: { value: string; label: string }[];
-}
-export interface AiPlanDraft {
-  title: string;
-  description: string;
-  routines: { name: string; tasks: string[] }[];
 }
 
 /** Everything the app shows, in one answer (see `GET /api/overview`). */
@@ -48,12 +60,14 @@ export interface NewGoal {
   milestones: Goal['milestones'];
   subcategories: Goal['subcategories'];
   tasks: Goal['tasks'];
+  /** Set when the AI writes this goal week by week. */
+  program?: Goal['program'];
   /** Connected professionals who start with edit access. */
   assignedProfessionalUids?: string[];
 }
 
 /** The parts of a goal that may change after it exists. */
-export type GoalChanges = Partial<Pick<Goal, 'title' | 'category' | 'description' | 'targetDate' | 'milestones' | 'subcategories' | 'tasks'>>;
+export type GoalChanges = Partial<Pick<Goal, 'title' | 'category' | 'description' | 'targetDate' | 'milestones' | 'subcategories' | 'tasks' | 'program'>>;
 
 export type RequestResult = { result: 'sent' | 'sent_again'; request: AccessRequest };
 
@@ -68,8 +82,10 @@ export const appApi = {
   /** The AI planner. Rejects when the AI is off, busy or out of free quota; callers then use the fixed questions. */
   aiFollowUps: (brief: AiBrief, signal?: AbortSignal) =>
     api<{ questions: AiFollowUp[] }>('POST', '/api/plan', { stage: 'questions', ...brief }, signal).then((r) => r.questions),
-  aiPlan: (brief: AiBrief, signal?: AbortSignal) =>
-    api<{ plan: AiPlanDraft }>('POST', '/api/plan', { stage: 'plan', ...brief }, signal).then((r) => r.plan),
+  aiProgram: (brief: AiBrief, signal?: AbortSignal) =>
+    api<{ program: AiProgramDraft }>('POST', '/api/plan', { stage: 'program', ...brief }, signal).then((r) => r.program),
+  aiWeek: (request: AiWeekRequest, signal?: AbortSignal) =>
+    api<{ days: SessionDraft[] }>('POST', '/api/plan', { stage: 'week', ...request }, signal).then((r) => r.days),
 
   createGoal: (goal: NewGoal) => api<Goal>('POST', '/api/goals', goal),
   patchGoal: (goalId: string, changes: GoalChanges) => api<Goal>('PATCH', `/api/goals/${encodeURIComponent(goalId)}`, changes),

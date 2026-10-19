@@ -97,6 +97,10 @@ import { DailyTaskSection } from './components/DailyTaskSection';
 import { SubcategoryBlock } from './components/SubcategoryBlock';
 import { GoalCard } from './components/GoalCard';
 import { OnboardingAnswers, StarterPlan, materializePlan } from './starterPlan';
+import { decorateFitness, makeProgram, materializeWeek, nextWeekDue, nextWeekNumber, weekResults } from './program';
+import { menuFor } from './exerciseMenu';
+import type { Level, Limit, Place } from './fitnessPlan';
+import { NextWeekCard } from './components/NextWeekCard';
 import { MonthlyMilestoneSection } from './components/MonthlyMilestoneSection';
 import { CreateGoalModal } from './components/CreateGoalModal';
 
@@ -172,6 +176,7 @@ const mapGoalDoc = (id: string, data: Record<string, unknown>): Goal => ({
   tasks: (data.tasks as Goal['tasks']) || [],
   viewerUids: Array.isArray(data.viewerUids) ? (data.viewerUids as string[]) : undefined,
   editorUids: Array.isArray(data.editorUids) ? (data.editorUids as string[]) : undefined,
+  ...(data.program ? { program: data.program as Goal['program'] } : {}),
 });
 
 const normalizeGoal = (goal: Goal): Goal => mapGoalDoc(goal.id, goal as unknown as Record<string, unknown>);
@@ -1124,7 +1129,12 @@ export default function App() {
       completed: false,
     }));
 
-    const planned = withRoutines
+    // A program (written week by week by the AI) puts only week 1 on the calendar and keeps what it needs for the rest.
+    const seed = Date.now() + index * 1000;
+    const program = plan.program ? makeProgram(plan.program, todayDate) : undefined;
+    const planned = plan.program
+      ? materializeWeek({ sessions: plan.program.week1, startDate: todayDate, weekNumber: 1, seed })
+      : withRoutines
       ? materializePlan(plan, {
           fromDate: todayDate,
           endDate: goalEndDate({ targetDate, milestones }),
@@ -1146,6 +1156,7 @@ export default function App() {
       milestones,
       subcategories: planned.subcategories,
       tasks: planned.tasks,
+      ...(program ? { program } : {}),
     });
     // Show it straight away, so opening it never finds an empty list.
     setGoals((prev) => (prev.some((g) => g.id === created.id) ? prev : [normalizeGoal(created), ...prev]));
@@ -1201,6 +1212,54 @@ export default function App() {
     setPersonaPickerOpen(false);
     if (openGoalId) openGoal(openGoalId);
     else if (profile?.persona === 'professional') setActiveTab('professional');
+  };
+
+  /** The goals whose written weeks are about to run out: the next week is offered on Today. */
+  const goalsNeedingNextWeek = goals.filter((g) => g.userId === user?.uid && nextWeekDue(g, todayDate));
+  const [planningWeekGoalId, setPlanningWeekGoalId] = useState<string | null>(null);
+
+  /**
+   * Asks the AI for the next week of a program goal, telling it how the last week went, and writes it
+   * onto the calendar after the weeks already there. On any failure nothing changes and the person can try again.
+   */
+  const handlePlanNextWeek = async (goalId: string) => {
+    const goal = goals.find((g) => g.id === goalId);
+    const program = goal?.program;
+    const weekNumber = program ? nextWeekNumber(program) : undefined;
+    if (!goal || !program || !weekNumber || planningWeekGoalId) return;
+    setPlanningWeekGoalId(goalId);
+    try {
+      const fitness = program.fitness;
+      const menu = fitness ? menuFor(fitness.place as Place, fitness.level as Level, fitness.limits as Limit[]) : undefined;
+      const last = weekResults(goal, program.startDate, weekNumber - 1);
+      const days = await appApi.aiWeek(
+        {
+          ...program.brief,
+          week: { days: program.brief.days, minutes: program.brief.minutes, months: program.brief.months },
+          ...(menu ? { menu } : {}),
+          weekNumber,
+          totalWeeks: program.totalWeeks,
+          outline: program.outline,
+          last,
+        },
+        AbortSignal.timeout(45_000)
+      );
+      const sessions = fitness ? decorateFitness(days) : days;
+      const written = materializeWeek({ sessions, startDate: program.startDate, weekNumber, seed: Date.now(), firstOrder: goal.subcategories.length });
+      const subcategories = [...goal.subcategories, ...written.subcategories];
+      const tasks = [...goal.tasks, ...written.tasks];
+      if (!fitsInGoalDocument(subcategories, tasks)) {
+        setErrorMessage('This goal is full, so the next week could not be added.');
+        return;
+      }
+      await saveGoal(goalId, { subcategories, tasks, program: { ...program, plannedWeeks: weekNumber } });
+      setSuccessMessage(`Week ${weekNumber} of “${goal.title}” is ready.`);
+    } catch (err) {
+      console.error('Plan next week error:', err);
+      setErrorMessage('Could not plan the next week right now. Please try again in a moment.');
+    } finally {
+      setPlanningWeekGoalId(null);
+    }
   };
 
   /** Saves a goal made in the guided flow and opens it. */
@@ -2673,6 +2732,13 @@ export default function App() {
                 {/* Card from the admin, under the progress bar */}
                 <CmsBanners banners={liveBanners} placement="today-card" limit={1} onOpenPage={setOpenPageSlug} />
 
+                {/* A program goal whose written weeks are about to run out: offer the next week */}
+                <NextWeekCard
+                  goals={goalsNeedingNextWeek}
+                  busyGoalId={planningWeekGoalId}
+                  onPlan={handlePlanNextWeek}
+                />
+
                 {/* Unfinished tasks from earlier days, with a way to pick them up or let them go */}
                 <MissedTasks
                   items={missedTasks}
@@ -3230,7 +3296,7 @@ export default function App() {
             }
           }}
           onCreate={handleCreateGuidedGoal}
-          ai={{ followUps: appApi.aiFollowUps, plan: appApi.aiPlan }}
+          ai={{ followUps: appApi.aiFollowUps, program: appApi.aiProgram }}
         /></Suspense>
       )}
 

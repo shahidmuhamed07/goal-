@@ -113,3 +113,27 @@ export const nextWeekDue = (goal: Pick<Goal, 'program'>, today: string): boolean
 /** The number of the next week to write, or undefined when the whole goal is written. */
 export const nextWeekNumber = (program: GoalProgram): number | undefined =>
   program.plannedWeeks < program.totalWeeks ? program.plannedWeeks + 1 : undefined;
+
+/** Everything a guided flow hands to the app to create a program goal: the AI's outline and week 1, and what it was told. */
+export interface ProgramSeed {
+  outline: GoalProgram['outline'];
+  week1: SessionDraft[];
+  brief: GoalProgram['brief'];
+  fitness?: GoalProgram['fitness'];
+  totalWeeks: number;
+}
+
+/** The longest goal written week by week: a year. Longer goals keep adding weeks as they go. */
+export const MAX_PROGRAM_WEEKS = 52;
+
+export const totalWeeksFor = (months: number): number => Math.min(MAX_PROGRAM_WEEKS, Math.max(1, months * 4));
+
+/** The record kept on the goal, ready to write the next week from. */
+export const makeProgram = (seed: ProgramSeed, startDate: string): GoalProgram => ({
+  startDate,
+  totalWeeks: seed.totalWeeks,
+  plannedWeeks: 1,
+  outline: seed.outline.slice(0, 12),
+  brief: seed.brief,
+  ...(seed.fitness ? { fitness: seed.fitness } : {}),
+});
