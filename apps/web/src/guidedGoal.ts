@@ -21,6 +21,8 @@ export interface GuidedOption {
   value: string;
   label: string;
   hint?: string;
+  /** Tapping it clears the other choices, and tapping another clears it ("No pain or problems"). */
+  exclusive?: boolean;
 }
 
 export interface GuidedQuestion {
@@ -113,6 +115,8 @@ export class AnswerReader {
 }
 
 const opt = (value: string, label: string, hint?: string): GuidedOption => ({ value, label, hint });
+/** The "none of these" choice of a pick-any question: a clear answer of its own, never left blank. */
+const nothing = (label: string, hint?: string): GuidedOption => ({ value: 'none', label, hint, exclusive: true });
 
 /** Keeps the first `min` routines coming from the answers and tops up from `fallback` so a plan is never thin. */
 const ensure = (routines: RoutineDraft[], fallback: RoutineDraft[], min = 4): RoutineDraft[] => {
@@ -497,10 +501,11 @@ const fitness: Niche = {
     },
     {
       id: 'limits',
-      title: 'Anything we should work around?',
-      hint: 'Pick any that apply, or none. We will choose gentler exercises.',
+      title: 'Any pain or limits to be careful with?',
+      hint: 'Pick any that apply. We will choose gentler exercises for them.',
       kind: 'multi',
       options: [
+        nothing('No pain or limits', 'I feel fine, go ahead'),
         opt('knees', 'Sore or weak knees'),
         opt('back', 'Lower back trouble'),
         opt('shoulders', 'Shoulder trouble'),
@@ -733,7 +738,8 @@ const MAX_ROUTINES = 6;
 
 /** Whether a question has been answered well enough to move on. Typing is never needed. */
 export const isAnswered = (question: GuidedQuestion, answers: Answers): boolean => {
-  if (question.kind === 'multi') return true; // picking none is fine: the plan falls back to sensible defaults
+  // A question with a "none" choice wants one tap on something; any other pick-any question may be left empty.
+  if (question.kind === 'multi') return !question.options.some((o) => o.exclusive) || (Array.isArray(answers[question.id]) && (answers[question.id] as string[]).length > 0);
   const a = answers[question.id];
   return typeof a === 'string' && a.length > 0;
 };

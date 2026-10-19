@@ -360,3 +360,22 @@ describe('working with the AI planner', () => {
     assert.equal(plan.months, 3);
   });
 });
+
+describe('the "no pain or limits" choice', () => {
+  const limits = NICHES.find((n) => n.key === 'fitness')!.questions.find((q) => q.id === 'limits')!;
+
+  it('is offered first and must be answered, so it is a deliberate tap', () => {
+    assert.equal(limits.options[0].value, 'none');
+    assert.equal(limits.options[0].exclusive, true);
+    assert.equal(isAnswered(limits, {}), false);
+    assert.equal(isAnswered(limits, { limits: ['none'] }), true);
+    assert.equal(isAnswered(limits, { limits: ['knees'] }), true);
+  });
+
+  it('makes the same plan as having nothing to work around', () => {
+    const base = { aim: 'muscle', where: 'gym', level: 'beginner' };
+    const none = buildGuidedPlan('fitness', { ...base, limits: ['none'] }, common());
+    const empty = buildGuidedPlan('fitness', { ...base, limits: [] }, common());
+    assert.deepEqual(none, empty);
+  });
+});

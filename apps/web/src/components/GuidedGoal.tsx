@@ -134,7 +134,11 @@ export const GuidedGoal: React.FC<GuidedGoalProps> = ({ onClose, onCreate, makeP
     forgetFollowUps(id);
     setAnswers((prev) => {
       const current = Array.isArray(prev[id]) ? (prev[id] as string[]) : [];
-      return { ...prev, [id]: current.includes(value) ? current.filter((v) => v !== value) : [...current, value] };
+      const options = allQuestions.find((q) => q.id === id)?.options ?? [];
+      const exclusive = (v: string) => options.some((o) => o.value === v && o.exclusive);
+      if (current.includes(value)) return { ...prev, [id]: current.filter((v) => v !== value) };
+      // "No pain or limits" stands alone; picking anything else removes it.
+      return { ...prev, [id]: exclusive(value) ? [value] : [...current.filter((v) => !exclusive(v)), value] };
     });
   };
   const toggleDay = (day: number) => setDays((prev) => (prev.includes(day) ? prev.filter((d) => d !== day) : [...prev, day]));
