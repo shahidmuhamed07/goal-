@@ -3,7 +3,6 @@ import {
   Briefcase,
   Building2,
   ChevronLeft,
-  Clock,
   Coins,
   Dumbbell,
   GraduationCap,
@@ -94,7 +93,9 @@ export const GuidedGoal: React.FC<GuidedGoalProps> = ({ onClose, onCreate, makeP
   const [answers, setAnswers] = useState<Answers>({});
   const [days, setDays] = useState<number[]>([1, 3, 5]);
   // The time for each session is optional: nothing is asked or assumed until the person adds it.
-  const [minutes, setMinutes] = useState<number | null>(null);
+  // How long each session is: always chosen (30 to start), and set to the recommendation when there is one.
+  const [minutes, setMinutes] = useState<number | null>(30);
+  const [minutesChosen, setMinutesChosen] = useState(false);
   // True once the person has changed the days themselves, so a suggestion never overwrites their choice.
   const [daysChosen, setDaysChosen] = useState(false);
   // Fitness only: what the person chose to tell us about themselves. Every part is optional.
@@ -191,6 +192,7 @@ export const GuidedGoal: React.FC<GuidedGoalProps> = ({ onClose, onCreate, makeP
   // Arriving at the week screen with a suggestion: start from it, unless the person already chose days.
   useEffect(() => {
     if (step === 'week' && advice && !daysChosen) setDays(advice.days);
+    if (step === 'week' && advice && !minutesChosen) setMinutes(advice.minutes);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [step]);
 
@@ -473,29 +475,25 @@ export const GuidedGoal: React.FC<GuidedGoalProps> = ({ onClose, onCreate, makeP
               : `Every ${describeDays(days)}`}
           </p>
 
-          {minutes === null ? (
-            <button type="button" className="chip mt-6 inline-flex items-center gap-2 px-4 py-2.5 text-sm" onClick={() => setMinutes(advice?.minutes ?? 30)}>
-              <Clock className="h-4 w-4" />
-              Add a time for each session
-              <span className="font-medium text-slate-500">(optional)</span>
-            </button>
-          ) : (
-            <>
-              <div className="mt-6 mb-2 flex items-center justify-between gap-3">
-                <p className="section-label">How long each time?</p>
-                <button type="button" className="text-xs font-semibold text-[color:var(--tone-700)] cursor-pointer" data-plain onClick={() => setMinutes(null)}>
-                  Remove time
-                </button>
-              </div>
-              <div className="grid grid-cols-4 gap-2" role="group" aria-label="Minutes each day">
-                {MINUTE_CHOICES.map((m) => (
-                  <button key={m} type="button" className="chip py-3 text-sm" data-active={minutes === m} aria-pressed={minutes === m} onClick={() => setMinutes(m)}>
-                    {m === 60 ? '1 hour' : `${m} min`}
-                  </button>
-                ))}
-              </div>
-            </>
-          )}
+          <p className="section-label mt-6 mb-2">How long each time?</p>
+          <div className="grid grid-cols-4 gap-2" role="group" aria-label="Minutes each time">
+            {MINUTE_CHOICES.map((m) => (
+              <button
+                key={m}
+                type="button"
+                className="chip py-3 text-sm"
+                data-active={minutes === m}
+                aria-pressed={minutes === m}
+                onClick={() => {
+                  setMinutesChosen(true);
+                  setMinutes(m);
+                }}
+              >
+                {m === 60 ? '1 hour' : `${m} min`}
+              </button>
+            ))}
+          </div>
+          {advice && <p className="mt-2 text-xs font-medium text-slate-500">Recommended: {advice.minutes === 60 ? '1 hour' : `${advice.minutes} min`}</p>}
 
           <p className="section-label mt-6 mb-2">For how long?</p>
           <div className="grid grid-cols-4 gap-2" role="group" aria-label="Months">

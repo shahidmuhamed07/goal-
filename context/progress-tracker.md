@@ -121,6 +121,9 @@ Found by reading the code on 2026-10-11; none of these have been reproduced unle
 
 ## Changelog
 
+### 2026-10-19 — Time is chosen, with a recommendation  (branch `feature/ai-planner`)
+- **What & why:** On "Plan your week" the optional "Add a time" chip and "Remove time" are gone. The four times (15 min, 30 min, 45 min, 1 hour) are always shown; for fitness the recommended one is preselected and labelled "Recommended: 45 min" (until the person picks another); other areas start at 30. Files: `components/GuidedGoal.tsx`. Verified: tsc ✓, web tests ✓, build ✓; not re-checked in the browser.
+
 ### 2026-10-19 — "A little about you" step: age, height, weight shape the fitness recommendation  (branch `feature/ai-planner`)
 - **Type:** feature
 - **What & why:** Height and weight moved out of the week screen into their own optional step for fitness goals, "A little about you": age, height, weight and how much the person is on their feet in a normal day. They shape the recommendation: fat loss gets more time each session (a normal 30 becomes 45), muscle building gets shorter, harder sessions with a different workout each day, a higher body weight (BMI 30 or more) starts low impact and no longer than 45 minutes, age 55 or more gets one day and 15 minutes less, under 18 is kept to four days, and a sitting beginner is kept to three days. The week screen shows "Train: Mon · Tue · Thu · Fri. Rest: Wed · Sat · Sun." for the chosen days, and the preview lists the same. The same facts go to the AI (with a note on how to use them: gentler for older or heavier people, steady cardio for fat loss, shorter harder lifts for muscle). Everything is optional ("Skip for now"). Absurd values (an age of 400) are ignored.
