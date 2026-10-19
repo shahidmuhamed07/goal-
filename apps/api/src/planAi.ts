@@ -220,6 +220,7 @@ export const AREA_NOTES: Record<string, string> = {
     'Fitness: every session is its own workout. Different days train different things (for example upper body, lower body, full body, or push, pull and legs, as the person asked).',
     'From week to week change some exercises and raise the work gently: more reps, then a third set, then more weight. Make the last week of each block easier so the body can recover.',
     'Give every exercise a dose, such as "3 sets of 8" or "3 holds of 30 seconds". Respect any pain or limit the person mentioned.',
+    'If the person gave their age, height and weight, use them to set how hard to start: gentler and lower impact for older people or a higher body weight; for fat loss include steady cardio such as a brisk walk or the bike on some days; for muscle keep sessions shorter and harder with different lifts each day. Rest days are the days not picked.',
   ].join(' '),
   eating: 'Eating and wellbeing: each day is a small, different plan (meals, water, sleep or a calm habit). Keep it simple and realistic, never a strict diet, and never give medical advice.',
   career: 'Career or business: each day has concrete things to produce (a message sent, a role applied for, a skill practised). Make them small and finishable.',

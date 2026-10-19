@@ -330,32 +330,71 @@ export interface WeekAdvice {
 const LEVEL_WORDS: Record<Level, string> = { beginner: 'you are new to training', returning: 'you are coming back after a break', some: 'you have some experience', experienced: 'you are experienced' };
 const AIM_WORDS: Record<Aim, string> = { muscle: 'build muscle', strength: 'get stronger', fat: 'lose fat', stamina: 'build stamina', mobility: 'move better', active: 'stay active' };
 
+/** What the person chose to tell us about themselves. Every part is optional. */
+export interface AboutYou {
+  age?: number;
+  heightCm?: number;
+  weightKg?: number;
+  /** How much they are on their feet in a normal day. */
+  movement?: 'sitting' | 'some' | 'active';
+}
+
+/** Body mass index, or undefined when height or weight is missing or not believable. */
+export const bmiOf = (about: AboutYou): number | undefined => {
+  const { heightCm: h, weightKg: w } = about;
+  if (!h || !w || h < 100 || h > 230 || w < 25 || w > 300) return undefined;
+  return Math.round((w / ((h / 100) * (h / 100))) * 10) / 10;
+};
+
 /**
- * How many days a week and how long each time suits this person, from what they told us.
+ * How many days a week and how long each time suits this person, from what they told us and, when
+ * they shared it, their age, height and weight. Fat loss gets more time each session; muscle gets
+ * shorter, harder sessions; older age and a higher body weight start gentler.
  * It is only a suggestion: the person can change the days and the time.
  */
-export const adviseFitnessWeek = (r: AnswerReader): WeekAdvice => {
+export const adviseFitnessWeek = (r: AnswerReader, about: AboutYou = {}): WeekAdvice => {
   const level = asLevel(r.one('level'));
   const aim = asAim(r.one('aim'));
   const limits = limitsFrom(r);
   const split = r.one('split');
   const hasLimit = limits.length > 0 || r.other('limits').length > 0;
+  const bmi = bmiOf(about);
+  const age = about.age && about.age >= 10 && about.age <= 100 ? about.age : undefined;
+  const heavy = bmi !== undefined && bmi >= 30;
+  const gentleStart = level === 'beginner' || level === 'returning';
 
-  let count = level === 'beginner' || level === 'returning' ? 3 : level === 'some' ? 4 : 5;
+  let count = gentleStart ? 3 : level === 'some' ? 4 : 5;
   if (aim === 'mobility') count = Math.max(count, 4);
-  if (aim === 'fat' && level !== 'beginner') count += 1;
+  if (aim === 'fat' && level !== 'beginner' && !heavy) count += 1;
   if (split === 'ppl') count = level === 'experienced' ? 6 : 3;
-  if (split === 'upperlower') count = Math.max(4, Math.min(count, 4));
-  // A pain or limit means one day less, but a beginner is never pushed below three days a week on that account.
-  if (hasLimit && count > 3) count -= 1;
+  if (split === 'upperlower') count = 4;
+  if (gentleStart && about.movement === 'sitting') count = Math.min(count, 3);
+  // A pain or limit, or an older body, means one day less, but never below three for someone just starting.
+  if ((hasLimit || (age !== undefined && age >= 55)) && count > 3) count -= 1;
+  if (age !== undefined && age < 18) count = Math.min(count, 4);
   count = Math.min(6, Math.max(2, count));
 
-  const minutes = aim === 'mobility' ? 30 : level === 'beginner' || level === 'returning' ? 30 : level === 'some' ? 45 : aim === 'stamina' ? 45 : 60;
+  let minutes = aim === 'mobility' ? 30 : gentleStart ? 30 : level === 'some' ? 45 : aim === 'stamina' ? 45 : 60;
+  if (aim === 'fat') minutes += 15; // burning fat takes a little more time each session
+  if (aim === 'muscle') minutes = Math.min(minutes, 45); // strength sessions are shorter and harder
+  if (heavy && minutes > 45) minutes = 45; // start low impact and build
+  if (age !== undefined && age >= 55) minutes = Math.max(30, minutes - 15);
+  minutes = Math.min(60, Math.max(30, minutes));
+
   const because = [LEVEL_WORDS[level], aim ? `you want to ${AIM_WORDS[aim]}` : '', hasLimit ? 'you have something to be careful with' : ''].filter(Boolean);
   const list = because.length > 1 ? `${because.slice(0, -1).join(', ')} and ${because[because.length - 1]}` : because[0];
+
+  const shaped: string[] = [];
+  if (aim === 'fat') shaped.push('Fat loss works best with a little more time each session.');
+  if (aim === 'muscle') shaped.push('Muscle building uses shorter, harder sessions, with a different workout each day.');
+  const bodyLines: string[] = [];
+  if (heavy) bodyLines.push('We start with low-impact moves and build up.');
+  if (age !== undefined && age >= 55) bodyLines.push('We kept it gentler for your age.');
+  if (age !== undefined && age < 18) bodyLines.push('We kept it to a few days, so you can grow and recover.');
+
   return {
     days: weekdaysFor(count),
     minutes,
-    note: `We suggest ${count} days a week, about ${minutes} minutes each time, because ${list}.`,
+    note: `We suggest ${count} days a week, about ${minutes} minutes each time, because ${list}.${[...shaped, ...bodyLines].length > 0 ? ` ${[...shaped, ...bodyLines].join(' ')}` : ''}`,
   };
 };

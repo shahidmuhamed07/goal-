@@ -14,7 +14,7 @@ import {
   type NicheKey,
 } from './guidedGoal';
 import { GOAL_CATEGORIES } from './utils';
-import { adviseFitnessWeek, limitsFrom, weekdaysFor } from './fitnessPlan';
+import { adviseFitnessWeek, bmiOf, limitsFrom, weekdaysFor } from './fitnessPlan';
 import { materializePlan, tasksForMinutes } from './starterPlan';
 
 const common = (over: Partial<CommonAnswers> = {}): CommonAnswers => ({ days: [1, 3, 5], minutes: 30, months: 3, ...over });
@@ -392,5 +392,45 @@ describe('the week we recommend for fitness', () => {
       assert.equal(days.length, n);
       assert.equal(new Set(days).size, n);
     }
+  });
+});
+
+describe('the recommendation uses what the person told us about themselves', () => {
+  const reader = (answers: Answers) => new AnswerReader(NICHES.find((n) => n.key === 'fitness')!.questions, answers);
+
+  it('works out body mass index only from believable height and weight', () => {
+    assert.equal(bmiOf({ heightCm: 170, weightKg: 70 }), 24.2);
+    assert.equal(bmiOf({ heightCm: 170 }), undefined);
+    assert.equal(bmiOf({ heightCm: 20, weightKg: 70 }), undefined);
+  });
+
+  it('gives fat loss more time each session than muscle building', () => {
+    const base = { level: 'some' };
+    const fat = adviseFitnessWeek(reader({ ...base, aim: 'fat' }), { age: 30, heightCm: 170, weightKg: 80 });
+    const muscle = adviseFitnessWeek(reader({ ...base, aim: 'muscle' }), { age: 30, heightCm: 170, weightKg: 80 });
+    assert.ok(fat.minutes > muscle.minutes, `${fat.minutes} vs ${muscle.minutes}`);
+    assert.match(muscle.note, /shorter, harder sessions, with a different workout each day/);
+    assert.match(fat.note, /a little more time/);
+  });
+
+  it('starts gently and low impact at a high body weight, and gentler for an older person', () => {
+    const heavy = adviseFitnessWeek(reader({ level: 'some', aim: 'fat' }), { heightCm: 165, weightKg: 100 });
+    assert.ok(heavy.minutes <= 45);
+    assert.match(heavy.note, /low-impact/);
+    const older = adviseFitnessWeek(reader({ level: 'experienced', aim: 'muscle' }), { age: 62 });
+    const younger = adviseFitnessWeek(reader({ level: 'experienced', aim: 'muscle' }), { age: 30 });
+    assert.ok(older.days.length < younger.days.length);
+    assert.match(older.note, /gentler for your age/);
+  });
+
+  it('keeps a teenager to a few days, and never asks a sitting beginner for more than three', () => {
+    assert.ok(adviseFitnessWeek(reader({ level: 'experienced', aim: 'muscle' }), { age: 15 }).days.length <= 4);
+    assert.equal(adviseFitnessWeek(reader({ level: 'beginner', aim: 'fat' }), { movement: 'sitting' }).days.length, 3);
+  });
+
+  it('ignores an age or measurement that cannot be real', () => {
+    const odd = adviseFitnessWeek(reader({ level: 'some', aim: 'muscle' }), { age: 400, heightCm: 5, weightKg: 9000 });
+    const none = adviseFitnessWeek(reader({ level: 'some', aim: 'muscle' }));
+    assert.deepEqual(odd, none);
   });
 });
