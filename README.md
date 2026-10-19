@@ -18,9 +18,13 @@ You need Node 20 or newer (`.nvmrc`).
 
 ```bash
 npm install          # once, at the repo root: installs every app
-npm run dev          # the app      → http://localhost:3000
-npm run dev:admin    # the admin    → http://localhost:3001
+npm run dev:all      # the app and the API together → http://localhost:3000 (the API on :3002)
+npm run dev          # only the app  → http://localhost:3000 (needs the API running too, see below)
+npm run dev:api      # only the API  → http://localhost:3002
+npm run dev:admin    # the admin     → http://localhost:3001
 ```
+
+**The app needs the API.** Goals, accounts and chat live in the API and MongoDB, so with only `npm run dev` the app has nothing to talk to and stays on its loading screen. Use `npm run dev:all` (or run `npm run dev:api` in a second terminal). Locally the API uses a separate database, `goalpath_dev`, so trying things out never touches the live data. To use another database, start it like `MONGODB_DB=goalpath npm run dev:api`.
 
 Other commands, all from the repo root:
 

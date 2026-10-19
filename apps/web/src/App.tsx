@@ -40,6 +40,7 @@ import { auth, googleProvider } from './firebase';
 import { appApi, type GoalChanges } from './api/appApi';
 import { ApiError } from './api/client';
 import { usePolling } from './api/usePolling';
+import { API_URL } from './api/config';
 import { clearOverviewCache, readOverviewCache, writeOverviewCache } from './api/overviewCache';
 import {
   Goal,
@@ -1979,11 +1980,18 @@ export default function App() {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center gap-4">
         <GoalPathLoader />
-        {serverSlow && (
-          <p className="meta max-w-xs px-6 text-center">
-            Waking up the server. This can take up to a minute when it has been idle.
-          </p>
-        )}
+        {serverSlow &&
+          (import.meta.env.DEV && API_URL.startsWith('http://localhost') && overviewPoll.error ? (
+            // Only on your own computer: the usual reason is that the API is not running.
+            <p className="meta max-w-sm px-6 text-center">
+              Cannot reach the API at {API_URL}. Start it with <code>npm run dev:api</code> (or run both with{' '}
+              <code>npm run dev:all</code>), then this page loads by itself.
+            </p>
+          ) : (
+            <p className="meta max-w-xs px-6 text-center">
+              Waking up the server. This can take up to a minute when it has been idle.
+            </p>
+          ))}
       </div>
     );
   }

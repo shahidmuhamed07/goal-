@@ -14,6 +14,8 @@
   "scripts": {
     "dev": "npm run dev -w @goalpath/web",
     "dev:web": "npm run dev -w @goalpath/web",
+    "dev:api": "MONGODB_DB=${MONGODB_DB:-goalpath_dev} npm run dev -w @goalpath/api",
+    "dev:all": "node scripts/dev-all.mjs",
     "dev:admin": "npm run dev -w @goalpath/admin",
     "build": "npm run build -w @goalpath/web",
     "build:admin": "npm run build -w @goalpath/admin",

@@ -37,9 +37,7 @@
       "runtimeExecutable": "npm",
       "runtimeArgs": [
         "run",
-        "start",
-        "-w",
-        "@goalpath/api"
+        "dev:api"
       ],
       "port": 3002
     }
