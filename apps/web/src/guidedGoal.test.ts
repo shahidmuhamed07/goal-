@@ -4,8 +4,10 @@ import {
   NICHES,
   buildGuidedPlan,
   cleanText,
+  describeForAi,
   isAnswered,
   makePlanWithRules,
+  planFromAi,
   visibleQuestions,
   type Answers,
   type CommonAnswers,
@@ -311,5 +313,50 @@ describe('it plugs into the calendar', () => {
   it('the AI-ready seam: the rules plan maker returns the same plan', async () => {
     const answers = firstChoices('career');
     assert.deepEqual(await makePlanWithRules('career', answers, common()), buildGuidedPlan('career', answers, common()));
+  });
+});
+
+describe('working with the AI planner', () => {
+  it('tells the AI the area and each choice as plain question and answer text', () => {
+    const described = describeForAi('career', { aim: 'switch' });
+    assert.equal(described.niche, 'Career');
+    assert.ok(described.answers.length >= 1);
+    assert.ok(described.answers.every((a) => a.q.length > 0 && a.a.length > 0));
+    assert.ok(!JSON.stringify(described).includes('"switch"'), 'shows the label, not the internal value');
+  });
+
+  it('sends typed "something else" text, and follow-up answers, in the person\'s own words', () => {
+    const answers = { aim: 'other', aim_other: '  Become a\u0007 pilot ', 'ai:f1': 'Tech', 'ai:f2': 'other', 'ai:f2_other': 'Evenings' };
+    const described = describeForAi('career', answers, [
+      { id: 'f1', title: 'Which field?' },
+      { id: 'f2', title: 'When?' },
+      { id: 'f3', title: 'Not answered?' },
+    ]);
+    assert.ok(described.answers.some((a) => a.a === 'Become a pilot'));
+    assert.deepEqual(described.answers.slice(-2), [
+      { q: 'Which field?', a: 'Tech' },
+      { q: 'When?', a: 'Evenings' },
+    ]);
+  });
+
+  it('shapes an AI plan like one made by the rules: spread over the chosen days, tasks sized to the time', () => {
+    const plan = planFromAi(
+      'learning',
+      {
+        title: 'Learn guitar',
+        description: 'Start gently.',
+        routines: [
+          { name: 'Chords', tasks: ['One', 'Two', 'Three', 'Four', 'Five'] },
+          { name: 'Songs', tasks: ['One', 'Two', 'Three', 'Four', 'Five'] },
+          { name: 'Extra', tasks: ['One'] },
+        ],
+      },
+      { days: [1, 3], minutes: 15, months: 3 }
+    );
+    assert.equal(plan.routines.length, 2, 'never more routines than days');
+    assert.deepEqual(plan.routines.map((r) => r.weekdays), [[1], [3]]);
+    assert.equal(plan.routines[0].tasks.length, 2, '15 minutes means 2 tasks');
+    assert.equal(plan.category, 'Learning & Skills');
+    assert.equal(plan.months, 3);
   });
 });

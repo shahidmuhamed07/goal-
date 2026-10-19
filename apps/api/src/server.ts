@@ -3,6 +3,7 @@ import { loadEnv } from './env';
 import { createApp } from './app';
 import { MemoryStore } from './memoryStore';
 import { MongoStore } from './mongoStore';
+import { createGeminiClient, createPlanAi } from './planAi';
 import type { ContentStore } from './store';
 
 async function main() {
@@ -31,15 +32,19 @@ async function main() {
     );
   }
 
+  const planAi = env.GEMINI_API_KEY ? createPlanAi(createGeminiClient({ apiKey: env.GEMINI_API_KEY, model: env.GEMINI_MODEL })) : undefined;
+  if (!planAi) console.warn('GEMINI_API_KEY is empty: the AI planner is off and the app uses its fixed questions.');
+
   const app = createApp(store, {
     adminAuth,
+    planAi,
     userAuth: verify,
     corsOrigins: env.CORS_ORIGINS.split(',').map((s) => s.trim()).filter(Boolean),
     isProduction: env.NODE_ENV === 'production',
   });
 
   const server = app.listen(env.PORT, () => {
-    console.log(`API ready on http://localhost:${env.PORT}  (store: ${env.STORE}${env.STORE === 'mongo' ? `, database: ${env.MONGODB_DB}` : ', nothing is saved'}, admin login: ${adminAuth ? `on, ${ownerEmails.length} owner(s)` : 'off'})`);
+    console.log(`API ready on http://localhost:${env.PORT}  (store: ${env.STORE}${env.STORE === 'mongo' ? `, database: ${env.MONGODB_DB}` : ', nothing is saved'}, admin login: ${adminAuth ? `on, ${ownerEmails.length} owner(s)` : 'off'}, AI planner: ${planAi ? env.GEMINI_MODEL : 'off'})`);
   });
 
   // The most common start-up problem on a developer's computer: the API is already running somewhere else.

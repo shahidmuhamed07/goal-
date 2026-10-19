@@ -12,6 +12,10 @@ const schema = z.object({
   FIREBASE_PROJECT_ID: z.string().default('goal-path-9f4cc'),
   /** Comma-separated emails allowed to use the admin. Empty means no login is set up. */
   ADMIN_EMAILS: z.string().default(''),
+  /** The key for the free Google Gemini AI that helps plan goals. A secret: set it on the host, never in code. Empty turns the AI off. */
+  GEMINI_API_KEY: z.string().optional(),
+  /** Which Gemini model to ask. Changeable without a code change if Google renames or retires one. */
+  GEMINI_MODEL: z.string().default('gemini-2.5-flash'),
 });
 
 export type Env = z.infer<typeof schema>;

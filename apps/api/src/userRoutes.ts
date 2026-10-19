@@ -13,6 +13,7 @@ import {
   type UserProfile,
 } from '@goalpath/shared';
 import type { Identity, TokenVerifier } from './auth';
+import { AiBadAnswerError, AiUnavailableError, createDailyBudget, planBody, type PlanAi } from './planAi';
 import { DuplicateError, type ContentStore, type Doc } from './store';
 import {
   MAX_GOAL_BYTES,
@@ -30,6 +31,8 @@ export interface UserRoutesOptions {
   /** Checks a login token. Without it every route answers 503 (nobody can be told apart). */
   verify?: TokenVerifier;
   now: () => Date;
+  /** The AI that helps plan goals. Without it `POST /plan` answers 503. */
+  planAi?: PlanAi;
 }
 
 /** Characters for an access code: no 0/O or 1/I, so a code read aloud is not misheard. */
@@ -94,7 +97,7 @@ export function createUserRoutes(store: ContentStore, options: UserRoutesOptions
     }
   };
   // Only these doors need a login; anything else falls through to the server's own "not found".
-  router.use(['/me', '/overview', '/clients', '/users', '/public-profiles', '/access-requests', '/collaborators', '/goals', '/chats'], requireUser);
+  router.use(['/me', '/overview', '/plan', '/clients', '/users', '/public-profiles', '/access-requests', '/collaborators', '/goals', '/chats'], requireUser);
 
   const me = (res: Response) => res.locals.user as Identity;
   const wrap =
@@ -717,6 +720,42 @@ export function createUserRoutes(store: ContentStore, options: UserRoutesOptions
         await store.upsert('chats', asDoc({ ...thread, lastRead: { ...(thread.lastRead ?? {}), [who]: nowIso() } }));
       }
       res.status(204).end();
+    }),
+  );
+
+  /**
+   * The AI planner. `stage: "questions"` returns 2 or 3 follow-up questions with tap options;
+   * `stage: "plan"` returns a starter plan. Only what the app chose is sent on to the AI: never
+   * the person's name, email or account. Every answer is checked, and any failure is a plain
+   * error the app answers by falling back to its own fixed questions.
+   */
+  const planBudget = createDailyBudget(options.now, 30, 900);
+  router.post(
+    '/plan',
+    limit('plan', 8),
+    wrap(async (req, res) => {
+      if (!options.planAi) {
+        res.status(503).json({ error: 'ai_not_configured' });
+        return;
+      }
+      const body = planBody.parse(req.body);
+      if (!planBudget.take(me(res).uid)) {
+        res.status(429).json({ error: 'ai_daily_limit' });
+        return;
+      }
+      try {
+        if (body.stage === 'questions') {
+          res.json({ questions: await options.planAi.followUps(body) });
+        } else {
+          res.json({ plan: await options.planAi.plan(body) });
+        }
+      } catch (err) {
+        // The detail is for the server log (it holds no key or personal data); the app only learns the kind of failure.
+        console.error(`AI planner (${body.stage}) failed:`, err instanceof Error ? err.message : err);
+        if (err instanceof AiBadAnswerError) res.status(502).json({ error: 'ai_bad_answer' });
+        else if (err instanceof AiUnavailableError) res.status(503).json({ error: 'ai_unavailable' });
+        else throw err;
+      }
     }),
   );
 

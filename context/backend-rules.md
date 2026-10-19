@@ -14,7 +14,7 @@
 | Client config | `apps/web/firebase-applet-config.json` (public web config) |
 | API | `apps/api`, Express + zod, on Render (`https://goal-tcrb.onrender.com`). Locally `http://localhost:3002`. The web app finds it through `VITE_API_URL` (set in the GitHub workflow; defaults to the local API in development). |
 | Database | MongoDB Atlas, database `goalpath`. `STORE=memory` runs the API with an in-memory store for demos and tests. |
-| Settings | `apps/api/.env` locally, Render environment in production: `MONGODB_URI`, `MONGODB_DB`, `CORS_ORIGINS`, `FIREBASE_PROJECT_ID`, `ADMIN_EMAILS`, `STORE`. Never commit them. |
+| Settings | `apps/api/.env` locally, Render environment in production: `MONGODB_URI`, `MONGODB_DB`, `CORS_ORIGINS`, `FIREBASE_PROJECT_ID`, `ADMIN_EMAILS`, `STORE`, `GEMINI_API_KEY` (secret; empty turns the AI planner off), `GEMINI_MODEL` (default `gemini-2.5-flash`). Never commit them. |
 
 **Identity.** Every request to the people-data routes carries `Authorization: Bearer <Firebase ID token>`. The API verifies it with Google's published keys (`createFirebaseVerifier`: signature, issuer, audience, expiry) and takes the account's `uid` (and name, email, photo) **from the token**. A request can never claim to be someone else, and no route accepts a `uid` for "who is asking". Without a verifier configured the routes answer 503, never open.
 
@@ -60,6 +60,7 @@ All under `/api`, all need a login unless noted. Anything not allowed answers **
 | `GET /chats`, `GET /chats/:id/messages` | The two people in the conversation only. The id must be a well-formed pair that includes the caller. |
 | `POST /chats/:id/messages` | A member, **and only while one has connected the other** (otherwise 403 `not_connected`). Sender and time come from the server. 60 per minute. Reading after a connection ends still works. |
 | `POST /chats/:id/read` | Marks the thread read for the caller. |
+| `POST /plan` | **AI planner** for "Help me plan". Body `{ stage: 'questions' \| 'plan', niche, answers: [{q, a}], week? }` (zod, max 20 answers). `questions` returns 1 to 3 follow-up questions with 2 to 5 tap options; `plan` returns `{ title, description, routines: [{ name, tasks[] }] }`. Calls Google Gemini from the server (`planAi.ts`, key in `x-goog-api-key`); the AI is told only the area and the person's choices, never name, email or account, and treats typed text as data. Every AI answer is checked against a strict shape and cleaned (control characters out, lengths capped); otherwise `502 ai_bad_answer`. `503 ai_not_configured` (no key), `503 ai_unavailable` (Gemini unreachable or out of free quota), `429 too_many_requests` (8 a minute each) and `429 ai_daily_limit` (30 a day each, 900 for everyone; counted in server memory, reset by a restart or a new day). The app answers every failure by using its own fixed questions and rules. |
 
 Request bodies are checked with zod (`userSchemas.ts`); unknown fields are dropped, so a request cannot write `userId`, `viewerUids`, `editorUids`, `collaborators`, `collaboratorUids` or `code`.
 

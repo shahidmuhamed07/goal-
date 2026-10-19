@@ -21,6 +21,7 @@ import {
 import type { AdminAuth, TokenVerifier } from './auth';
 import { SCHEMAS } from './schemas';
 import { DuplicateError, type ContentStore, type Doc } from './store';
+import type { PlanAi } from './planAi';
 import { createUserRoutes } from './userRoutes';
 
 export interface AppOptions {
@@ -30,6 +31,8 @@ export interface AppOptions {
   adminAuth?: AdminAuth;
   /** How the app's own users prove who they are (their Firebase login token). Without it people's data is unavailable. */
   userAuth?: TokenVerifier;
+  /** The AI that helps plan goals. Without it the planning route answers 503 and the app uses its own fixed questions. */
+  planAi?: PlanAi;
   /** Lets tests control "now". */
   now?: () => Date;
 }
@@ -283,7 +286,7 @@ export function createApp(store: ContentStore, options: AppOptions) {
   app.use('/api/admin', adminRoutes);
 
   /** People's own data: accounts, goals, connections and chat. Every route here needs a login. */
-  app.use('/api', createUserRoutes(store, { verify: options.userAuth, now }));
+  app.use('/api', createUserRoutes(store, { verify: options.userAuth, now, planAi: options.planAi }));
 
   app.use((_req, res) => {
     res.status(404).json({ error: 'not_found' });

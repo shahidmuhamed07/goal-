@@ -753,6 +753,20 @@ export const buildGuidedPlan = (key: NicheKey, answers: Answers, common: CommonA
   const niche = nicheByKey(key);
   const days = common.days.length > 0 ? common.days : [1, 3, 5];
   const drafted = niche.plan(new AnswerReader(niche.questions, answers), { ...common, days });
+  return shapePlan(niche, drafted, { ...common, days });
+};
+
+/**
+ * Turns a drafted plan (a title and routines in order of importance) into a starter plan:
+ * routines are spread over the chosen days and each keeps as many tasks as the time allows.
+ * The rules and the AI both end here, so a plan always looks the same to the screens.
+ */
+const shapePlan = (
+  niche: Niche,
+  drafted: { title: string; description: string; routines: RoutineDraft[]; sized?: boolean },
+  common: CommonAnswers
+): StarterPlan => {
+  const days = common.days.length > 0 ? common.days : [1, 3, 5];
   const count = Math.max(1, Math.min(MAX_ROUTINES, drafted.routines.length, days.length));
   const chosen = drafted.routines.slice(0, count);
   const spread = spreadOverDays(chosen.length, days);
@@ -762,14 +776,53 @@ export const buildGuidedPlan = (key: NicheKey, answers: Answers, common: CommonA
     focus: niche.key === 'custom' ? 'custom' : niche.key,
     title: cleanText(drafted.title, 100) || niche.label,
     category: niche.category,
-    description: drafted.description,
+    description: cleanText(drafted.description, 300),
     months: common.months,
     routines: chosen.map((routine, index) => ({
-      name: routine.name,
+      name: cleanText(routine.name, 60),
       weekdays: spread[index],
       tasks: routine.tasks.map((t) => cleanText(t, 160)).filter(Boolean).slice(0, drafted.sized ? routine.tasks.length : perRoutine),
     })),
   };
+};
+
+/** A plan the AI wrote, shaped exactly like one the rules wrote. */
+export const planFromAi = (
+  key: NicheKey,
+  drafted: { title: string; description: string; routines: RoutineDraft[] },
+  common: CommonAnswers
+): StarterPlan => shapePlan(nicheByKey(key), drafted, common);
+
+/**
+ * What is sent to the AI: the area and every choice so far as plain question and
+ * answer text. Typed "something else" text is included (it is the person's own
+ * words); nothing about who the person is ever is.
+ */
+export const describeForAi = (
+  key: NicheKey,
+  answers: Answers,
+  followUps: { id: string; title: string }[] = []
+): { niche: string; answers: { q: string; a: string }[] } => {
+  const niche = nicheByKey(key);
+  const out: { q: string; a: string }[] = [];
+  for (const question of visibleQuestions(niche, answers)) {
+    const value = answers[question.id];
+    const picked = (Array.isArray(value) ? value : typeof value === 'string' && value ? [value] : []).map((v) => {
+      if (v === 'other') {
+        const typed = answers[`${question.id}_other`];
+        return typeof typed === 'string' && typed.trim() ? cleanText(typed, 70) : 'something else';
+      }
+      return question.options.find((o) => o.value === v)?.label ?? v;
+    });
+    if (picked.length > 0) out.push({ q: question.title, a: picked.join(', ') });
+  }
+  for (const followUp of followUps) {
+    const value = answers[`ai:${followUp.id}`];
+    const typed = answers[`ai:${followUp.id}_other`];
+    const text = value === 'other' ? (typeof typed === 'string' ? typed : '') : value;
+    if (typeof text === 'string' && text.trim()) out.push({ q: followUp.title, a: cleanText(text, 100) });
+  }
+  return { niche: niche.label, answers: out };
 };
 
 /**

@@ -3230,6 +3230,7 @@ export default function App() {
             }
           }}
           onCreate={handleCreateGuidedGoal}
+          ai={{ followUps: appApi.aiFollowUps, plan: appApi.aiPlan }}
         /></Suspense>
       )}
 

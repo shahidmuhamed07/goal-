@@ -10,6 +10,23 @@ import type {
 } from '../types';
 import { ApiError, api } from './client';
 
+/** What the app tells the AI planner: the area and what was chosen, as plain question and answer text. */
+export interface AiBrief {
+  niche: string;
+  answers: { q: string; a: string }[];
+  week?: { days: string[]; minutes: number | null; months: number };
+}
+export interface AiFollowUp {
+  id: string;
+  title: string;
+  options: { value: string; label: string }[];
+}
+export interface AiPlanDraft {
+  title: string;
+  description: string;
+  routines: { name: string; tasks: string[] }[];
+}
+
 /** Everything the app shows, in one answer (see `GET /api/overview`). */
 export interface Overview {
   profile: UserProfile;
@@ -47,6 +64,12 @@ export const appApi = {
   overview: (signal?: AbortSignal) => api<Overview>('GET', '/api/overview', undefined, signal),
   patchMe: (changes: Partial<Pick<UserProfile, 'persona' | 'personaChosenAt' | 'onboardedAt' | 'onboarding'>>) =>
     api<UserProfile>('PATCH', '/api/me', changes),
+
+  /** The AI planner. Rejects when the AI is off, busy or out of free quota; callers then use the fixed questions. */
+  aiFollowUps: (brief: AiBrief, signal?: AbortSignal) =>
+    api<{ questions: AiFollowUp[] }>('POST', '/api/plan', { stage: 'questions', ...brief }, signal).then((r) => r.questions),
+  aiPlan: (brief: AiBrief, signal?: AbortSignal) =>
+    api<{ plan: AiPlanDraft }>('POST', '/api/plan', { stage: 'plan', ...brief }, signal).then((r) => r.plan),
 
   createGoal: (goal: NewGoal) => api<Goal>('POST', '/api/goals', goal),
   patchGoal: (goalId: string, changes: GoalChanges) => api<Goal>('PATCH', `/api/goals/${encodeURIComponent(goalId)}`, changes),

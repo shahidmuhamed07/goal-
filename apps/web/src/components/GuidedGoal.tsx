@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Apple,
   Briefcase,
@@ -8,27 +8,28 @@ import {
   Coins,
   Dumbbell,
   GraduationCap,
-  Plus,
   Sparkles,
   X,
 } from 'lucide-react';
 import { AskBubble, OptionRow } from './Onboarding';
-import { RoutineEditor, isRoutineReady, type DraftRoutine } from './RoutineEditor';
+import type { AiBrief, AiFollowUp, AiPlanDraft } from '../api/appApi';
 import {
   MINUTE_CHOICES,
   MONTH_CHOICES,
   NICHES,
   cleanText,
+  describeForAi,
   isAnswered,
   makePlanWithRules,
   nicheByKey,
+  planFromAi,
   visibleQuestions,
   type Answers,
   type GuidedQuestion,
   type NicheKey,
   type PlanMaker,
 } from '../guidedGoal';
-import type { StarterPlan, StarterRoutine } from '../starterPlan';
+import type { StarterPlan } from '../starterPlan';
 import { WEEKDAY_LETTER, WEEKDAY_LONG, WEEK_ORDER, describeDays } from '../recurrence';
 
 const NICHE_ICONS: Record<NicheKey, React.ElementType> = {
@@ -46,9 +47,20 @@ interface GuidedGoalProps {
   onClose: (goalId?: string) => void;
   /** Saves the goal and its routines. Returns the new goal's id, or null when it could not be saved. */
   onCreate: (plan: StarterPlan) => Promise<string | null>;
-  /** Turns answers into a plan. Defaults to the built-in rules; an AI can be supplied later. */
+  /** Turns answers into a plan. Defaults to the built-in rules; used whenever the AI is missing or fails. */
   makePlan?: PlanMaker;
+  /**
+   * The AI that asks follow-up questions and writes the plan. Optional: without it, or when a call
+   * fails (offline, busy, out of free quota), the flow carries on with its own fixed questions and rules.
+   */
+  ai?: {
+    followUps: (brief: AiBrief, signal?: AbortSignal) => Promise<AiFollowUp[]>;
+    plan: (brief: AiBrief, signal?: AbortSignal) => Promise<AiPlanDraft>;
+  };
 }
+
+/** How long to wait for the AI before carrying on without it. */
+const AI_WAIT_MS = 22_000;
 
 /**
  * An optional helper for someone who is not sure how to set up a goal.
@@ -57,7 +69,7 @@ interface GuidedGoalProps {
  * then check a sample plan and change it before saving. The plan is only a base,
  * and every routine and task can be edited on the goal's page afterwards.
  */
-export const GuidedGoal: React.FC<GuidedGoalProps> = ({ onClose, onCreate, makePlan = makePlanWithRules }) => {
+export const GuidedGoal: React.FC<GuidedGoalProps> = ({ onClose, onCreate, makePlan = makePlanWithRules, ai }) => {
   // It always opens on "what do you want to work on?": nothing is chosen for the person.
   const [nicheKey, setNicheKey] = useState<NicheKey | null>(null);
   const [stepIndex, setStepIndex] = useState(0);
@@ -71,19 +83,29 @@ export const GuidedGoal: React.FC<GuidedGoalProps> = ({ onClose, onCreate, makeP
 
   const [plan, setPlan] = useState<StarterPlan | null>(null);
   const [titleDraft, setTitleDraft] = useState('');
-  // The routines of the plan as the person is shaping them, and which one is open for editing.
-  const [draft, setDraft] = useState<DraftRoutine[]>([]);
-  const [openRoutine, setOpenRoutine] = useState<string | null>(null);
+  // The AI's follow-up questions for these answers, and whether we are waiting for them or for the plan.
+  const [followUps, setFollowUps] = useState<AiFollowUp[]>([]);
+  const [asking, setAsking] = useState(false);
+  const [planFromAiDraft, setPlanFromAiDraft] = useState(false);
+  // What the AI was last asked, so going back and forward never asks (or spends free quota) twice.
+  const askedFor = useRef('');
+  const planCache = useRef(new Map<string, { plan: StarterPlan; byAi: boolean }>());
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const niche = nicheKey ? nicheByKey(nicheKey) : null;
   const questions = useMemo(() => (niche ? visibleQuestions(niche, answers) : []), [niche, answers]);
+  // The AI's questions look and answer exactly like ours: tap one, or "Something else".
+  const followQuestions: GuidedQuestion[] = useMemo(
+    () => followUps.map((f) => ({ id: `ai:${f.id}`, title: f.title, kind: 'single', options: f.options, allowOther: true })),
+    [followUps]
+  );
+  const allQuestions = useMemo(() => [...questions, ...followQuestions], [questions, followQuestions]);
 
-  // niche, then its questions, then the week, then the plan to check
-  const flow: string[] = useMemo(() => ['niche', ...questions.map((q) => `q:${q.id}`), 'week', 'preview'], [questions]);
+  // niche, then its questions, then the AI's follow-ups, then the week, then the plan to check
+  const flow: string[] = useMemo(() => ['niche', ...allQuestions.map((q) => `q:${q.id}`), 'week', 'preview'], [allQuestions]);
   const step = flow[Math.min(stepIndex, flow.length - 1)];
-  const question: GuidedQuestion | undefined = step.startsWith('q:') ? questions.find((q) => `q:${q.id}` === step) : undefined;
+  const question: GuidedQuestion | undefined = step.startsWith('q:') ? allQuestions.find((q) => `q:${q.id}` === step) : undefined;
   const progress = Math.round((stepIndex / (flow.length - 1)) * 100);
 
   const go = (delta: 1 | -1) => {
@@ -95,73 +117,106 @@ export const GuidedGoal: React.FC<GuidedGoalProps> = ({ onClose, onCreate, makeP
     if (key !== nicheKey) {
       setNicheKey(key);
       setAnswers({}); // answers belong to one niche, so a different niche starts clean
+      setFollowUps([]);
     }
   };
 
-  const setAnswer = (id: string, value: string | string[]) => setAnswers((prev) => ({ ...prev, [id]: value }));
+  // Changing one of our own answers means the AI's follow-ups no longer fit, so they are asked again.
+  const forgetFollowUps = (id: string) => {
+    if (!id.startsWith('ai:')) setFollowUps([]);
+  };
+  const setAnswer = (id: string, value: string | string[]) => {
+    if (JSON.stringify(answers[id]) !== JSON.stringify(value) && !id.endsWith('_other')) forgetFollowUps(id);
+    setAnswers((prev) => ({ ...prev, [id]: value }));
+  };
   // Reads the latest answers rather than the ones from this render, so two quick taps both count.
-  const toggleMulti = (id: string, value: string) =>
+  const toggleMulti = (id: string, value: string) => {
+    forgetFollowUps(id);
     setAnswers((prev) => {
       const current = Array.isArray(prev[id]) ? (prev[id] as string[]) : [];
       return { ...prev, [id]: current.includes(value) ? current.filter((v) => v !== value) : [...current, value] };
     });
+  };
   const toggleDay = (day: number) => setDays((prev) => (prev.includes(day) ? prev.filter((d) => d !== day) : [...prev, day]));
 
+  /** What the AI is told about this goal so far. */
+  const briefFor = (withWeek: boolean): AiBrief => {
+    const described = describeForAi(nicheKey!, answers, followUps);
+    return withWeek ? { ...described, week: { days: sortedDays.map((d) => WEEKDAY_LONG[d]), minutes, months } } : described;
+  };
+  const sortedDays = useMemo(() => WEEK_ORDER.filter((d) => days.includes(d)), [days]);
+
   // Make the sample plan when the person reaches the last step, and again if anything it depends on changes.
+  // The AI writes it when it can; if it cannot, our own rules do, so there is always a plan.
   useEffect(() => {
     if (step !== 'preview' || !nicheKey) return;
     let cancelled = false;
     setPlan(null);
     setError(null);
-    makePlan(nicheKey, answers, { days, minutes, months })
-      .then((made) => {
-        if (cancelled) return;
-        setPlan(made);
-        setTitleDraft(made.title);
-        setDraft(made.routines.map((r, i) => ({ uid: `r${i}`, name: r.name, weekdays: r.weekdays, tasks: r.tasks, everyWeeks: r.everyWeeks ?? 1, included: true })));
-        setOpenRoutine(null);
-      })
-      .catch(() => {
-        if (!cancelled) setError('We could not put a plan together. Please go back and try again.');
-      });
+    const common = { days, minutes, months };
+    const signature = JSON.stringify({ nicheKey, brief: ai ? briefFor(true) : answers, common });
+    const show = (made: StarterPlan, byAi: boolean) => {
+      if (cancelled) return;
+      planCache.current.set(signature, { plan: made, byAi });
+      setPlan(made);
+      setPlanFromAiDraft(byAi);
+      setTitleDraft(made.title);
+    };
+    const cached = planCache.current.get(signature);
+    if (cached) {
+      show(cached.plan, cached.byAi);
+      return;
+    }
+    const byRules = () =>
+      makePlan(nicheKey, answers, common)
+        .then((made) => show(made, false))
+        .catch(() => {
+          if (!cancelled) setError('We could not put a plan together. Please go back and try again.');
+        });
+    if (!ai) {
+      void byRules();
+    } else {
+      ai.plan(briefFor(true), AbortSignal.timeout(AI_WAIT_MS))
+        .then((drafted) => show(planFromAi(nicheKey, drafted, common), true))
+        .catch(() => byRules());
+    }
     return () => {
       cancelled = true;
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [step, nicheKey, answers, days, minutes, months, makePlan]);
-
-  const chosenRoutines = draft.filter((r) => r.included);
-  const updateRoutine = (uid: string, changes: Partial<DraftRoutine>) =>
-    setDraft((prev) => prev.map((r) => (r.uid === uid ? { ...r, ...changes } : r)));
-  const moveRoutine = (uid: string, direction: -1 | 1) =>
-    setDraft((prev) => {
-      const from = prev.findIndex((r) => r.uid === uid);
-      const to = from + direction;
-      if (from < 0 || to < 0 || to >= prev.length) return prev;
-      const next = [...prev];
-      [next[from], next[to]] = [next[to], next[from]];
-      return next;
-    });
-  const addRoutine = () => {
-    const uid = `new-${Date.now()}`;
-    setDraft((prev) => [...prev, { uid, name: '', weekdays: days.length > 0 ? days : [1, 3, 5], tasks: [''], everyWeeks: 1, included: true }]);
-    setOpenRoutine(uid);
-  };
-
-  /** What gets saved: only the routines left included, cleaned up, in the order shown. */
-  const finalRoutines = (): StarterRoutine[] =>
-    chosenRoutines.map((r) => ({
-      name: cleanText(r.name, 60),
-      weekdays: r.weekdays,
-      tasks: r.tasks.map((t) => cleanText(t, 160)).filter(Boolean),
-      ...(r.everyWeeks > 1 ? { everyWeeks: r.everyWeeks } : {}),
-    }));
 
   const canNext = (): boolean => {
     if (step === 'niche') return !!nicheKey;
     if (question) return isAnswered(question, answers);
     if (step === 'week') return days.length > 0;
-    if (step === 'preview') return !!plan && chosenRoutines.length > 0 && chosenRoutines.every(isRoutineReady) && cleanText(titleDraft, 100).length > 0 && !creating;
+    if (step === 'preview') return !!plan && plan.routines.length > 0 && cleanText(titleDraft, 100).length > 0 && !creating;
     return true;
+  };
+
+  /**
+   * Moves on. After the last of our own questions, the AI is asked for a few follow-ups that fit
+   * these answers. If it cannot help (offline, busy, out of free quota) the person just carries on.
+   */
+  const next = async () => {
+    const lastOwn = !!question && question.id === questions[questions.length - 1]?.id;
+    if (ai && nicheKey && lastOwn && followUps.length === 0) {
+      const brief = briefFor(false);
+      const signature = JSON.stringify(brief);
+      if (askedFor.current !== signature) {
+        askedFor.current = signature;
+        setAsking(true);
+        try {
+          const asked = await ai.followUps(brief, AbortSignal.timeout(AI_WAIT_MS));
+          setFollowUps(asked);
+        } catch {
+          /* no follow-up questions; the fixed ones were enough */
+        } finally {
+          setAsking(false);
+        }
+      }
+    }
+    go(1);
   };
 
   const create = async () => {
@@ -169,7 +224,7 @@ export const GuidedGoal: React.FC<GuidedGoalProps> = ({ onClose, onCreate, makeP
     setCreating(true);
     setError(null);
     try {
-      const id = await onCreate({ ...plan, title: cleanText(titleDraft, 100), routines: finalRoutines() });
+      const id = await onCreate({ ...plan, title: cleanText(titleDraft, 100) });
       if (id) onClose(id);
       else setError('We could not save your goal. Check your connection and try again.');
     } catch {
@@ -293,7 +348,7 @@ export const GuidedGoal: React.FC<GuidedGoalProps> = ({ onClose, onCreate, makeP
     // preview
     return (
       <>
-        <AskBubble title="Here is a starting point" sub="Change anything you like: days, how often, tasks, order. Then create it." />
+        <AskBubble title="Here is a starting point" sub="This is only a start. After you create it, edit anything you like." />
         {!plan && !error && <p className="mt-8 text-center text-sm text-slate-500">Putting your plan together…</p>}
         {plan && (
           <div className="mt-6 space-y-4">
@@ -314,31 +369,25 @@ export const GuidedGoal: React.FC<GuidedGoalProps> = ({ onClose, onCreate, makeP
             </div>
 
             <ul className="space-y-3" aria-label="Routines in this plan">
-              {draft.map((routine, index) => (
-                <RoutineEditor
-                  key={routine.uid}
-                  routine={routine}
-                  index={index}
-                  count={draft.length}
-                  expanded={openRoutine === routine.uid}
-                  onToggleExpanded={() => setOpenRoutine((current) => (current === routine.uid ? null : routine.uid))}
-                  onChange={(changes) => updateRoutine(routine.uid, changes)}
-                  onMove={(direction) => moveRoutine(routine.uid, direction)}
-                  onRemove={() => {
-                    setDraft((prev) => prev.filter((r) => r.uid !== routine.uid));
-                    setOpenRoutine(null);
-                  }}
-                />
+              {plan.routines.map((routine) => (
+                <li key={routine.name} className="neu p-4">
+                  <div className="flex items-baseline justify-between gap-3">
+                    <h3 className="font-display text-base font-semibold text-slate-900">{routine.name}</h3>
+                    <span className="shrink-0 text-xs font-bold text-[color:var(--tone-700)]">{describeDays(routine.weekdays)}</span>
+                  </div>
+                  <ul className="mt-2 space-y-1">
+                    {routine.tasks.map((task) => (
+                      <li key={task} className="text-sm leading-snug text-slate-600">
+                        {task}
+                      </li>
+                    ))}
+                  </ul>
+                </li>
               ))}
             </ul>
-            <button type="button" className="chip inline-flex w-full items-center justify-center gap-2 py-3 text-sm" onClick={addRoutine}>
-              <Plus className="h-4 w-4" />
-              Add a routine
-            </button>
-            {chosenRoutines.length === 0 && <p className="text-sm font-medium text-rose-600">Keep at least one routine to create the goal.</p>}
-            {chosenRoutines.length > 0 && !chosenRoutines.every(isRoutineReady) && (
-              <p className="text-sm font-medium text-rose-600">Every routine needs a name and at least one day.</p>
-            )}
+            <p className="text-center text-xs text-slate-500">
+              {planFromAiDraft ? 'Suggested for you by AI, based on your answers. ' : ''}You can change everything on the goal page.
+            </p>
           </div>
         )}
         {error && <p className="mt-6 text-center text-sm font-medium text-rose-600" role="alert">{error}</p>}
@@ -382,8 +431,8 @@ export const GuidedGoal: React.FC<GuidedGoalProps> = ({ onClose, onCreate, makeP
         </div>
 
         <div className="pb-6 pt-2 safe-bottom">
-          <button type="button" className="btn-tone h-14 w-full text-[1.0625rem]" disabled={!canNext()} onClick={isPreview ? create : () => go(1)}>
-            {isPreview ? (creating ? 'Creating…' : 'Create my goal') : 'Continue'}
+          <button type="button" className="btn-tone h-14 w-full text-[1.0625rem]" disabled={!canNext() || asking} onClick={isPreview ? create : next}>
+            {isPreview ? (creating ? 'Creating…' : 'Create my goal') : asking ? 'Thinking of a few questions…' : 'Continue'}
           </button>
         </div>
       </div>
