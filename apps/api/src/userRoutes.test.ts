@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { get as httpGet } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { after, before, describe, it } from 'node:test';
 import type { AccessRequest, ChatMessage, ChatThread, Goal, UserProfile } from '@goalpath/shared';
@@ -376,6 +377,40 @@ describe('the overview', () => {
   it('gives a stranger nothing of anyone else’s', async () => {
     const o = (await call('carol', 'GET', '/overview')).body as Overview;
     assert.deepEqual([o.goals, o.sharedGoals, o.clients, o.incoming, o.outgoing, o.threads], [[], [], [], [], [], []]);
+  });
+
+  it('can be kept by the browser but must be checked each time, and says "not modified" when nothing changed', async () => {
+    const address = server.address() as AddressInfo;
+    // Plain http, because fetch adds "no-cache" to any request that carries its own If-None-Match.
+    // A browser asking again by itself does not, and that is the case that matters.
+    const ask = (who: string, tag?: string) =>
+      new Promise<{ status: number; headers: Record<string, string | string[] | undefined>; body: string }>((resolve, reject) => {
+        const req = httpGet(
+          { host: '127.0.0.1', port: address.port, path: '/api/overview', headers: { authorization: `Bearer tok-${who}`, ...(tag ? { 'if-none-match': tag } : {}) } },
+          (res) => {
+            let body = '';
+            res.on('data', (chunk) => (body += chunk));
+            res.on('end', () => resolve({ status: res.statusCode ?? 0, headers: res.headers, body }));
+          },
+        );
+        req.on('error', reject);
+      });
+    const first = await ask('alice');
+    assert.equal(first.status, 200);
+    assert.match(String(first.headers['cache-control']), /private/);
+    assert.match(String(first.headers['cache-control']), /no-cache/);
+    assert.match(String(first.headers.vary), /Authorization/i);
+    const tag = String(first.headers.etag);
+    assert.ok(tag);
+    const same = await ask('alice', tag);
+    assert.equal(same.status, 304);
+    assert.equal(same.body.length, 0);
+    // A change makes the tag different, and someone else's answer never matches.
+    await call('alice', 'POST', '/goals', newGoal({ title: 'A new goal' }));
+    const changed = await ask('alice', tag);
+    assert.equal(changed.status, 200);
+    assert.notEqual(String(changed.headers.etag), tag);
+    assert.equal((await ask('bob', tag)).status, 200);
   });
 
   it('needs a login and an account', async () => {

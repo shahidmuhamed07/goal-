@@ -233,7 +233,10 @@ export function createUserRoutes(store: ContentStore, options: UserRoutesOptions
         store.find('goals', { userId: uid }),
         store.find('goals', { viewerUids: uid }),
       ]);
-      res.set('Cache-Control', 'no-store');
+      // Not `no-store`: the browser may keep it, but must ask first. The answer carries a tag (ETag), so when
+      // nothing changed the server replies "not modified" with no body, which keeps the every-10-seconds
+      // refresh almost free. `Vary` keeps one person's answer from ever being matched to another's request.
+      res.set({ 'Cache-Control': 'private, no-cache', Vary: 'Authorization' });
       res.json({ profile, clients: clients.map(asProfile).map(publicView), incoming, outgoing, threads, goals, sharedGoals });
     }),
   );

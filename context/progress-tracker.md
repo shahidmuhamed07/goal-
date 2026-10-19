@@ -67,7 +67,7 @@ Legend: ✅ shipped · 🟡 shipped with caveats · ⬜ not present
 | Shell | Swipe navigation between tabs | ✅ | |
 | Shell | Back-button handling, double-back to exit | ✅ | |
 | Shell | Branded loader, Lovi-style pastel theme, reduced-motion support | ✅ | |
-| Platform | CI deploy to Firebase Hosting on push to `main`; Render deploys the API | ✅ | Keep-awake ping for the free Render plan once merged |
+| Platform | CI deploy to Firebase Hosting on push to `main`; Render deploys the API | ✅ | Needs an outside pinger so the free Render API does not sleep (README) |
 | Platform | Automated tests | 🟡 | API (permissions, content) and the web app's pure logic; no browser/UI tests |
 | Platform | AI/Gemini features | ⬜ | SDK listed in `package.json`, never used |
 | Platform | Notifications (push/email) | ⬜ | |
@@ -120,6 +120,15 @@ Found by reading the code on 2026-10-11; none of these have been reproduced unle
 ---
 
 ## Changelog
+
+### 2026-10-19 — Speed: the app opens on saved data, wakes the server early, loads less  (branch `feature/speed`)
+- **Type:** performance
+- **What & why:** Measured on the live site: the first request took **31.8 s** (the Render free server was asleep), later ones 0.4 to 0.8 s. The GitHub "keep awake" job ran only every 2 to 4 hours, not every 10 minutes (GitHub delays scheduled jobs), so it could not help; it was **removed**. The real cure is an outside uptime service pinging `/health` every 5 minutes (setup steps are in the README; free), or the paid Render plan. In the app and server: (1) **wake on open**: the page asks `/health` the moment it loads, before sign-in, so the server wakes while the person signs in; (2) **no more waiting in line**: the overview is asked for at the same time as account setup instead of after it (only a brand-new account still waits for setup); (3) **opens on the last saved view**: the last overview is kept on the device (one key per account, removed on sign-out) and shown at once with a small "Showing your last saved view. Connecting…" note until the server answers; the server's answer always replaces it; (4) the "Waking up the server…" note now appears after 4 s of silence (before, it appeared only after a failure, which a slow wake never produces); (5) `/overview` is sent as `private, no-cache` with an ETag, so a refresh with nothing new is a tiny "not modified"; (6) the server asks for its 9 database indexes together (one round trip) instead of one by one at every start; (7) rarely used screens (guided plan, first-run questions, chat, Connect, profiles, the give-up and assign windows) are loaded when first opened, and React and Firebase are separate cached files. Cloudflare in front of Render already compresses the API's answers, so no compression was added.
+- **Files:** `apps/web/src/{App,main}.tsx`, `apps/web/src/api/{wake,overviewCache}.ts`, `apps/web/vite.config.ts`, `apps/api/src/{userRoutes,mongoStore}.ts`, removed `.github/workflows/keep-api-awake.yml`.
+- **Data/rules impact:** none. The saved picture holds the same data the app already shows, in the browser's own storage, and is cleared on sign-out.
+- **Verified:** lint ✓ · build ✓ · API tests 91/91 ✓ (new: not-modified replies, headers) · web tests ✓ (new: the saved picture is per account, versioned, size-limited, cleared on sign-out, harmless when storage is blocked) · in a throwaway harness (real app, in-memory API, made-up login; deleted): lazy screens (Connect, Help me plan) load; with the API stopped the app opened at once on the saved view with the "Connecting…" note; when the API came back (empty, so the account had to be created first) the note went and the saved goal was replaced by the server's answer. Bundle: first load went from one 695 KB file (185 KB compressed) to 402 KB of app code (121 KB compressed) plus cached React and Firebase files, with about 135 KB loaded only when needed. **Not verified:** the real cold start on Render (needs the pinger or the paid plan to compare), phones on a slow network, and the effect of the Render and Atlas regions.
+- **Left to you:** set up the free pinger (README), and check the Render service region and the Atlas cluster region are the same and near your users.
+- **Docs updated:** `README.md`, `architecture.md`, `backend-rules.md`.
 
 ### 2026-10-19 — Fitness in "Help me plan": a real framework, more choices  (branch `feature/guided-plan-editing`)
 - **Type:** feature

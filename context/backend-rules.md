@@ -101,7 +101,7 @@ accessRequests/{pro}_{client}.status = 'approved'                               
 - **Updates arrive by polling**, not push: the app asks for `/overview` every ~10 s while visible, again when the person returns to the app, and for an open chat every ~3 s. After the app's own change, answers that were already on their way are discarded (`usePolling.touch()`), so an old answer cannot undo it.
 - **IDs inside arrays** are client-generated, e.g. `t-<Date.now()>`, `sc-<Date.now()>`, `m-<Date.now()>-<n>`.
 - **Chat history is unpaginated** — all messages of a thread are fetched each time.
-- **Render's free plan sleeps** after about 15 minutes idle; the first request then takes up to ~50 s. The app shows "Waking up the server…" and retries; a scheduled ping (`.github/workflows/keep-api-awake.yml`) keeps it awake once merged to `main`. A paid plan removes the problem.
+- **Render's free plan sleeps** after about 15 minutes idle; the first request then takes up to ~50 s. The app wakes the API as the page opens (`wake.ts`), opens on the last saved view (`overviewCache.ts`) and says "Waking up the server…"; an outside uptime service pinging `/health` every 5 minutes (README) keeps it awake. A paid plan removes the problem. `/overview` answers `Cache-Control: private, no-cache` with an ETag, so a refresh with nothing new is a tiny "not modified" reply.
 
 ## 7. Known gaps
 

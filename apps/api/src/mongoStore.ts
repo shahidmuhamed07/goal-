@@ -19,20 +19,22 @@ export class MongoStore implements ContentStore {
   async ready() {
     await this.client.connect();
     this.db = this.client.db(this.dbName);
-    // Two pages cannot share an address.
-    await this.db.collection('pages').createIndex({ slug: 1 }, { unique: true });
-    // Two accounts cannot share an access code (accounts without one yet are left out of the index).
-    await this.db
-      .collection('users')
-      .createIndex({ code: 1 }, { unique: true, partialFilterExpression: { code: { $type: 'string' } } });
-    // The lookups the app makes all the time.
-    await this.db.collection('users').createIndex({ collaboratorUids: 1 });
-    await this.db.collection('goals').createIndex({ userId: 1 });
-    await this.db.collection('goals').createIndex({ viewerUids: 1 });
-    await this.db.collection('accessRequests').createIndex({ toUid: 1 });
-    await this.db.collection('accessRequests').createIndex({ fromUid: 1 });
-    await this.db.collection('chats').createIndex({ participantUids: 1 });
-    await this.db.collection('messages').createIndex({ chatId: 1, createdAt: 1 });
+    // Indexes are asked for together, in one round trip, because each start of the server asks for all of
+    // them and a sleeping server is already slow enough. Asking for one that exists changes nothing.
+    await Promise.all([
+      // Two pages cannot share an address.
+      this.db.collection('pages').createIndex({ slug: 1 }, { unique: true }),
+      // Two accounts cannot share an access code (accounts without one yet are left out of the index).
+      this.db.collection('users').createIndex({ code: 1 }, { unique: true, partialFilterExpression: { code: { $type: 'string' } } }),
+      // The lookups the app makes all the time.
+      this.db.collection('users').createIndex({ collaboratorUids: 1 }),
+      this.db.collection('goals').createIndex({ userId: 1 }),
+      this.db.collection('goals').createIndex({ viewerUids: 1 }),
+      this.db.collection('accessRequests').createIndex({ toUid: 1 }),
+      this.db.collection('accessRequests').createIndex({ fromUid: 1 }),
+      this.db.collection('chats').createIndex({ participantUids: 1 }),
+      this.db.collection('messages').createIndex({ chatId: 1, createdAt: 1 }),
+    ]);
   }
 
   async close() {

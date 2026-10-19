@@ -68,7 +68,8 @@ Top to bottom:
 | Piece | How | Feeds |
 |---|---|---|
 | Auth | `onAuthStateChanged` | `user` |
-| Account setup | After sign-in, `appApi.sync()` creates the account (and its invite code) if new. A failed try is retried every 4 s, and `serverSlow` shows "Waking up the server…" (a sleeping Render server can take ~50 s). | `profile`, `accountReady` |
+| Account setup | After sign-in, `appApi.sync()` creates the account (and its invite code) if new. A failed try is retried every 4 s. Nothing waits for it except a brand-new account: the overview is asked for at the same time, and only if it answers "no account yet" does it wait for setup and ask again. `serverSlow` shows "Waking up the server…" after 4 s without an answer. | `profile` |
+| **Saved picture** | The last overview is kept on the device (`src/api/overviewCache.ts`, one key per account, at most every 30 s and when the page is left, removed on sign-out and ignored if it belongs to another account, is old or too large). On the next open the app shows it at once, with a small "Showing your last saved view. Connecting…" note, until the server answers. | `overview` until fresh data arrives |
 | **Overview poll** | `usePolling(appApi.overview, 10 s)` once the account is ready. One answer holds the account, clients, incoming/outgoing requests, chat threads, own goals and goals shared with me. Pauses while the app is hidden, refreshes when it returns. | `profile`, `incomingRequests`, `outgoingRequests`, `chatThreads` (→ unread badges), `clientList`, `sharedGoals`, and `goals` |
 | Goals for the open workspace | Derived from the overview: my own workspace → `overview.goals`; a client's → `overview.sharedGoals` filtered to that `userId`. Newest first. | `goals` |
 | Chat messages | `ChatPanel` polls `appApi.messages` every 3 s while open; sending adds the message at once and refetches. | the open conversation |
@@ -177,7 +178,7 @@ A day counts when ≥ 1 task **scheduled on that date** is completed (it uses `t
 | Deploy | Push/merge to `main` → `.github/workflows/firebase-hosting-merge.yml`: Node 20, `npm ci`, `npm run build`, `FirebaseExtended/action-hosting-deploy` to the `live` channel. Secrets: `FIREBASE_SERVICE_ACCOUNT`, `FIREBASE_PROJECT_ID`. |
 | Deploy (admin) | Push/merge to `main` touching `apps/admin`, `packages/shared` or `deploy/admin` → `.github/workflows/firebase-admin-hosting.yml` builds the admin (`VITE_API_URL` = the Render API) and deploys `deploy/admin/firebase.json` to the Hosting site `goal-path-admin`, which must exist first. Also runnable by hand from the Actions tab. |
 | API | Render deploys `apps/api` from `main` by itself. Settings are in the Render environment (see [backend-rules.md §1](backend-rules.md)). **Merging a change that needs new API routes deploys the web app within minutes and the API a few minutes later; for a short while the app may show errors.** |
-| Keep the API awake | `.github/workflows/keep-api-awake.yml` pings `/health` every 10 minutes (needs to be on `main`). |
+| Keep the API awake | An outside uptime service (UptimeRobot or cron-job.org, free) calls `GET /health` every 5 minutes; see README. A GitHub scheduled job was tried and removed (GitHub ran it only every 2 to 4 hours). The app also wakes the API itself the moment a page opens (`src/api/wake.ts`). |
 | Hosting config | SPA rewrite (`** → /index.html`); everything `no-cache` except `/assets/**` (immutable, 1 year). |
 
 **Treat `main` as production.** Merging deploys immediately. Work on a branch (e.g. `Staging/testing`) and merge via PR.

@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { useState, useEffect, useMemo, useRef, useCallback, useLayoutEffect } from 'react';
+import { Suspense, lazy, useState, useEffect, useMemo, useRef, useCallback, useLayoutEffect } from 'react';
 import type { ElementType } from 'react';
 import {
   User,
@@ -40,6 +40,7 @@ import { auth, googleProvider } from './firebase';
 import { appApi, type GoalChanges } from './api/appApi';
 import { ApiError } from './api/client';
 import { usePolling } from './api/usePolling';
+import { clearOverviewCache, readOverviewCache, writeOverviewCache } from './api/overviewCache';
 import {
   Goal,
   Milestone,
@@ -96,21 +97,23 @@ import { SubcategoryBlock } from './components/SubcategoryBlock';
 import { GoalCard } from './components/GoalCard';
 import { OnboardingAnswers, StarterPlan, materializePlan } from './starterPlan';
 import { MonthlyMilestoneSection } from './components/MonthlyMilestoneSection';
-import { CollaboratorsPanel } from './components/CollaboratorsPanel';
 import { CreateGoalModal } from './components/CreateGoalModal';
-import { GoalAssignmentModal } from './components/GoalAssignmentModal';
-import { GiveUpInterventionModal } from './components/GiveUpInterventionModal';
 
-import { ProfessionalProfilePanel } from './components/ProfessionalProfilePanel';
-import { AccountProfilePanel } from './components/AccountProfilePanel';
-import { Onboarding } from './components/Onboarding';
-import { GuidedGoal } from './components/GuidedGoal';
 import { ProgressDialog } from './components/ProgressDialog';
 import { BackButton } from './components/BackButton';
 import { MissedTasks } from './components/MissedTasks';
 import { findMissedTasks, findPushableRoutines, moveTasksToDay, pushRoutineForward, skipTasks, type PushableRoutine } from './missed';
+
+/* Screens that most visits never open are loaded when first needed, which keeps the first load small. */
+const GuidedGoal = lazy(() => import('./components/GuidedGoal').then((m) => ({ default: m.GuidedGoal })));
+const Onboarding = lazy(() => import('./components/Onboarding').then((m) => ({ default: m.Onboarding })));
+const ChatPanel = lazy(() => import('./components/ChatPanel').then((m) => ({ default: m.ChatPanel })));
+const CollaboratorsPanel = lazy(() => import('./components/CollaboratorsPanel').then((m) => ({ default: m.CollaboratorsPanel })));
+const ProfessionalProfilePanel = lazy(() => import('./components/ProfessionalProfilePanel').then((m) => ({ default: m.ProfessionalProfilePanel })));
+const AccountProfilePanel = lazy(() => import('./components/AccountProfilePanel').then((m) => ({ default: m.AccountProfilePanel })));
+const GiveUpInterventionModal = lazy(() => import('./components/GiveUpInterventionModal').then((m) => ({ default: m.GiveUpInterventionModal })));
+const GoalAssignmentModal = lazy(() => import('./components/GoalAssignmentModal').then((m) => ({ default: m.GoalAssignmentModal })));
 import { HOME_TAB, backTarget, tabOrder, type TabKey } from './navigation';
-import { ChatPanel } from './components/ChatPanel';
 import { threadHasUnread } from './chat';
 
 /**
@@ -284,32 +287,36 @@ export default function App() {
 
   // After sign-in the account is created on the server if it is new (it also holds the invite
   // code). A sleeping server can take a while to wake, so a failed try is simply tried again.
-  const [accountReady, setAccountReady] = useState(false);
+  // Nothing waits for this: the overview below is asked for at the same time, and only a brand-new
+  // account has to wait here (the overview says "no account yet" and the call below finishes first).
   const [serverSlow, setServerSlow] = useState(false);
+  const accountSetup = useRef<Promise<unknown> | null>(null);
   useEffect(() => {
     if (!user) {
       setWorkspaceUid(null);
       setProfile(null);
-      setAccountReady(false);
       setServerSlow(false);
+      accountSetup.current = null;
       return undefined;
     }
     setWorkspaceUid((prev) => prev || user.uid);
     let cancelled = false;
     let timer: number | undefined;
+    let finish: () => void = () => {};
+    accountSetup.current = new Promise<void>((resolve) => {
+      finish = resolve;
+    });
     const attempt = () => {
       appApi
         .sync()
         .then((account) => {
           if (cancelled) return;
           setProfile(account);
-          setAccountReady(true);
-          setServerSlow(false);
+          finish();
         })
         .catch((err) => {
           if (cancelled) return;
           console.error('Account setup:', err);
-          setServerSlow(true);
           timer = window.setTimeout(attempt, 4000);
         });
     };
@@ -320,19 +327,58 @@ export default function App() {
     };
   }, [user]);
 
+  // What this device saw last time, so the app can open on it while the server answers.
+  const savedOverview = useMemo(() => (user ? readOverviewCache(user.uid) : null), [user?.uid]);
+
   // Everything the app shows comes from one answer that is refreshed every few seconds while
   // the app is open, and again whenever the person comes back to it.
-  const overviewPoll = usePolling((signal) => appApi.overview(signal), {
-    enabled: !!user && accountReady,
-    intervalMs: 10_000,
-    resetKey: user?.uid,
-  });
-  const overview = overviewPoll.data;
+  const overviewPoll = usePolling(
+    async (signal) => {
+      try {
+        return await appApi.overview(signal);
+      } catch (err) {
+        // A brand-new account does not exist on the server until setup has finished.
+        if (err instanceof ApiError && err.code === 'no_account' && accountSetup.current) {
+          await accountSetup.current;
+          return appApi.overview(signal);
+        }
+        throw err;
+      }
+    },
+    { enabled: !!user, intervalMs: 10_000, resetKey: user?.uid }
+  );
+  const overview = overviewPoll.data ?? savedOverview ?? undefined;
+  /** True while the app shows the saved picture and has not yet heard from the server. */
+  const showingSaved = !!user && !overviewPoll.data && !!savedOverview;
 
+  // Keep the saved picture fresh: at most every 30 seconds, and once more as the page is left.
+  const lastSaved = useRef(0);
+  const latestOverview = useRef(overviewPoll.data);
+  latestOverview.current = overviewPoll.data;
   useEffect(() => {
-    if (overviewPoll.error && !overview) setServerSlow(true);
-    if (overview) setServerSlow(false);
-  }, [overviewPoll.error, overview]);
+    if (!user || !overviewPoll.data) return;
+    if (Date.now() - lastSaved.current < 30_000) return;
+    lastSaved.current = Date.now();
+    writeOverviewCache(user.uid, overviewPoll.data);
+  }, [user, overviewPoll.data]);
+  useEffect(() => {
+    if (!user) return undefined;
+    const keep = () => {
+      if (latestOverview.current) writeOverviewCache(user.uid, latestOverview.current);
+    };
+    window.addEventListener('pagehide', keep);
+    return () => window.removeEventListener('pagehide', keep);
+  }, [user]);
+
+  // Say so if the server is taking a while, instead of leaving a blank wait.
+  useEffect(() => {
+    if (!user || overviewPoll.data) {
+      setServerSlow(false);
+      return undefined;
+    }
+    const timer = window.setTimeout(() => setServerSlow(true), 4000);
+    return () => window.clearTimeout(timer);
+  }, [user, overviewPoll.data]);
 
   useEffect(() => {
     if (!user) {
@@ -1015,6 +1061,7 @@ export default function App() {
 
   const handleSignOut = async () => {
     try {
+      clearOverviewCache();
       await signOut(auth);
       setUser(null);
       setSelectedGoalId(null);
@@ -3066,25 +3113,25 @@ export default function App() {
 
             {activeTab === 'professional' && isOwner && (
               profile?.persona === 'professional' ? (
-                <ProfessionalProfilePanel
+                <Suspense fallback={null}><ProfessionalProfilePanel
                   user={user}
                   profile={profile}
                   onError={setErrorMessage}
                   switching={savingPersona}
                   onSwitchToClient={handleLeaveProfessional}
-                />
+                /></Suspense>
               ) : (
-                <AccountProfilePanel
+                <Suspense fallback={null}><AccountProfilePanel
                   user={user}
                   profile={profile}
                   saving={savingPersona}
                   onBecomeProfessional={() => handleChoosePersona('professional')}
-                />
+                /></Suspense>
               )
             )}
 
             {activeTab === 'connect' && (
-              <CollaboratorsPanel
+              <Suspense fallback={null}><CollaboratorsPanel
                 user={user}
                 profile={profile}
                 incomingRequests={incomingRequests}
@@ -3103,17 +3150,17 @@ export default function App() {
                 onRemoveClient={handleRemoveClient}
                 onOpenChat={setChatTarget}
                 unreadChatUids={unreadChatUids}
-              />
+              /></Suspense>
             )}
           </div>
       </main>
 
       {chatTarget && user && (
-        <ChatPanel
+        <Suspense fallback={null}><ChatPanel
           me={{ uid: user.uid, name: profile?.displayName || user.displayName || user.email || 'You' }}
           other={chatTarget}
           onClose={() => setChatTarget(null)}
-        />
+        /></Suspense>
       )}
 
       {/* FOOTER */}
@@ -3166,7 +3213,7 @@ export default function App() {
 
       {/* OPTIONAL "HELP ME PLAN" QUESTIONS. Opens over the form, so closing it returns to the form as it was. */}
       {guidedOpen && (
-        <GuidedGoal
+        <Suspense fallback={null}><GuidedGoal
           onClose={(goalId) => {
             setGuidedOpen(false);
             if (goalId) {
@@ -3175,7 +3222,7 @@ export default function App() {
             }
           }}
           onCreate={handleCreateGuidedGoal}
-        />
+        /></Suspense>
       )}
 
       {/* CREATE GOAL MODAL */}
@@ -3191,18 +3238,18 @@ export default function App() {
 
       {/* GOAL ASSIGNMENT MODAL */}
       {managingAssignedGoal && (
-        <GoalAssignmentModal
+        <Suspense fallback={null}><GoalAssignmentModal
           isOpen
           onClose={() => setManagingAssignedGoal(null)}
           goal={managingAssignedGoal}
           collaborators={profile?.collaborators || []}
           onSave={handleSaveGoalCollaboratorAssignments}
-        />
+        /></Suspense>
       )}
 
       {/* GIVE UP MOTIVATIONAL INTERVENTION MODAL */}
       {giveUpTargetGoal && (
-      <GiveUpInterventionModal
+      <Suspense fallback={null}><GiveUpInterventionModal
         isOpen
         onClose={() => setGiveUpTargetGoal(null)}
         goal={giveUpTargetGoal}
@@ -3216,7 +3263,14 @@ export default function App() {
         onExtendGoalDeadline={async (goalId, monthsToAdd) => {
           await handleExtendGoalDeadline(goalId, monthsToAdd);
         }}
-      />
+      /></Suspense>
+      )}
+
+      {/* While the server wakes, the app shows what this device saw last time and says so. */}
+      {showingSaved && (
+        <div className="fixed top-16 sm:top-20 inset-x-0 z-[55] flex justify-center px-4 pointer-events-none" role="status">
+          <span className="badge shadow-sm">Showing your last saved view. Connecting…</span>
+        </div>
       )}
 
       {/* DOUBLE-BACK EXIT HINT: phone + laptop, above the tab bar */}
@@ -3281,12 +3335,12 @@ export default function App() {
 
       {/* FIRST-RUN QUESTIONS: asked once for a new account, and again from the account menu */}
       {!!user && !!profile && !dataLoading && isOwner && personaPickerOpen && (
-        <Onboarding
+        <Suspense fallback={null}><Onboarding
           isOpen
           name={((profile?.displayName || user.displayName || '').split(' ')[0] || '').trim()}
           onFinish={handleFinishOnboarding}
           onClose={handleCloseOnboarding}
-        />
+        /></Suspense>
       )}
 
       {/* POPUPS FROM THE ADMIN: one at a time, never over the first-run or guided questions */}

@@ -57,6 +57,16 @@ One-time setup for the admin site:
 3. **Render → the API service → Environment**: set `CORS_ORIGINS` to include the admin address (and keep the app's), for example `https://goal-path-9f4cc.web.app,https://goal-path-9f4cc.firebaseapp.com,https://goal-path-admin.web.app`, and check `ADMIN_EMAILS`. Then redeploy.
 4. Run the "Deploy admin to Firebase Hosting on merge" workflow once from the **Actions** tab (or push a change to `apps/admin`).
 
+### Keeping the API awake (Render's free plan)
+
+Render's free plan puts the API to sleep after about 15 minutes without a request, and the first request afterwards takes 30 to 50 seconds. A free outside "uptime" service fixes that by asking the API a tiny question every 5 minutes. One-time setup (about 5 minutes):
+
+1. Create a free account at **UptimeRobot** (uptimerobot.com) or **cron-job.org**.
+2. Add a monitor / job that sends a **GET** request to `https://goal-tcrb.onrender.com/health` **every 5 minutes**.
+3. Check it a day later: the first open of the app after a quiet night should take about a second, not a minute.
+
+(A GitHub scheduled job was tried first and removed: GitHub ran it only every 2 to 4 hours, so the server still slept.) The paid Render plan (Starter, about $7 a month) removes the sleeping altogether.
+
 ## Working here
 
 - Keep `main` working. Make changes on a branch, then merge.
