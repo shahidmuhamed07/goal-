@@ -9,6 +9,7 @@ export type {
   Subcategory,
   TaskItem,
   Goal,
+  GoalProgram,
   Collaborator,
   UserProfile,
   AccountPersona,
