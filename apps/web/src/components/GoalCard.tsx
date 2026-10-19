@@ -1,5 +1,6 @@
 import React, { useMemo } from 'react';
 import { ArrowRight, Check, Lock, Plus, Users } from 'lucide-react';
+import { previewGoal } from '../goalPreview';
 import { Collaborator, Goal } from '../types';
 import { shiftDateString, isGoalSharedWith } from '../utils';
 import {
@@ -124,6 +125,9 @@ export const GoalCard: React.FC<GoalCardProps> = ({
 
   const shown = rows.slice(0, 3);
   const hidden = rows.length - shown.length;
+  const preview = useMemo(() => previewGoal(goal, today), [goal, today]);
+  const shortDay = (date: string) =>
+    new Date(`${date}T12:00:00`).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
 
   return (
     <article
@@ -135,10 +139,10 @@ export const GoalCard: React.FC<GoalCardProps> = ({
         className={`absolute inset-x-0 top-0 h-1 bg-gradient-to-r ${categoryAccent(goal.category)}`}
       />
 
-      <div className="flex-1 flex flex-col gap-2.5 sm:gap-4 p-3.5 sm:p-5 pt-4 sm:pt-5">
+      <div className="flex-1 flex flex-col gap-3 sm:gap-4 p-4 sm:p-5 pt-5">
         <div className="min-w-0 space-y-1.5">
           <span className="badge">{goal.category || 'General'}</span>
-          <h3 className="text-base sm:text-lg font-extrabold leading-snug text-slate-900">
+          <h3 className="text-lg font-extrabold leading-snug text-slate-900">
             <button
               type="button"
               data-plain
@@ -152,33 +156,54 @@ export const GoalCard: React.FC<GoalCardProps> = ({
             </button>
           </h3>
           {goal.description && (
-            <p className="hidden sm:block text-xs leading-relaxed text-slate-600 line-clamp-2">{goal.description}</p>
+            <p className="text-sm sm:text-xs leading-relaxed text-slate-600 line-clamp-3 sm:line-clamp-2">{goal.description}</p>
           )}
         </div>
 
-        {/* Phone: one line and seven dots instead of the full week */}
+        {/* Phone: what today's work is, not a row of dots */}
         {hasAnything && (
-          <div className="sm:hidden flex items-center justify-between gap-3">
-            <p className="min-w-0 truncate text-xs text-slate-600">
-              {rows.length > 0
-                ? `${rows
-                    .slice(0, 2)
-                    .map((r) => r.name)
-                    .join(' · ')}${rows.length > 2 ? ` +${rows.length - 2}` : ''}`
-                : next
-                ? `Next up: ${next.name}`
-                : 'Nothing planned this week'}
-            </p>
-            <span aria-hidden="true" className="flex shrink-0 items-center gap-1">
-              {days.map((date) => (
-                <span
-                  key={date}
-                  className={`block w-1.5 h-1.5 rounded-full ${
-                    plannedDates.has(date) ? 'bg-[color:var(--tone-700)]' : 'bg-slate-300'
-                  } ${date === today ? 'ring-2 ring-[color:var(--tone-300)]' : ''}`}
-                />
-              ))}
-            </span>
+          <div className="sm:hidden neu-inset-sm space-y-2 p-3.5">
+            <div className="flex items-center justify-between gap-2">
+              <span className="section-label">{preview.total > 0 ? 'Today' : 'Nothing today'}</span>
+              {preview.total > 0 && (
+                <span className="badge tabular-nums">
+                  {preview.done}/{preview.total} done
+                </span>
+              )}
+            </div>
+            {preview.total > 0 ? (
+              <>
+                {preview.routines.length > 0 && (
+                  <p className="truncate text-xs font-bold text-[color:var(--tone-700)]">{preview.routines.join(' · ')}</p>
+                )}
+                <ul className="space-y-1.5">
+                  {preview.tasks.slice(0, 3).map((t) => (
+                    <li key={t.id} className="flex items-start gap-2 text-sm leading-snug">
+                      <span
+                        aria-hidden="true"
+                        className={`mt-0.5 grid h-4 w-4 shrink-0 place-items-center rounded-full ${
+                          t.completed ? 'bg-[color:var(--tone-600)] text-white' : 'border border-slate-300 bg-white'
+                        }`}
+                      >
+                        {t.completed && <Check className="h-3 w-3" strokeWidth={3.5} />}
+                      </span>
+                      <span className={t.completed ? 'text-slate-400 line-through' : 'text-slate-800'}>{t.text}</span>
+                    </li>
+                  ))}
+                </ul>
+                {preview.tasks.length > 3 && <p className="meta">+ {preview.tasks.length - 3} more today</p>}
+              </>
+            ) : (
+              <p className="text-sm text-slate-600">
+                {preview.next ? (
+                  <>
+                    Next: <strong className="text-slate-800">{preview.next.routine}</strong> on {shortDay(preview.next.date)}
+                  </>
+                ) : (
+                  'Nothing planned for today.'
+                )}
+              </p>
+            )}
           </div>
         )}
 

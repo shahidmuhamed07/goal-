@@ -35,6 +35,14 @@ describe('the niches', () => {
     assert.equal(NICHES.length, 7);
   });
 
+  it('show three main areas first: Health & Fitness, Finance & Wealth and Skills & Learning', () => {
+    const main = NICHES.filter((n) => n.group === 'main');
+    assert.deepEqual(main.map((n) => n.label), ['Health & Fitness', 'Finance & Wealth', 'Skills & Learning']);
+    const more = NICHES.filter((n) => n.group === 'more').map((n) => n.key).sort();
+    assert.deepEqual(more, ['business', 'career', 'custom', 'health']);
+    assert.equal(NICHES.find((n) => n.key === 'health')!.label, 'Eating & wellbeing');
+  });
+
   it('have no Creative Writing, in the plain form or the guided flow', () => {
     assert.equal((GOAL_CATEGORIES as readonly string[]).includes('Creative Writing'), false);
     assert.equal(NICHES.some((n) => n.category === 'Creative Writing' || /creative/i.test(n.label)), false);
@@ -42,23 +50,29 @@ describe('the niches', () => {
 
   it('never ask the person to type: every question is a tap with at least two choices', () => {
     for (const n of NICHES) {
-      assert.ok(n.questions.length >= 2 && n.questions.length <= 5, n.key);
+      assert.ok(n.questions.length >= 2 && n.questions.length <= (n.key === 'fitness' ? 6 : 5), n.key);
       assert.equal(new Set(n.questions.map((q) => q.id)).size, n.questions.length, `${n.key} repeats a question id`);
       for (const q of n.questions) {
-        assert.ok(q.kind === 'single' || q.kind === 'multi', `${n.key}.${q.id}`);
-        assert.ok(q.options.length >= 2, `${n.key}.${q.id} needs choices`);
+        assert.ok(q.kind === 'single' || q.kind === 'multi' || q.kind === 'numbers', `${n.key}.${q.id}`);
+        if (q.kind === 'numbers') {
+          // Numbers are set with a slider, never typed, and can be skipped.
+          assert.ok((q.fields ?? []).length >= 1 && q.skippable === true, `${n.key}.${q.id} needs fields and a Skip`);
+          for (const f of q.fields ?? []) assert.ok(f.min < f.start && f.start < f.max && f.step > 0, `${n.key}.${q.id}.${f.id}`);
+        } else {
+          assert.ok(q.options.length >= 2, `${n.key}.${q.id} needs choices`);
+        }
       }
     }
   });
 
-  it('ask at most four questions on any path, so it stays quick', () => {
+  it('ask at most four questions on any path, so it stays quick (Fitness asks six: it needs to know the person)', () => {
     for (const n of NICHES) {
       const worst = Math.max(
         visibleQuestions(n, {}).length,
         visibleQuestions(n, firstChoices(n.key)).length,
         ...n.questions.flatMap((q) => q.options.map((o) => visibleQuestions(n, { [q.id]: o.value }).length)),
       );
-      assert.ok(worst <= 4, `${n.key} asks ${worst} questions`);
+      assert.ok(worst <= (n.key === 'fitness' ? 6 : 4), `${n.key} asks ${worst} questions`);
     }
   });
 });

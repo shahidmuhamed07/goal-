@@ -1,4 +1,4 @@
-import { buildFitnessPlan } from './fitnessPlan';
+import { adviseFitnessWeek, buildFitnessPlan, readProfile, recommendAim } from './fitnessPlan';
 import { spreadOverDays, tasksForMinutes, type StarterPlan } from './starterPlan';
 
 /**
@@ -23,13 +23,37 @@ export interface GuidedOption {
   hint?: string;
 }
 
+/** One number on a "numbers" question (a height, a weight), set with a slider and + / - buttons. */
+export interface NumberField {
+  id: string;
+  label: string;
+  unit: string;
+  min: number;
+  max: number;
+  step: number;
+  /** Where the slider starts. */
+  start: number;
+}
+
 export interface GuidedQuestion {
   id: string;
   title: string;
   hint?: string;
-  /** `single`: tap one. `multi`: tap any (none is fine). Nothing here ever has to be typed. */
-  kind: 'single' | 'multi';
+  /**
+   * `single`: tap one. `multi`: tap any (none is fine). `numbers`: set one or more numbers with a slider
+   * (and it can be skipped). Nothing here ever has to be typed.
+   */
+  kind: 'single' | 'multi' | 'numbers';
   options: GuidedOption[];
+  /** For a `numbers` question: the numbers to set. Each answer is stored under its own `id`. */
+  fields?: NumberField[];
+  /** Lets the person pass a question without answering it ("Skip"). Used for personal numbers. */
+  skippable?: boolean;
+  /**
+   * Picks the option to recommend from the answers so far. It is shown first, marked
+   * "Recommended for you", and the rest stay available.
+   */
+  recommend?: (answers: Answers) => string | undefined;
   /** Adds a "Something else" choice. Typing a name for it is optional. */
   allowOther?: boolean;
   /** Ask this question only when it applies to the answers so far. */
@@ -51,6 +75,15 @@ export interface RoutineDraft {
   tasks: string[];
 }
 
+/** What a niche suggests for the week once it knows the person: how many days, how long, and why. */
+export interface WeekAdvice {
+  days: number[];
+  /** A recommended session length, offered but never forced. */
+  minutes?: number;
+  /** One plain sentence on what the advice is based on. */
+  note: string;
+}
+
 /** The niches people can start from. `custom` is "Something else": a generic starting point for any goal. */
 export type NicheKey = 'career' | 'business' | 'health' | 'fitness' | 'money' | 'learning' | 'custom';
 
@@ -58,9 +91,13 @@ export interface Niche {
   key: NicheKey;
   label: string;
   tagline: string;
+  /** `main` areas are shown first; `more` ones sit behind "More areas". */
+  group: 'main' | 'more';
   /** The goal category the app files it under. */
   category: string;
   questions: GuidedQuestion[];
+  /** Suggests days (and a session length) for the week screen from the answers. Left out, the usual default applies. */
+  adviseWeek?: (answers: AnswerReader) => WeekAdvice | undefined;
   /**
    * Turns the answers into a title, a description and routines in order of importance.
    * The common answers (days and time) are passed too, for a niche that shapes its plan by them.
@@ -98,6 +135,13 @@ export class AnswerReader {
     return this.one(id) === value || this.many(id).includes(value);
   }
 
+  /** A number answered on a "numbers" question, or undefined when it was skipped or is not a number. */
+  number(id: string): number | undefined {
+    const a = this.answers[id];
+    const n = typeof a === 'string' ? Number(a) : NaN;
+    return Number.isFinite(n) ? n : undefined;
+  }
+
   /** What was typed under "Something else", if anything. Always optional. */
   other(id: string, max = 60): string {
     const typed = this.answers[`${id}_other`];
@@ -130,6 +174,7 @@ const or = (value: string, fallback: string) => (value ? value : fallback);
 
 const career: Niche = {
   key: 'career',
+  group: 'more',
   label: 'Career',
   tagline: 'A new job, a promotion or a new direction',
   category: 'Career',
@@ -272,6 +317,7 @@ const career: Niche = {
 
 const business: Niche = {
   key: 'business',
+  group: 'more',
   label: 'Business',
   tagline: 'Launch, get customers or grow sales',
   category: 'Business',
@@ -359,7 +405,8 @@ const eating = (a: Answers) => a.aim === 'eat';
 
 const health: Niche = {
   key: 'health',
-  label: 'Health',
+  group: 'more',
+  label: 'Eating & wellbeing',
   tagline: 'Eating, sleep, stress and energy',
   category: 'Health',
   questions: [
@@ -455,15 +502,42 @@ const health: Niche = {
 
 const fitness: Niche = {
   key: 'fitness',
-  label: 'Fitness',
-  tagline: 'Build strength, stamina or both',
+  group: 'main',
+  label: 'Health & Fitness',
+  tagline: 'Workouts, strength and stamina',
   category: 'Fitness',
   questions: [
+    {
+      id: 'body',
+      title: 'Your height and weight',
+      hint: 'We use these only to suggest a starting plan. You can skip this.',
+      kind: 'numbers',
+      skippable: true,
+      options: [],
+      fields: [
+        { id: 'height', label: 'Height', unit: 'cm', min: 120, max: 220, step: 1, start: 170 },
+        { id: 'weight', label: 'Weight', unit: 'kg', min: 30, max: 200, step: 1, start: 70 },
+      ],
+    },
+    {
+      id: 'steps',
+      title: 'About how many steps do you walk a day?',
+      hint: 'A guess is fine. Your phone counts them.',
+      kind: 'single',
+      options: [
+        opt('low', 'Under 4,000', 'Mostly sitting'),
+        opt('some', '4,000 to 7,000', 'A little walking'),
+        opt('good', '7,000 to 10,000', 'On your feet a fair bit'),
+        opt('high', 'More than 10,000', 'Very active days'),
+      ],
+    },
     {
       id: 'aim',
       title: 'What is your main aim?',
       kind: 'single',
       allowOther: true,
+      // Looks at height, weight and steps, and puts the aim that suits them first.
+      recommend: (answers) => recommendAim(readProfile(new AnswerReader([], answers))),
       options: [
         opt('muscle', 'Build muscle', 'Bigger, stronger muscles'),
         opt('strength', 'Get stronger', 'Lift heavier over time'),
@@ -510,6 +584,7 @@ const fitness: Niche = {
   ],
   // The framework lives in fitnessPlan.ts: the number of training days, the place, the level, the
   // limits and the time for each session shape the week, the exercises and the doses.
+  adviseWeek: (r) => adviseFitnessWeek(readProfile(r)),
   plan: (r, common) => buildFitnessPlan(r, common),
 };
 
@@ -517,6 +592,7 @@ const fitness: Niche = {
 
 const money: Niche = {
   key: 'money',
+  group: 'main',
   label: 'Finance & Wealth',
   tagline: 'Save, pay off debt or start investing',
   category: 'Finance & Wealth',
@@ -583,7 +659,8 @@ const money: Niche = {
 
 const learning: Niche = {
   key: 'learning',
-  label: 'Learning & Skills',
+  group: 'main',
+  label: 'Skills & Learning',
   tagline: 'Pick up something new, step by step',
   category: 'Learning & Skills',
   questions: [
@@ -664,6 +741,7 @@ const learning: Niche = {
 
 const custom: Niche = {
   key: 'custom',
+  group: 'more',
   label: 'Something else',
   tagline: 'Any goal that is not in the list',
   category: 'General',
@@ -733,7 +811,7 @@ const MAX_ROUTINES = 6;
 
 /** Whether a question has been answered well enough to move on. Typing is never needed. */
 export const isAnswered = (question: GuidedQuestion, answers: Answers): boolean => {
-  if (question.kind === 'multi') return true; // picking none is fine: the plan falls back to sensible defaults
+  if (question.kind === 'multi' || question.kind === 'numbers') return true; // picking none is fine: the plan falls back to sensible defaults
   const a = answers[question.id];
   return typeof a === 'string' && a.length > 0;
 };

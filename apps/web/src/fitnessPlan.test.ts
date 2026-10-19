@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { buildGuidedPlan, nicheByKey, type Answers, type CommonAnswers } from './guidedGoal';
-import { movesForMinutes } from './fitnessPlan';
+import { AnswerReader, buildGuidedPlan, nicheByKey, type Answers, type CommonAnswers } from './guidedGoal';
+import { adviseFitnessWeek, bmiOf, movesForMinutes, readProfile, recommendAim, weekdaysFor } from './fitnessPlan';
 
 const common = (over: Partial<CommonAnswers> = {}): CommonAnswers => ({ days: [1, 3, 5], minutes: 30, months: 3, ...over });
 const plan = (answers: Answers, over: Partial<CommonAnswers> = {}) => buildGuidedPlan('fitness', answers, common(over));
@@ -18,7 +18,7 @@ describe('the fitness questions', () => {
   const options = (id: string) => niche.questions.find((q) => q.id === id)!.options.map((o) => o.value);
 
   it('offer four or more choices on every question, so people find themselves in them', () => {
-    for (const q of niche.questions) assert.ok(q.options.length >= 4, q.id);
+    for (const q of niche.questions.filter((x) => x.kind !== 'numbers')) assert.ok(q.options.length >= 4, q.id);
     assert.ok(options('aim').length >= 5);
     assert.ok(options('where').length >= 4);
     assert.ok(options('level').length >= 4);
@@ -28,6 +28,91 @@ describe('the fitness questions', () => {
     assert.deepEqual(options('aim'), AIMS);
     assert.deepEqual(options('where'), PLACES);
     assert.deepEqual(options('level'), LEVELS);
+  });
+});
+
+describe('knowing the person: height, weight and steps come first', () => {
+  const niche = nicheByKey('fitness');
+  const reader = (answers: Answers) => new AnswerReader(niche.questions, answers);
+
+  it('asks for height and weight, then steps, before the aim, so the aim can be recommended', () => {
+    assert.deepEqual(niche.questions.map((q) => q.id), ['body', 'steps', 'aim', 'where', 'level', 'limits']);
+    const body = niche.questions[0];
+    assert.equal(body.kind, 'numbers');
+    assert.equal(body.skippable, true);
+    assert.deepEqual(body.fields!.map((f) => f.id), ['height', 'weight']);
+  });
+
+  it('works out body mass index, and ignores numbers that cannot be right', () => {
+    assert.equal(bmiOf(170, 70), 24.2);
+    assert.equal(bmiOf(160, 90), 35.2);
+    assert.equal(bmiOf(undefined, 70), undefined);
+    assert.equal(bmiOf(60, 70), undefined);
+    assert.equal(bmiOf(170, 5), undefined);
+  });
+
+  it('recommends fat loss for a higher BMI, muscle for a low one, and reads steps when there are no numbers', () => {
+    assert.equal(recommendAim({ bmi: 27, steps: undefined }), 'fat');
+    assert.equal(recommendAim({ bmi: 25, steps: 'high' }), 'fat');
+    assert.equal(recommendAim({ bmi: 17.5, steps: 'some' }), 'muscle');
+    assert.equal(recommendAim({ bmi: 22, steps: 'some' }), 'muscle');
+    assert.equal(recommendAim({ bmi: undefined, steps: 'low' }), 'active');
+    assert.equal(recommendAim({ bmi: undefined, steps: 'high' }), 'strength');
+    assert.equal(recommendAim({ bmi: undefined, steps: undefined }), undefined);
+  });
+
+  it('the aim question marks the recommended aim from the answers so far', () => {
+    const aim = niche.questions.find((q) => q.id === 'aim')!;
+    assert.equal(aim.recommend!({ height: '170', weight: '85' }), 'fat');
+    assert.equal(aim.recommend!({ steps: 'low' }), 'active');
+    assert.equal(aim.recommend!({}), undefined);
+    assert.equal(aim.recommend!({ body_skipped: '1' }), undefined);
+  });
+
+  it('suggests days and a session length that fit experience, aim and walking', () => {
+    const advise = (answers: Answers) => adviseFitnessWeek(readProfile(reader(answers)));
+    assert.deepEqual(advise({ level: 'beginner', aim: 'muscle' }).days, [1, 3, 5]);
+    assert.equal(advise({ level: 'beginner', aim: 'muscle' }).minutes, 30);
+    assert.equal(advise({ level: 'some', aim: 'muscle' }).days.length, 4);
+    assert.equal(advise({ level: 'some', aim: 'muscle' }).minutes, 45);
+    assert.equal(advise({ level: 'experienced', aim: 'muscle' }).days.length, 5);
+    assert.equal(advise({ level: 'experienced', aim: 'fat' }).days.length, 6);
+    assert.equal(advise({ level: 'beginner', aim: 'fat', steps: 'good' }).days.length, 4);
+    assert.equal(advise({ level: 'beginner', aim: 'fat', steps: 'low' }).days.length, 3);
+  });
+
+  it('keeps it gentle when breathless, or when very little walking meets a beginner', () => {
+    const advise = (answers: Answers) => adviseFitnessWeek(readProfile(reader(answers)));
+    assert.ok(advise({ level: 'experienced', aim: 'fat', limits: ['breath'] }).days.length <= 3);
+    assert.equal(advise({ level: 'experienced', limits: ['breath'] }).minutes, 30);
+    assert.ok(advise({ level: 'beginner', aim: 'muscle', steps: 'low' }).days.length <= 3);
+  });
+
+  it('explains what the suggestion is based on, including the BMI when it is known', () => {
+    const note = adviseFitnessWeek(readProfile(reader({ height: '170', weight: '85', steps: 'low', level: 'beginner', aim: 'fat' }))).note;
+    assert.match(note, /^We suggest 3 days a week of about 30 minutes, because /);
+    assert.ok(note.includes('BMI of 29.4') && note.includes('very little') && note.includes('losing fat'));
+    const bare = adviseFitnessWeek(readProfile(reader({}))).note;
+    assert.ok(!bare.includes('BMI'));
+  });
+
+  it('spreads any number of days over the week with rest days between', () => {
+    for (let n = 1; n <= 7; n += 1) assert.equal(weekdaysFor(n).length, n);
+    assert.deepEqual(weekdaysFor(3), [1, 3, 5]);
+    assert.deepEqual(weekdaysFor(4), [1, 2, 4, 5]);
+    assert.deepEqual(weekdaysFor(0), [3]);
+    assert.equal(weekdaysFor(99).length, 7);
+  });
+
+  it('the niche passes it to the week screen', () => {
+    const advice = niche.adviseWeek!(reader({ level: 'some', aim: 'muscle', height: '175', weight: '72' }));
+    assert.ok(advice && advice.days.length === 4 && advice.minutes === 45 && advice.note.length > 0);
+  });
+
+  it('the plan says what it was built around', () => {
+    const p = plan({ aim: 'fat', where: 'home', level: 'beginner', height: '170', weight: '85', steps: 'low' }, { days: [1, 3, 5] });
+    assert.ok(p.description.includes('Built around your height and weight (BMI 29.4) and very little walking each day.'), p.description);
+    assert.ok(!plan({ aim: 'fat' }).description.includes('Built around'));
   });
 });
 

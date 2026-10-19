@@ -44,7 +44,7 @@ Legend: ✅ shipped · 🟡 shipped with caveats · ⬜ not present
 |---|---|---|---|
 | Auth | Google sign-in (popup → redirect fallback) | ✅ | |
 | Auth | Email/password sign-up, sign-in, reset | ✅ | Needs Email/Password enabled in Firebase console |
-| Onboarding | Guided first-run questions that build starter goals and weekly routines | 🟡 | Real-database write not yet tested with a brand-new account; persona itself is descriptive only |
+| Onboarding | Welcome + persona, then straight into the guided plan (first-run goal built by Help me plan) | 🟡 | Tested only in a throwaway harness, not with a brand-new real account; persona itself is descriptive only |
 | Goals | Create goal (1–24 months, presets or custom category) | ✅ | |
 | Goals | Dashboard: stats, search, category filter, cards | ✅ | |
 | Goals | Edit title/category/description; give-up flow; extend timeline | ✅ | Give-up permanently deletes the goal |
@@ -120,6 +120,14 @@ Found by reading the code on 2026-10-11; none of these have been reproduced unle
 ---
 
 ## Changelog
+
+### 2026-10-19 — Three main areas, a fitness intake with recommendations, and a phone goal card that shows today  (branch `feature/main-areas`)
+- **Type:** feature + simplification
+- **What & why:** Requested by the owner. (1) **Phone goal card:** bigger card, larger description (3 lines on a phone), the seven dots are gone; instead a "Today" block shows the done/total count, the routine names, up to three of today's tasks with tick circles (done ones struck through, not-done first), "+ N more today", or "Next: <routine> on <date>" / "Nothing planned for today". Desktop card unchanged. The logic is `previewGoal` in `src/goalPreview.ts`. (2) **Fewer starting choices:** the first screen offers **Health & Fitness**, **Finance & Wealth** and **Skills & Learning**; Career, Business, Eating & wellbeing and Something else sit under a **More areas** fold (it opens by itself if one of them was chosen). (3) **First run goes straight into Help me plan:** the welcome screens are only hello and "how will you use Goal Path?"; planning your own goals then opens the guided questions (one flow, one place to maintain). The old first-run questions (focus, eating, activity, days, minutes, length, starter yes/no, slide-to-commit, confetti) are removed. Professionals keep the short set-up. (4) **Fitness intake:** height and weight (sliders with minus/plus; **Skip for now** until touched), daily steps, then the aim with a **Recommended for you** choice listed first (from BMI, steps), place, level, limits. On "Plan your week" the app suggests days (and minutes) from everything it learned, explains why in one sentence, and offers **Lighter / Recommended / More** day counts; days the person changes are never overwritten. The plan description mentions height and weight (BMI) and walking when given.
+- **Files:** new `apps/web/src/goalPreview.ts` + test; edited `components/GoalCard.tsx`, `components/GuidedGoal.tsx`, `components/Onboarding.tsx` (now welcome + persona only), `guidedGoal.ts`, `fitnessPlan.ts`, `starterPlan.ts` (first-run templates and options deleted; only the plan types and `materializePlan`, `spreadOverDays`, `tasksForMinutes` remain), `App.tsx` (`handleStartPlanning`, `handleFinishProfessional`; the old `handleFinishOnboarding` is gone), `index.css` (confetti removed), plus tests.
+- **Data/rules impact:** none. First run now saves only `persona`, `personaChosenAt`, `onboardedAt` (no `onboarding` answers any more). Height and weight are used to shape the plan and are not stored.
+- **Verified:** tsc ✓ · build ✓ · web tests 149/149 ✓ · in a throwaway harness on a phone-sized browser: welcome → persona → three areas + More areas (shows Career, Business, Eating & wellbeing, Something else) → height/weight sliders ("Skip for now" became "Continue" once touched) → steps → aim with "Recommended for you" first → place, level, limits → week with suggestion note, three presets, days preselected Mon/Wed/Fri and the time hint → starting plan → created; the goal card showed 0/6 done, today's routine and three tasks. **Not verified:** a real sign-in; tapping a task on the card; desktop width of the new screens; other niches still have three-option questions.
+- **Docs updated:** `architecture.md`, `ui-context.md`.
 
 ### 2026-10-19 — First-run questions: one goal, no age question; a new plan has work on its first day  (branch `feature/speed`)
 - **Type:** fix + simplification

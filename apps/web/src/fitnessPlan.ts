@@ -1,4 +1,4 @@
-import type { AnswerReader, CommonAnswers, RoutineDraft } from './guidedGoal';
+import type { AnswerReader, CommonAnswers, RoutineDraft, WeekAdvice } from './guidedGoal';
 import { describeDays } from './recurrence';
 
 /**
@@ -191,6 +191,120 @@ const CORE_POSTURE = mobility('Core and posture', ['Dead bug: 3 sets of 8 each s
 const RECOVERY = mobility('Active recovery', ['Easy walk for 20 minutes', 'Full-body stretch for 10 minutes', 'Drink plenty of water', 'Go to bed at your usual time']);
 const FUN_MOVEMENT = mobility('Fun movement', ['Dance, swim, cycle or play a sport for 30 minutes', 'Keep it easy enough to chat', 'Stretch afterwards', 'Drink water']);
 
+/* ---------------------------------------------------------------------------- */
+/* Knowing the person: height, weight, daily steps                               */
+/* ---------------------------------------------------------------------------- */
+
+/** How much the person walks in a day, roughly. */
+export type Steps = 'low' | 'some' | 'good' | 'high';
+
+/** The few things the engine reads from the answers. */
+interface Reader {
+  one(id: string): string | undefined;
+  many(id: string): string[];
+  number(id: string): number | undefined;
+}
+
+export interface FitnessProfile {
+  heightCm?: number;
+  weightKg?: number;
+  /** Body mass index to one decimal, when both height and weight make sense. */
+  bmi?: number;
+  steps?: Steps;
+  level: Level;
+  aim?: Aim;
+  limits: Limit[];
+}
+
+/** Body mass index from a height in centimetres and a weight in kilograms, or undefined for numbers that cannot be right. */
+export const bmiOf = (heightCm?: number, weightKg?: number): number | undefined => {
+  if (!heightCm || !weightKg || heightCm < 100 || heightCm > 230 || weightKg < 25 || weightKg > 300) return undefined;
+  const metres = heightCm / 100;
+  return Math.round((weightKg / (metres * metres)) * 10) / 10;
+};
+
+/** Reads everything the recommendations need from the answers given so far. */
+export const readProfile = (r: Reader): FitnessProfile => {
+  const heightCm = r.number('height');
+  const weightKg = r.number('weight');
+  const stepsAnswer = r.one('steps');
+  return {
+    heightCm,
+    weightKg,
+    bmi: bmiOf(heightCm, weightKg),
+    steps: stepsAnswer === 'low' || stepsAnswer === 'some' || stepsAnswer === 'good' || stepsAnswer === 'high' ? stepsAnswer : undefined,
+    level: asLevel(r.one('level')),
+    aim: asAim(r.one('aim')),
+    limits: r.many('limits').filter((l): l is Limit => l === 'knees' || l === 'back' || l === 'shoulders' || l === 'breath'),
+  };
+};
+
+/**
+ * The aim that suits what we know so far: a higher BMI points to fat loss, a low one to building
+ * muscle, very little walking to getting more active, a lot of walking to getting stronger, and
+ * otherwise building muscle. Nothing known means no recommendation.
+ */
+export const recommendAim = (profile: Pick<FitnessProfile, 'bmi' | 'steps'>): Aim | undefined => {
+  const { bmi, steps } = profile;
+  if (bmi === undefined && steps === undefined) return undefined;
+  if (bmi !== undefined && bmi >= 25) return 'fat';
+  if (bmi !== undefined && bmi < 18.5) return 'muscle';
+  if (steps === 'low') return 'active';
+  if (steps === 'high') return 'strength';
+  return 'muscle';
+};
+
+/** Training days that suit a number of days a week, spread so rest days fall between them. */
+export const weekdaysFor = (count: number): number[] => {
+  const n = Math.max(1, Math.min(7, Math.round(count)));
+  const table: Record<number, number[]> = {
+    1: [3],
+    2: [2, 4],
+    3: [1, 3, 5],
+    4: [1, 2, 4, 5],
+    5: [1, 2, 3, 4, 5],
+    6: [1, 2, 3, 4, 5, 6],
+    7: [1, 2, 3, 4, 5, 6, 0],
+  };
+  return table[n];
+};
+
+const clamp = (n: number, low: number, high: number) => Math.max(low, Math.min(high, n));
+
+/**
+ * How many days a week, and how long each time, suit this person: their experience sets the
+ * starting point, the aim and walking adjust it, and anything that makes training harder (being
+ * out of breath, very little walking as a beginner) keeps it gentle.
+ */
+export const adviseFitnessWeek = (profile: FitnessProfile): WeekAdvice => {
+  const { level, aim, steps, limits, bmi } = profile;
+  const beginner = level === 'beginner' || level === 'returning';
+  let days = beginner ? 3 : level === 'some' ? 4 : 5;
+  if (aim === 'fat') days += beginner ? (steps === 'low' ? 0 : 1) : 1;
+  if (aim === 'mobility') days = 4;
+  if (aim === 'active') days = Math.min(days, 3);
+  if (beginner && steps === 'low') days = Math.min(days, 3);
+  if (limits.includes('breath')) days = Math.min(days, 3);
+  days = clamp(days, 2, 6);
+
+  let minutes = beginner ? 30 : level === 'some' ? 45 : 60;
+  if (limits.includes('breath') || steps === 'low' || aim === 'mobility') minutes = 30;
+
+  const reasons: string[] = [];
+  reasons.push(level === 'beginner' ? 'you are starting out' : level === 'returning' ? 'you are coming back' : level === 'some' ? 'you have some experience' : 'you are experienced');
+  if (aim) reasons.push(`your aim is ${{ muscle: 'building muscle', strength: 'getting stronger', fat: 'losing fat', stamina: 'building stamina', mobility: 'moving better', active: 'staying active' }[aim]}`);
+  if (bmi !== undefined) reasons.push(`your height and weight give a BMI of ${bmi}`);
+  if (steps) reasons.push(`you walk ${{ low: 'very little', some: 'a little', good: 'a good amount', high: 'a lot' }[steps]} each day`);
+  if (limits.length > 0) reasons.push('you want to work around a limit');
+  const because = reasons.length > 1 ? `${reasons.slice(0, -1).join(', ')} and ${reasons[reasons.length - 1]}` : reasons[0];
+
+  return {
+    days: weekdaysFor(days),
+    minutes,
+    note: `We suggest ${days} days a week of about ${minutes} minutes, because ${because}.`,
+  };
+};
+
 /** The names of the sessions in a week for this aim and number of training days, most important first. */
 type Slot = { kind: 'strength'; session: string; name: string } | { kind: 'other'; make: () => RoutineDraft };
 
@@ -278,12 +392,22 @@ export const buildFitnessPlan = (r: AnswerReader, common: CommonAnswers): { titl
   const restDays = [0, 1, 2, 3, 4, 5, 6].filter((d) => !days.includes(d));
   const rest = restDays.length > 0 ? ` Rest on ${onDays(restDays)}: an easy walk, a stretch and good sleep.` : ' Take the recovery session easy.';
   const time = common.minutes ? ` Sessions are about ${common.minutes} minutes.` : '';
+  const profile = readProfile(r);
+  const basis =
+    profile.bmi !== undefined || profile.steps
+      ? ` Built around ${[
+          profile.bmi !== undefined ? `your height and weight (BMI ${profile.bmi})` : '',
+          profile.steps ? `${{ low: 'very little', some: 'a little', good: 'a good amount of', high: 'a lot of' }[profile.steps]} walking each day` : '',
+        ]
+          .filter(Boolean)
+          .join(' and ')}.`
+      : '';
 
   const aimTitle = aim ? titles[aim] : 'Get stronger and fitter';
   const typed = r.one('aim') === 'other' ? r.other('aim', 70) : '';
   return {
     title: typed || aimTitle,
-    description: `${n} training ${n === 1 ? 'day' : 'days'} a week, ${placeText[place]}. ${trainText}${rest}${time} Swap exercises freely.`.slice(0, 600),
+    description: `${n} training ${n === 1 ? 'day' : 'days'} a week, ${placeText[place]}. ${trainText}${rest}${time}${basis} Swap exercises freely.`.slice(0, 700),
     routines,
     sized: true,
   };

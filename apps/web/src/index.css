@@ -804,24 +804,6 @@ input[type="radio"] {
   animation: gp-sheet-up 0.45s var(--ease-glide) both;
 }
 
-/* Paper that falls once when someone commits */
-@keyframes gp-confetti {
-  0% {
-    transform: translateY(-20px) rotate(0deg);
-    opacity: 1;
-  }
-  100% {
-    transform: translateY(110vh) rotate(540deg);
-    opacity: 0.9;
-  }
-}
-
-.gp-confetti {
-  animation-name: gp-confetti;
-  animation-timing-function: cubic-bezier(0.3, 0.6, 0.4, 1);
-  animation-fill-mode: both;
-}
-
 /* A scroll area with no visible bar, for full-screen flows */
 .hide-scroll {
   scrollbar-width: none;
@@ -1287,7 +1269,6 @@ body:has(.scrim) {
   .tab-panel,
   .orb-float,
   .sheet-up,
-  .gp-confetti,
   .bar-grow,
   .gp-flame-live,
   .gp-loader-mark {

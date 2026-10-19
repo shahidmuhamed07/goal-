@@ -96,7 +96,7 @@ import { ProgressBar, GoalPathLogo, GoalPathLoader, GlassIconButton, GlassBadge,
 import { DailyTaskSection } from './components/DailyTaskSection';
 import { SubcategoryBlock } from './components/SubcategoryBlock';
 import { GoalCard } from './components/GoalCard';
-import { OnboardingAnswers, StarterPlan, materializePlan } from './starterPlan';
+import { StarterPlan, materializePlan } from './starterPlan';
 import { MonthlyMilestoneSection } from './components/MonthlyMilestoneSection';
 import { CreateGoalModal } from './components/CreateGoalModal';
 
@@ -1153,54 +1153,31 @@ export default function App() {
     return created.id;
   };
 
-  /**
-   * Finishes the first-run questions: records the answers on the profile and,
-   * for someone planning their own goals, creates a goal for each thing they
-   * chose to work on, with the starter routines already written onto the
-   * calendar. Returns the ids of the goals it created.
-   */
-  const handleFinishOnboarding = async (
-    answers: OnboardingAnswers,
-    plans: StarterPlan[]
-  ): Promise<string[]> => {
-    if (!user) return [];
+  /** Records who the person is (and that first-run is done) so the questions are not asked again. */
+  const recordPersona = async (persona: 'client' | 'professional') => {
     const chosenAt = new Date().toISOString();
-    const createdIds: string[] = [];
-
-    for (const plan of plans) {
-      const id = await createGoalFromPlan(plan, answers.starter, createdIds.length);
-      if (id) createdIds.push(id);
-    }
-
-    // Only answered questions are stored.
-    const stored: Record<string, unknown> = {
-      focus: answers.focus,
-      days: answers.days,
-      minutes: answers.minutes,
-      months: answers.months,
-      starter: answers.starter,
-    };
-    if (answers.eating) stored.eating = answers.eating;
-    if (answers.activity) stored.activity = answers.activity;
-
-    await appApi.patchMe({
-      persona: answers.persona,
-      personaChosenAt: chosenAt,
-      onboardedAt: chosenAt,
-      onboarding: stored,
-    });
-    setProfile((prev) =>
-      prev ? { ...prev, persona: answers.persona, personaChosenAt: chosenAt, onboardedAt: chosenAt } : prev
-    );
-    return createdIds;
+    await appApi.patchMe({ persona, personaChosenAt: chosenAt, onboardedAt: chosenAt });
+    setProfile((prev) => (prev ? { ...prev, persona, personaChosenAt: chosenAt, onboardedAt: chosenAt } : prev));
   };
 
-  /** Leaves the questions, straight into the first new goal when there is one. */
-  const handleCloseOnboarding = (openGoalId?: string) => {
+  /** Someone planning their own goals goes straight from the welcome into "Help me plan". */
+  const handleStartPlanning = async () => {
+    await recordPersona('client');
     setPersonaPromptDismissed(true);
     setPersonaPickerOpen(false);
-    if (openGoalId) openGoal(openGoalId);
-    else if (profile?.persona === 'professional') setActiveTab('professional');
+    setGuidedOpen(true);
+  };
+
+  /** A professional: remember the choice; the screen then offers the profile set-up. */
+  const handleFinishProfessional = async () => {
+    await recordPersona('professional');
+  };
+
+  /** Leaves the welcome screens. */
+  const handleCloseOnboarding = () => {
+    setPersonaPromptDismissed(true);
+    setPersonaPickerOpen(false);
+    if (profile?.persona === 'professional') setActiveTab('professional');
   };
 
   /** Saves a goal made in the guided flow and opens it. */
@@ -3346,7 +3323,8 @@ export default function App() {
         <Suspense fallback={null}><Onboarding
           isOpen
           name={((profile?.displayName || user.displayName || '').split(' ')[0] || '').trim()}
-          onFinish={handleFinishOnboarding}
+          onStartPlanning={handleStartPlanning}
+          onFinishProfessional={handleFinishProfessional}
           onClose={handleCloseOnboarding}
         /></Suspense>
       )}
