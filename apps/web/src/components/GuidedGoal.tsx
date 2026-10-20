@@ -12,8 +12,8 @@ import {
 } from 'lucide-react';
 import { AskBubble, OptionRow } from './Onboarding';
 import type { AiBrief, AiFollowUp, AiProgramDraft } from '../api/appApi';
-import { adviseFitnessWeek, fitnessInputs, weekdaysFor, type AboutYou, type WeekAdvice } from '../fitnessPlan';
-import { menuFor } from '../exerciseMenu';
+import { adviseFitnessWeek, fitnessInputs, healthyWeeks, sessionCalories, weekdaysFor, type AboutYou, type WeekAdvice } from '../fitnessPlan';
+import { menuFor, type GymKit } from '../exerciseMenu';
 import { dayNames, decorateFitness, totalWeeksFor } from '../program';
 import {
   AnswerReader,
@@ -44,6 +44,9 @@ const NICHE_ICONS: Record<NicheKey, React.ElementType> = {
 };
 
 /** The three day-counts offered next to a suggestion: a little lighter, the suggestion, and a little more. */
+const PUSHUP_LABEL = { none: 'None yet', few: '1 to 5', some: '6 to 15', many: '16 or more' } as const;
+const WALK_LABEL = { short: 'About 10 minutes', half: 'About 30 minutes', hour: '1 hour or more', jog: 'I can jog 5 km' } as const;
+const GYM_KIT_LABEL = { machines: 'Machines and cables', free: 'Free weights and dumbbells', both: 'Both' } as const;
 const MOVEMENT_LABEL = { sitting: 'Mostly sitting', some: 'Some walking', active: 'On my feet a lot' } as const;
 const MOVEMENT_HINT = { sitting: 'A desk or a lot of travel', some: 'A few short walks', active: 'Standing or walking most of the day' } as const;
 
@@ -54,6 +57,28 @@ const presetCounts = (suggested: number): Array<{ label: string; count: number }
 ];
 
 const sameDays = (a: number[], b: number[]) => a.length === b.length && [...a].sort().join() === [...b].sort().join();
+
+/** Rough numbers worth knowing, shown only when the person shared enough for them: calories and a healthy pace. */
+const FitnessNumbers: React.FC<{ about: AboutYou; minutes: number | null; aim: string; days: number }> = ({ about, minutes, aim, days }) => {
+  const each = sessionCalories(about, minutes ?? 30, (['muscle', 'strength', 'fat', 'stamina', 'mobility', 'active'] as const).find((a) => a === aim));
+  const pace = aim === 'fat' ? healthyWeeks(about) : undefined;
+  if (!each && !pace) return null;
+  return (
+    <div className="mt-3 space-y-1 text-xs leading-snug text-slate-600">
+      {each && (
+        <p>
+          A session burns roughly <strong className="text-slate-800">{each} calories</strong>, about {each * days} a week.
+        </p>
+      )}
+      {pace && (
+        <p>
+          To lose {pace.kg} kg at a healthy pace of 0.25 to 0.75 kg a week takes about <strong className="text-slate-800">{pace.fast} to {pace.slow} weeks</strong>.
+        </p>
+      )}
+      <p className="text-slate-400">These are rough guides, not promises. Food, sleep and your body all matter.</p>
+    </div>
+  );
+};
 
 interface GuidedGoalProps {
   /** Leave the flow. When a goal was just created, its id is passed so the app can open it. */
@@ -103,6 +128,10 @@ export const GuidedGoal: React.FC<GuidedGoalProps> = ({ onClose, onCreate, makeP
   const [height, setHeight] = useState('');
   const [weight, setWeight] = useState('');
   const [movement, setMovement] = useState<AboutYou['movement']>();
+  const [targetWeight, setTargetWeight] = useState('');
+  const [pushups, setPushups] = useState<AboutYou['pushups']>();
+  const [walk, setWalk] = useState<AboutYou['walk']>();
+  const [gymKit, setGymKit] = useState<GymKit>();
   const [months, setMonths] = useState(3);
 
   const [plan, setPlan] = useState<StarterPlan | null>(null);
@@ -183,8 +212,8 @@ export const GuidedGoal: React.FC<GuidedGoalProps> = ({ onClose, onCreate, makeP
   /** What the niche suggests for the week once it knows the person. */
   const about: AboutYou = useMemo(() => {
     const num = (v: string, lo: number, hi: number) => (Number(v) >= lo && Number(v) <= hi ? Math.round(Number(v)) : undefined);
-    return { age: num(age, 10, 100), heightCm: num(height, 100, 230), weightKg: num(weight, 25, 300), movement };
-  }, [age, height, weight, movement]);
+    return { age: num(age, 10, 100), heightCm: num(height, 100, 230), weightKg: num(weight, 25, 300), movement, targetKg: num(targetWeight, 30, 300), pushups, walk };
+  }, [age, height, weight, movement, targetWeight, pushups, walk]);
   const advice: WeekAdvice | undefined = useMemo(
     () => (niche?.key === 'fitness' ? adviseFitnessWeek(new AnswerReader(niche.questions, answers), about) : undefined),
     [niche, answers, about]
@@ -204,6 +233,10 @@ export const GuidedGoal: React.FC<GuidedGoalProps> = ({ onClose, onCreate, makeP
       if (about.heightCm) described.answers.push({ q: 'Height.', a: `${about.heightCm} cm` });
       if (about.weightKg) described.answers.push({ q: 'Weight.', a: `${about.weightKg} kg` });
       if (about.movement) described.answers.push({ q: 'A normal day.', a: MOVEMENT_LABEL[about.movement] });
+      if (about.targetKg) described.answers.push({ q: 'Target weight.', a: `${about.targetKg} kg` });
+      if (about.pushups) described.answers.push({ q: 'Push-ups they can do now.', a: PUSHUP_LABEL[about.pushups] });
+      if (about.walk) described.answers.push({ q: 'How far they can walk or jog without stopping.', a: WALK_LABEL[about.walk] });
+      if (gymKit && answers.where === 'gym') described.answers.push({ q: 'Gym equipment they like.', a: GYM_KIT_LABEL[gymKit] });
     }
     if (!withWeek) return described;
     const menu = nicheKey === 'fitness' ? fitnessMenu() : undefined;
@@ -213,7 +246,7 @@ export const GuidedGoal: React.FC<GuidedGoalProps> = ({ onClose, onCreate, makeP
   const fitnessMenu = () => {
     if (!niche) return undefined;
     const { place, level, limits } = fitnessInputs(new AnswerReader(niche.questions, answers));
-    return menuFor(place, level, limits);
+    return menuFor(place, level, limits, place === 'gym' ? gymKit ?? 'both' : 'both');
   };
 
   /** The AI's program as a starter plan: no repeating routines, but an outline and a written first week. */
@@ -232,7 +265,7 @@ export const GuidedGoal: React.FC<GuidedGoalProps> = ({ onClose, onCreate, makeP
         outline: drafted.outline,
         week1: isFitness ? decorateFitness(drafted.week) : drafted.week,
         brief: { niche: brief.niche, answers: brief.answers, days: dayNames(common.days), minutes: common.minutes, months: common.months },
-        ...(fitness ? { fitness: { place: fitness.place, level: fitness.level, limits: fitness.limits } } : {}),
+        ...(fitness ? { fitness: { place: fitness.place, level: fitness.level, limits: fitness.limits, ...(fitness.place === 'gym' && gymKit ? { kit: gymKit } : {}) } } : {}),
         totalWeeks: totalWeeksFor(common.months),
       },
     };
@@ -405,6 +438,31 @@ export const GuidedGoal: React.FC<GuidedGoalProps> = ({ onClose, onCreate, makeP
             {field('about-age', 'Age', 'years', age, setAge, 10, 100)}
             {field('about-height', 'Height', 'cm', height, setHeight, 100, 230)}
             {field('about-weight', 'Weight', 'kg', weight, setWeight, 25, 300)}
+            {answers.aim === 'fat' && field('about-target', 'Target weight (if you have one)', 'kg', targetWeight, setTargetWeight, 30, 300)}
+            {answers.where === 'gym' && (
+              <>
+                <p className="section-label pt-2">Gym equipment you like</p>
+                {(['machines', 'free', 'both'] as const).map((k) => (
+                  <OptionRow key={k} label={GYM_KIT_LABEL[k]} selected={gymKit === k} onClick={() => setGymKit(gymKit === k ? undefined : k)} />
+                ))}
+              </>
+            )}
+            <p className="section-label pt-2">How many push-ups can you do now?</p>
+            <div className="grid grid-cols-4 gap-2" role="group" aria-label="Push-ups you can do">
+              {(['none', 'few', 'some', 'many'] as const).map((k) => (
+                <button key={k} type="button" className="chip py-3 text-sm" data-active={pushups === k} aria-pressed={pushups === k} onClick={() => setPushups(pushups === k ? undefined : k)}>
+                  {PUSHUP_LABEL[k]}
+                </button>
+              ))}
+            </div>
+            <p className="section-label pt-2">How far can you walk or jog without stopping?</p>
+            <div className="grid grid-cols-2 gap-2" role="group" aria-label="How far you can walk or jog">
+              {(['short', 'half', 'hour', 'jog'] as const).map((k) => (
+                <button key={k} type="button" className="chip py-3 text-sm" data-active={walk === k} aria-pressed={walk === k} onClick={() => setWalk(walk === k ? undefined : k)}>
+                  {WALK_LABEL[k]}
+                </button>
+              ))}
+            </div>
             <p className="section-label pt-2">A normal day</p>
             {(['sitting', 'some', 'active'] as const).map((m) => (
               <OptionRow
@@ -416,7 +474,7 @@ export const GuidedGoal: React.FC<GuidedGoalProps> = ({ onClose, onCreate, makeP
               />
             ))}
             <p className="px-2 pt-1 text-center text-xs leading-snug text-slate-500">
-              Age, height and weight set how long and how hard we start, and which days to rest. They are saved only inside this goal.
+              These set how long and how hard we start, never how heavy to lift: we always say to use a weight that feels comfortable. They are saved only inside this goal.
             </p>
           </div>
         </>
@@ -450,6 +508,8 @@ export const GuidedGoal: React.FC<GuidedGoalProps> = ({ onClose, onCreate, makeP
               </div>
             </div>
           )}
+
+          {niche?.key === 'fitness' && <FitnessNumbers about={about} minutes={minutes} aim={String(answers.aim ?? '')} days={days.length} />}
 
           <p className="section-label mt-6 mb-2">Which days?</p>
           <div className="grid grid-cols-7 gap-2" role="group" aria-label="Days of the week">
@@ -596,7 +656,7 @@ export const GuidedGoal: React.FC<GuidedGoalProps> = ({ onClose, onCreate, makeP
               ))}
             </ul>
             <p className="text-center text-xs text-slate-500">
-              {planFromAiDraft ? 'Suggested for you by AI, based on your answers. ' : ''}You can change everything on the goal page.
+              {planFromAiDraft ? 'Made with AI from your answers. AI can make mistakes, so stop if anything hurts or feels wrong. ' : ''}You can change everything on the goal page.
             </p>
           </div>
         )}
@@ -642,7 +702,7 @@ export const GuidedGoal: React.FC<GuidedGoalProps> = ({ onClose, onCreate, makeP
 
         <div className="pb-6 pt-2 safe-bottom">
           <button type="button" className="btn-tone h-14 w-full text-[1.0625rem]" disabled={!canNext() || asking} onClick={isPreview ? create : next}>
-            {isPreview ? (creating ? 'Creating…' : 'Create my goal') : asking ? 'Thinking of a few questions…' : step === 'about' && !about.age && !about.heightCm && !about.weightKg && !about.movement ? 'Skip for now' : 'Continue'}
+            {isPreview ? (creating ? 'Creating…' : 'Create my goal') : asking ? 'Thinking of a few questions…' : step === 'about' && !about.age && !about.heightCm && !about.weightKg && !about.movement && !about.pushups && !about.walk && !about.targetKg && !gymKit ? 'Skip for now' : 'Continue'}
           </button>
         </div>
       </div>

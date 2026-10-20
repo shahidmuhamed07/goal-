@@ -97,8 +97,8 @@ import { DailyTaskSection } from './components/DailyTaskSection';
 import { SubcategoryBlock } from './components/SubcategoryBlock';
 import { GoalCard } from './components/GoalCard';
 import { OnboardingAnswers, StarterPlan, materializePlan } from './starterPlan';
-import { decorateFitness, makeProgram, materializeWeek, nextWeekDue, nextWeekNumber, weekResults } from './program';
-import { menuFor } from './exerciseMenu';
+import { decorateFitness, makeProgram, materializeWeek, nextWeekDue, nextWeekNumber, weekDates as weekDatesOf, weekResults } from './program';
+import { menuFor, type GymKit } from './exerciseMenu';
 import type { Level, Limit, Place } from './fitnessPlan';
 import { NextWeekCard } from './components/NextWeekCard';
 import { MonthlyMilestoneSection } from './components/MonthlyMilestoneSection';
@@ -1230,13 +1230,15 @@ export default function App() {
     setPlanningWeekGoalId(goalId);
     try {
       const fitness = program.fitness;
-      const menu = fitness ? menuFor(fitness.place as Place, fitness.level as Level, fitness.limits as Limit[]) : undefined;
+      const menu = fitness ? menuFor(fitness.place as Place, fitness.level as Level, fitness.limits as Limit[], (fitness.kit as GymKit | undefined) ?? 'both') : undefined;
       const last = weekResults(goal, program.startDate, weekNumber - 1);
+      // The exercise names used last week ("Bench press: 3 sets of 8" -> "Bench press"), so this week brings new ones.
+      const recent = menu ? Array.from(new Set(goal.tasks.filter((t) => weekDatesOf(program.startDate, weekNumber - 1).includes(t.date)).map((t) => t.text.split(':')[0].trim()))).slice(0, 40) : undefined;
       const days = await appApi.aiWeek(
         {
           ...program.brief,
           week: { days: program.brief.days, minutes: program.brief.minutes, months: program.brief.months },
-          ...(menu ? { menu } : {}),
+          ...(menu ? { menu, recent } : {}),
           weekNumber,
           totalWeeks: program.totalWeeks,
           outline: program.outline,

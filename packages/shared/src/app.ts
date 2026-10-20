@@ -82,8 +82,8 @@ export interface GoalProgram {
     minutes: number | null;
     months: number;
   };
-  /** Fitness only: the choices that decide which exercises may be used. */
-  fitness?: { place: string; level: string; limits: string[] };
+  /** Fitness only: the choices that decide which exercises may be used. `kit` is the gym equipment they like. */
+  fitness?: { place: string; level: string; limits: string[]; kit?: string };
 }
 
 export interface Goal {

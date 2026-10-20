@@ -14,7 +14,7 @@ import {
   type NicheKey,
 } from './guidedGoal';
 import { GOAL_CATEGORIES } from './utils';
-import { adviseFitnessWeek, bmiOf, limitsFrom, weekdaysFor } from './fitnessPlan';
+import { adviseFitnessWeek, bmiOf, healthyWeeks, limitsFrom, sessionCalories, weekdaysFor } from './fitnessPlan';
 import { materializePlan, tasksForMinutes } from './starterPlan';
 
 const common = (over: Partial<CommonAnswers> = {}): CommonAnswers => ({ days: [1, 3, 5], minutes: 30, months: 3, ...over });
@@ -432,5 +432,29 @@ describe('the recommendation uses what the person told us about themselves', () 
     const odd = adviseFitnessWeek(reader({ level: 'some', aim: 'muscle' }), { age: 400, heightCm: 5, weightKg: 9000 });
     const none = adviseFitnessWeek(reader({ level: 'some', aim: 'muscle' }));
     assert.deepEqual(odd, none);
+  });
+});
+
+describe('rough numbers for fitness', () => {
+  it('estimates the calories of a session from weight, time and aim, and never without a weight', () => {
+    assert.equal(sessionCalories({ weightKg: 80 }, 45, 'fat'), 360);
+    assert.ok(sessionCalories({ weightKg: 80 }, 45, 'muscle')! < sessionCalories({ weightKg: 80 }, 45, 'fat')!);
+    assert.equal(sessionCalories({}, 45, 'fat'), undefined);
+    assert.equal(sessionCalories({ weightKg: 5 }, 45, 'fat'), undefined);
+  });
+
+  it('gives a healthy range of weeks to reach a target, and nothing for a silly one', () => {
+    assert.deepEqual(healthyWeeks({ weightKg: 90, targetKg: 80 }), { kg: 10, fast: 13, slow: 40 });
+    assert.equal(healthyWeeks({ weightKg: 90, targetKg: 95 }), undefined, 'a target above the weight');
+    assert.equal(healthyWeeks({ weightKg: 90, targetKg: 40 }), undefined, 'too much to lose to guess');
+    assert.equal(healthyWeeks({ targetKg: 70 }), undefined);
+  });
+
+  it('starts gently for someone who cannot do a push-up and tires on a short walk', () => {
+    const r = new AnswerReader(NICHES.find((n) => n.key === 'fitness')!.questions, { level: 'experienced', aim: 'muscle' });
+    const fit = adviseFitnessWeek(r, { pushups: 'many', walk: 'jog' });
+    const starting = adviseFitnessWeek(r, { pushups: 'none', walk: 'short' });
+    assert.ok(starting.days.length <= fit.days.length);
+    assert.match(starting.note, /start gently/);
   });
 });

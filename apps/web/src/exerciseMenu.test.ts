@@ -13,13 +13,16 @@ describe('the exercise menu', () => {
     for (const name of ALL_EXERCISES) {
       assert.ok(name.length <= 60, name);
       const steps = stepsFor(name)!;
-      assert.ok(steps.length >= 2 && steps.length <= 4, `${name} has ${steps.length} steps`);
+      assert.ok(steps.length >= 3 && steps.length <= 5, `${name} has ${steps.length} lines`);
+      assert.match(steps[0], /^Works: .{3,40}$/, `${name} needs a short "works" line`);
       assert.ok(steps.every((s) => s.length <= 80), `${name} has a line over 80 letters`);
+      assert.ok(!/heavy as you can|maximum|max weight|to failure/i.test(steps.join(' ')), `${name} must not push for heavy weight`);
     }
     for (const part of [WARM_UP, COOL_DOWN]) assert.ok(part.steps.length >= 3 && part.steps.every((s) => s.length <= 80));
   });
 
   it('offers enough exercises for a varied month in every place, level and limit', () => {
+    for (const place of PLACES) assert.ok(menuFor(place, 'some', []).length >= 20, `${place} has a wide menu`);
     for (const place of PLACES) {
       for (const level of LEVELS) {
         assert.ok(menuFor(place, level, []).length >= 10, `${place} ${level}`);
@@ -44,8 +47,20 @@ describe('the exercise menu', () => {
     assert.ok(menuFor('homegear', 'some', []).includes('Dumbbell floor press'));
   });
 
+  it('lets a gym person choose machines, free weights or both, always keeping body-weight moves', () => {
+    const machines = menuFor('gym', 'some', [], 'machines');
+    const free = menuFor('gym', 'some', [], 'free');
+    const both = menuFor('gym', 'some', [], 'both');
+    assert.ok(machines.includes('Leg press') && !machines.includes('Goblet squat'));
+    assert.ok(free.includes('Goblet squat') && !free.includes('Leg press'));
+    assert.ok(machines.includes('Plank') && free.includes('Plank'));
+    assert.ok(both.length > machines.length && both.length > free.length);
+    assert.deepEqual(menuFor('home', 'some', [], 'machines'), menuFor('home', 'some', []), 'equipment only matters in a gym');
+  });
+
   it('finds steps whatever the capitals', () => {
     assert.deepEqual(stepsFor('bench PRESS'), stepsFor('Bench press'));
+    assert.ok(stepsFor('Bench press')![0].startsWith('Works: Chest'));
     assert.equal(stepsFor('Invented lift'), undefined);
   });
 });

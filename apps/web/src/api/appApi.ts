@@ -32,6 +32,8 @@ export interface AiWeekRequest extends AiBrief {
   totalWeeks: number;
   outline: { focus: string; note: string }[];
   last: { done: string[]; skipped: string[] };
+  /** Fitness: the exercises used last week, so this week brings new ones. */
+  recent?: string[];
 }
 export interface AiFollowUp {
   id: string;

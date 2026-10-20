@@ -337,6 +337,12 @@ export interface AboutYou {
   weightKg?: number;
   /** How much they are on their feet in a normal day. */
   movement?: 'sitting' | 'some' | 'active';
+  /** Where they would like to be, in kilograms (fat loss). */
+  targetKg?: number;
+  /** How many push-ups they can do now, a safe way to see their strength. */
+  pushups?: 'none' | 'few' | 'some' | 'many';
+  /** How far they can walk or jog without stopping. */
+  walk?: 'short' | 'half' | 'hour' | 'jog';
 }
 
 /** Body mass index, or undefined when height or weight is missing or not believable. */
@@ -361,7 +367,9 @@ export const adviseFitnessWeek = (r: AnswerReader, about: AboutYou = {}): WeekAd
   const bmi = bmiOf(about);
   const age = about.age && about.age >= 10 && about.age <= 100 ? about.age : undefined;
   const heavy = bmi !== undefined && bmi >= 30;
-  const gentleStart = level === 'beginner' || level === 'returning';
+  // Someone who cannot yet do a push-up and tires on a short walk starts gently, whatever they call their level.
+  const justStarting = about.pushups === 'none' && about.walk === 'short';
+  const gentleStart = level === 'beginner' || level === 'returning' || justStarting;
 
   let count = gentleStart ? 3 : level === 'some' ? 4 : 5;
   if (aim === 'mobility') count = Math.max(count, 4);
@@ -377,7 +385,7 @@ export const adviseFitnessWeek = (r: AnswerReader, about: AboutYou = {}): WeekAd
   let minutes = aim === 'mobility' ? 30 : gentleStart ? 30 : level === 'some' ? 45 : aim === 'stamina' ? 45 : 60;
   if (aim === 'fat') minutes += 15; // burning fat takes a little more time each session
   if (aim === 'muscle') minutes = Math.min(minutes, 45); // strength sessions are shorter and harder
-  if (heavy && minutes > 45) minutes = 45; // start low impact and build
+  if ((heavy || justStarting) && minutes > 45) minutes = 45; // start low impact and build
   if (age !== undefined && age >= 55) minutes = Math.max(30, minutes - 15);
   minutes = Math.min(60, Math.max(30, minutes));
 
@@ -389,6 +397,7 @@ export const adviseFitnessWeek = (r: AnswerReader, about: AboutYou = {}): WeekAd
   if (aim === 'muscle') shaped.push('Muscle building uses shorter, harder sessions, with a different workout each day.');
   const bodyLines: string[] = [];
   if (heavy) bodyLines.push('We start with low-impact moves and build up.');
+  if (justStarting) bodyLines.push('We start gently, because walking and push-ups are still hard right now.');
   if (age !== undefined && age >= 55) bodyLines.push('We kept it gentler for your age.');
   if (age !== undefined && age < 18) bodyLines.push('We kept it to a few days, so you can grow and recover.');
 
@@ -397,4 +406,31 @@ export const adviseFitnessWeek = (r: AnswerReader, about: AboutYou = {}): WeekAd
     minutes,
     note: `We suggest ${count} days a week, about ${minutes} minutes each time, because ${list}.${[...shaped, ...bodyLines].length > 0 ? ` ${[...shaped, ...bodyLines].join(' ')}` : ''}`,
   };
+};
+
+/* ------------------------------------------------------- rough numbers */
+
+/** How hard each aim works the body, as a MET value (a standard way to estimate calories). */
+const MET: Record<Aim, number> = { muscle: 4.5, strength: 4.5, fat: 6, stamina: 7, mobility: 2.8, active: 4.5 };
+
+/**
+ * A rough guide to the calories one session burns: MET × body weight × hours, rounded to the nearest 10.
+ * It is an estimate for motivation, never a promise. Undefined without a believable weight.
+ */
+export const sessionCalories = (about: AboutYou, minutes: number, aim: Aim | undefined): number | undefined => {
+  const w = about.weightKg;
+  if (!w || w < 25 || w > 300) return undefined;
+  return Math.round((MET[aim ?? 'active'] * w * (minutes / 60)) / 10) * 10;
+};
+
+/**
+ * How long a healthy pace of change takes: losing about 0.25 to 0.75 kg a week is considered safe.
+ * Undefined unless the target is below a believable current weight and is not extreme.
+ */
+export const healthyWeeks = (about: AboutYou): { fast: number; slow: number; kg: number } | undefined => {
+  const { weightKg: now, targetKg: target } = about;
+  if (!now || !target || now < 25 || now > 300 || target < 30 || target >= now) return undefined;
+  const kg = Math.round((now - target) * 10) / 10;
+  if (kg > now * 0.4) return undefined; // not a realistic target: leave it out rather than guess
+  return { kg, fast: Math.max(1, Math.round(kg / 0.75)), slow: Math.max(1, Math.round(kg / 0.25)) };
 };

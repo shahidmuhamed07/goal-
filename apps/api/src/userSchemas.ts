@@ -56,7 +56,7 @@ const program = z.object({
     minutes: z.number().int().min(5).max(240).nullable(),
     months: z.number().int().min(1).max(24),
   }),
-  fitness: z.object({ place: short(20), level: short(20), limits: z.array(short(20)).max(6) }).optional(),
+  fitness: z.object({ place: short(20), level: short(20), limits: z.array(short(20)).max(6), kit: short(20).optional() }).optional(),
 });
 
 /** One goal is one stored document, so its plan has a hard ceiling well under the database's own. */

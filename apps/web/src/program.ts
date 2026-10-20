@@ -24,7 +24,7 @@ export interface SessionDraft {
 /** How far ahead of a week's first day the person is offered to plan it. */
 export const PLAN_AHEAD_DAYS = 2;
 
-const MAX_STEP_LINES = 4;
+const MAX_STEP_LINES = 5;
 
 /** The weekday names the AI is told about, in week order (Mon first). */
 export const dayNames = (days: number[]): string[] => WEEK_ORDER.filter((d) => days.includes(d)).map((d) => WEEKDAY_SHORT[d]);

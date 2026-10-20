@@ -95,6 +95,8 @@ export const planBody = z
     weekNumber: z.number().int().min(2).max(60).optional(),
     totalWeeks: z.number().int().min(1).max(60).optional(),
     outline: z.array(z.object({ focus: line(100), note: z.string().max(160) })).max(14).optional(),
+    /** For `week`: the exercises used last week, so this week brings new ones. */
+    recent: z.array(line(60)).max(40).optional(),
     /** For `week`: what the person did with the week before. */
     last: z.object({ done: z.array(line(160)).max(40), skipped: z.array(line(160)).max(40) }).optional(),
   })
@@ -220,6 +222,8 @@ export const AREA_NOTES: Record<string, string> = {
     'Fitness: every session is its own workout. Different days train different things (for example upper body, lower body, full body, or push, pull and legs, as the person asked).',
     'From week to week change some exercises and raise the work gently: more reps, then a third set, then more weight. Make the last week of each block easier so the body can recover.',
     'Give every exercise a dose, such as "3 sets of 8" or "3 holds of 30 seconds". Respect any pain or limit the person mentioned.',
+    'Be safe and gentle, never aggressive. Never ask for a heavy or maximum weight: tell the person to use a weight that feels comfortable and that they could lift about three more times. Do not promise results or a number of kilos lost.',
+    'Use the person\'s walking, push-up and daily-movement answers to choose how hard to start. Use their equipment answer: machines, free weights, or both.',
     'If the person gave their age, height and weight, use them to set how hard to start: gentler and lower impact for older people or a higher body weight; for fat loss include steady cardio such as a brisk walk or the bike on some days; for muscle keep sessions shorter and harder with different lifts each day. Rest days are the days not picked.',
   ].join(' '),
   eating: 'Eating and wellbeing: each day is a small, different plan (meals, water, sleep or a calm habit). Keep it simple and realistic, never a strict diet, and never give medical advice.',
@@ -307,6 +311,7 @@ const weekPrompt = (body: PlanBody) => {
       ? `Last week the person finished: ${last.done.join('; ') || 'nothing'}. They skipped or missed: ${last.skipped.join('; ') || 'nothing'}.`
       : '',
     'If they missed more than a third of last week, keep this week the same size or a little easier. If they finished nearly everything, move forward as the outline says.',
+    body.recent?.length ? `Last week used these exercises: ${body.recent.join('; ')}. Bring different exercises or a different variation (other equipment, a different angle) this week, and only repeat one if there is no other choice.` : '',
     areaNote(body.niche),
     taskRules(body),
     `One entry for each of the days ${body.week?.days.join(', ')}.`,

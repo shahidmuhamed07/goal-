@@ -55,13 +55,13 @@ describe('weeks of a program', () => {
 
   it('leaves out an empty steps list and caps long ones', () => {
     const { tasks } = materializeWeek({
-      sessions: [{ day: 'Mon', name: 'Day', tasks: [{ text: 'a', steps: [] }, { text: 'b', steps: ['1', '2', '3', '4', '5', '6'] }] }],
+      sessions: [{ day: 'Mon', name: 'Day', tasks: [{ text: 'a', steps: [] }, { text: 'b', steps: ['1', '2', '3', '4', '5', '6', '7'] }] }],
       startDate: START,
       weekNumber: 1,
       seed: 2,
     });
     assert.equal('steps' in tasks[0], false);
-    assert.equal(tasks[1].steps!.length, 4);
+    assert.equal(tasks[1].steps!.length, 5);
   });
 
   it('reports what was finished and what was not, for the AI to adapt the next week', () => {
