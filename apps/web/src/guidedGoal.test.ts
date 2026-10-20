@@ -5,7 +5,10 @@ import {
   NICHES,
   buildGuidedPlan,
   cleanText,
+  cleanExtras,
+  describeExtras,
   describeForAi,
+  visibleExtras,
   isAnswered,
   makePlanWithRules,
   visibleQuestions,
@@ -14,7 +17,7 @@ import {
   type NicheKey,
 } from './guidedGoal';
 import { GOAL_CATEGORIES } from './utils';
-import { adviseFitnessWeek, bmiOf, healthyWeeks, limitsFrom, sessionCalories, weekdaysFor } from './fitnessPlan';
+import { aboutFromExtras, adviseFitnessWeek, bmiOf, healthyWeeks, limitsFrom, sessionCalories, weekdaysFor } from './fitnessPlan';
 import { materializePlan, tasksForMinutes } from './starterPlan';
 
 const common = (over: Partial<CommonAnswers> = {}): CommonAnswers => ({ days: [1, 3, 5], minutes: 30, months: 3, ...over });
@@ -45,7 +48,7 @@ describe('the niches', () => {
 
   it('never ask the person to type: every question is a tap with at least two choices', () => {
     for (const n of NICHES) {
-      assert.ok(n.questions.length >= 2 && n.questions.length <= 5, n.key);
+      assert.ok(n.questions.length >= 2 && n.questions.length <= 7, n.key); // fitness has a workout path and an eating path
       assert.equal(new Set(n.questions.map((q) => q.id)).size, n.questions.length, `${n.key} repeats a question id`);
       for (const q of n.questions) {
         assert.ok(q.kind === 'single' || q.kind === 'multi', `${n.key}.${q.id}`);
@@ -456,5 +459,95 @@ describe('rough numbers for fitness', () => {
     const starting = adviseFitnessWeek(r, { pushups: 'none', walk: 'short' });
     assert.ok(starting.days.length <= fit.days.length);
     assert.match(starting.note, /start gently/);
+  });
+});
+
+describe('only what each area can use is asked, and all of it is optional', () => {
+  const niche = (key: string) => NICHES.find((n) => n.key === key)!;
+  const ids = (key: string, answers: Answers = {}) => visibleExtras(niche(key), answers).map((f) => f.id);
+
+  it('asks about the body only for fitness and eating, never for money, work, learning or "something else"', () => {
+    for (const key of ['career', 'money', 'learning', 'custom']) {
+      assert.ok(!ids(key).some((id) => ['age', 'height', 'weight', 'pushups', 'walk'].includes(id)), key);
+    }
+    assert.ok(ids('fitness', { aim: 'muscle' }).includes('age'));
+  });
+
+  it('every area has its own extras, a reason, and a way to tell the AI about each one', () => {
+    for (const n of NICHES) {
+      assert.ok(n.extras.length >= 2, `${n.key} has extras`);
+      assert.ok(n.extrasWhy.length >= 20, `${n.key} says why`);
+      for (const f of n.extras) assert.ok(f.ask.length >= 4 && f.label.length >= 3, `${n.key}.${f.id}`);
+      assert.equal(new Set(n.extras.map((f) => f.id)).size, n.extras.length, `${n.key} repeats an extra`);
+    }
+  });
+
+  it('shows only the extras that fit the path: gym kit in a gym, parts for muscle, foods to avoid for eating', () => {
+    assert.ok(ids('fitness', { aim: 'muscle', where: 'gym' }).includes('kit'));
+    assert.ok(!ids('fitness', { aim: 'muscle', where: 'home' }).includes('kit'));
+    assert.ok(ids('fitness', { aim: 'muscle', where: 'gym' }).includes('parts'));
+    assert.ok(!ids('fitness', { aim: 'stamina', where: 'gym' }).includes('parts'));
+    assert.ok(ids('fitness', { aim: 'eat' }).includes('avoid') && ids('fitness', { aim: 'eat' }).includes('mealcount'));
+    assert.ok(!ids('fitness', { aim: 'eat' }).includes('pushups') && !ids('fitness', { aim: 'eat' }).includes('kit'));
+    assert.ok(ids('fitness', { aim: 'fat' }).includes('target'));
+    assert.ok(ids('money', { aim: 'debt' }).includes('debt') && !ids('money', { aim: 'save' }).includes('debt'));
+    assert.ok(ids('career', { aim: 'business' }).includes('sells') && !ids('career', { aim: 'job' }).includes('sells'));
+  });
+
+  it('keeps only valid extras: in range, offered, plain text, and relevant', () => {
+    const fit = niche('fitness');
+    const clean = cleanExtras(fit, { aim: 'muscle', where: 'gym' }, { age: '34', height: '5', weight: ' 80 ', kit: 'machines', pushups: 'lots', avoid: 'peanuts', parts: ['chest', 'toes'] });
+    assert.deepEqual(clean, { age: '34', weight: '80', kit: 'machines', parts: ['chest'] });
+    assert.deepEqual(cleanExtras(niche('learning'), {}, { age: '34', detail: '  Spanish\u0007  ' }), { detail: 'Spanish' });
+  });
+
+  it('tells the AI each extra as a plain question and answer, with its unit and label', () => {
+    const lines = describeExtras(niche('fitness'), { aim: 'muscle', where: 'gym' }, { age: '34', weight: '80', kit: 'machines', parts: ['chest', 'core'] });
+    assert.deepEqual(lines, [
+      { q: 'Age.', a: '34 years' },
+      { q: 'Weight.', a: '80 kg' },
+      { q: 'Parts of the body they want to bring up.', a: 'Chest and arms, Core and posture' },
+      { q: 'Gym equipment they like.', a: 'Machines and cables' },
+    ]);
+    assert.deepEqual(describeExtras(niche('money'), { aim: 'save' }, { target: '5000', monthly: '200' }), [
+      { q: 'The amount they want to reach.', a: '5000' },
+      { q: 'What they can put aside each month.', a: '200' },
+    ]);
+  });
+
+  it('turns fitness extras into the numbers the advice uses', () => {
+    assert.deepEqual(aboutFromExtras({ age: '34', height: '170', pushups: 'few', walk: 'half', movement: 'some' }), {
+      age: 34,
+      heightCm: 170,
+      weightKg: undefined,
+      targetKg: undefined,
+      movement: 'some',
+      pushups: 'few',
+      walk: 'half',
+    });
+  });
+});
+
+describe('eating healthier is a path of its own', () => {
+  const fit = NICHES.find((n) => n.key === 'fitness')!;
+
+  it('asks about the eating style and where meals come from, not about the gym', () => {
+    assert.deepEqual(visibleQuestions(fit, { aim: 'eat' }).map((q) => q.id), ['aim', 'style', 'meals']);
+    assert.ok(!visibleQuestions(fit, { aim: 'muscle' }).some((q) => q.id === 'style'));
+  });
+
+  it('makes daily eating habits, shaped by the style, never a workout', () => {
+    const veg = buildGuidedPlan('fitness', { aim: 'eat', style: 'vegetarian', meals: 'home' }, common({ days: [1, 2, 3, 4, 5], minutes: 60 }));
+    assert.equal(veg.title, 'Eat well, feel great');
+    assert.ok(veg.routines.flatMap((r) => r.tasks).some((t) => t.includes('paneer')));
+    const out = buildGuidedPlan('fitness', { aim: 'eat', meals: 'out' }, common({ days: [1, 2, 3, 4] }));
+    assert.equal(out.routines[0].name, 'Eating out, smartly');
+    assert.ok(!veg.routines.some((r) => /warm up|squat|bench/i.test(r.tasks.join(' '))));
+  });
+
+  it('recommends five steady days', () => {
+    const advice = adviseFitnessWeek(new AnswerReader(fit.questions, { aim: 'eat' }));
+    assert.equal(advice.days.length, 5);
+    assert.match(advice.note, /habits/);
   });
 });

@@ -226,15 +226,17 @@ export const AREA_NOTES: Record<string, string> = {
     'Use the person\'s walking, push-up and daily-movement answers to choose how hard to start. Use their equipment answer: machines, free weights, or both.',
     'If the person gave their age, height and weight, use them to set how hard to start: gentler and lower impact for older people or a higher body weight; for fat loss include steady cardio such as a brisk walk or the bike on some days; for muscle keep sessions shorter and harder with different lifts each day. Rest days are the days not picked.',
   ].join(' '),
-  eating: 'Eating and wellbeing: each day is a small, different plan (meals, water, sleep or a calm habit). Keep it simple and realistic, never a strict diet, and never give medical advice.',
+  eating: 'Eating healthier: each day is a small, different plan (meals, snacks, water, shopping or cooking). Respect the eating style, the foods they avoid or are allergic to, and how many meals they have. Keep it simple and realistic, never a strict diet, never prescribe calories, and never give medical advice. If age, height and weight are given, use them only to keep portions and habits sensible.',
   career: 'Career or business: each day has concrete things to produce (a message sent, a role applied for, a skill practised). Make them small and finishable.',
   business: 'Business: each day has one clear action toward customers, sales or the product. Make them small and finishable.',
   finance: 'Money: each day has a small habit or a number to write down. Give habits only, never investment advice or product names.',
   learning: 'Learning: each day says what to study, for how long, and what "done" looks like. Mix new material with practice and review.',
 };
 
-const areaNote = (niche: string) => {
-  const lower = niche.toLowerCase();
+const areaNote = (body: Pick<PlanBody, 'niche' | 'answers'>) => {
+  const lower = body.niche.toLowerCase();
+  // Health & Fitness covers eating too: when the person chose to eat healthier, the eating notes apply, not the workout ones.
+  if (body.answers.some((a) => a.a.toLowerCase() === 'eat healthier')) return AREA_NOTES.eating;
   const key = Object.keys(AREA_NOTES).find((k) => lower.includes(k)) ?? (lower.includes('wellbeing') || lower.includes('health') ? 'eating' : lower.includes('money') || lower.includes('wealth') ? 'finance' : undefined);
   return key ? AREA_NOTES[key] : '';
 };
@@ -272,7 +274,7 @@ const questionsPrompt = (body: PlanBody) =>
     'Ask 1 to 3 short follow-up questions, only ones that would clearly make this person\'s plan better (for example which body parts to bring up, or what has got in the way before).',
     'Do not repeat anything already answered. Each question must be answerable by tapping one of 2 to 5 short options.',
     'Make the options specific to this person\'s answers, not generic.',
-    areaNote(body.niche),
+    areaNote(body),
     'JSON shape: {"questions":[{"title":"...?","options":["...","..."]}]}',
   ]
     .filter(Boolean)
@@ -288,7 +290,7 @@ const programPrompt = (body: PlanBody) => {
     `1. "title": 2 to 4 plain words, like "Build muscle" or "Save more money" (no slogans), and "description": one or two sentences.`,
     `2. "outline": ${weeks} entries, one for each of the first ${weeks} weeks, each with a "focus" (a few words) and a "note" (one short line). The weeks build on each other.`,
     `3. "week": week 1 in full: one entry for each of the days ${body.week?.days.join(', ')}, each a different session with its own name.`,
-    areaNote(body.niche),
+    areaNote(body),
     taskRules(body),
     `JSON shape: {"title":"...","description":"...","outline":[{"focus":"...","note":"..."}],"week":[${DAY_SHAPE(!!body.menu)}]}`,
   ]
@@ -312,7 +314,7 @@ const weekPrompt = (body: PlanBody) => {
       : '',
     'If they missed more than a third of last week, keep this week the same size or a little easier. If they finished nearly everything, move forward as the outline says.',
     body.recent?.length ? `Last week used these exercises: ${body.recent.join('; ')}. Bring different exercises or a different variation (other equipment, a different angle) this week, and only repeat one if there is no other choice.` : '',
-    areaNote(body.niche),
+    areaNote(body),
     taskRules(body),
     `One entry for each of the days ${body.week?.days.join(', ')}.`,
     `JSON shape: {"days":[${DAY_SHAPE(!!body.menu)}]}`,

@@ -345,6 +345,21 @@ export interface AboutYou {
   walk?: 'short' | 'half' | 'hour' | 'jog';
 }
 
+/** What the person told us in the optional extras, as the numbers and choices the advice uses. */
+export const aboutFromExtras = (values: Record<string, string | string[]>): AboutYou => {
+  const num = (k: string) => (typeof values[k] === 'string' && values[k] !== '' ? Number(values[k]) : undefined);
+  const pick = <T extends string>(k: string, allowed: readonly T[]): T | undefined => (allowed as readonly string[]).includes(String(values[k])) ? (values[k] as T) : undefined;
+  return {
+    age: num('age'),
+    heightCm: num('height'),
+    weightKg: num('weight'),
+    targetKg: num('target'),
+    movement: pick('movement', ['sitting', 'some', 'active'] as const),
+    pushups: pick('pushups', ['none', 'few', 'some', 'many'] as const),
+    walk: pick('walk', ['short', 'half', 'hour', 'jog'] as const),
+  };
+};
+
 /** Body mass index, or undefined when height or weight is missing or not believable. */
 export const bmiOf = (about: AboutYou): number | undefined => {
   const { heightCm: h, weightKg: w } = about;
@@ -359,6 +374,10 @@ export const bmiOf = (about: AboutYou): number | undefined => {
  * It is only a suggestion: the person can change the days and the time.
  */
 export const adviseFitnessWeek = (r: AnswerReader, about: AboutYou = {}): WeekAdvice => {
+  // Eating healthier is daily habits, not workouts: five steady days, with time for shopping and cooking.
+  if (r.one('aim') === 'eat') {
+    return { days: weekdaysFor(5), minutes: 30, note: 'We suggest 5 days a week of small habits, about 30 minutes a day for planning, shopping and cooking, because steady habits beat strict rules.' };
+  }
   const level = asLevel(r.one('level'));
   const aim = asAim(r.one('aim'));
   const limits = limitsFrom(r);

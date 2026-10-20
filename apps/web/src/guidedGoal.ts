@@ -25,6 +25,26 @@ export interface GuidedOption {
   exclusive?: boolean;
 }
 
+/**
+ * Something extra a person may tell us about their goal. Each area lists only what its plan can use
+ * (age and weight for fitness and eating, an amount to save for money, an exam date for learning), and
+ * everything here is optional. The answers go to the AI as plain question and answer text.
+ */
+export interface ExtraField {
+  id: string;
+  /** What the person sees. */
+  label: string;
+  kind: 'number' | 'text' | 'single' | 'multi';
+  unit?: string;
+  min?: number;
+  max?: number;
+  options?: GuidedOption[];
+  /** Only shown for some answers. */
+  showIf?: (answers: Answers) => boolean;
+  /** How the AI is told about it, as a question it answers. */
+  ask: string;
+}
+
 export interface GuidedQuestion {
   id: string;
   title: string;
@@ -67,6 +87,9 @@ export interface Niche {
   /** The goal category the app files it under. */
   category: string;
   questions: GuidedQuestion[];
+  /** Optional extras for this area (the "anything to add?" step) and the reason we ask for them. */
+  extras: ExtraField[];
+  extrasWhy: string;
   /**
    * Turns the answers into a title, a description and routines in order of importance.
    * The common answers (days and time) are passed too, for a niche that shapes its plan by them.
@@ -182,6 +205,20 @@ const career: Niche = {
       ],
     },
   ],
+  extras: [
+    { id: 'field', label: 'Your field or role', kind: 'text', ask: 'Their field or role.' },
+    { id: 'deadline', label: 'A date you are working toward', kind: 'text', ask: 'A date they are working toward.' },
+    { id: 'sells', label: 'What your business sells', kind: 'text', showIf: (a) => a.aim === 'business', ask: 'What their business sells.' },
+    {
+      id: 'customers',
+      label: 'Customers so far',
+      kind: 'single',
+      showIf: (a) => a.aim === 'business',
+      options: [opt('none', 'None yet'), opt('few', 'A few'), opt('regular', 'Regular customers')],
+      ask: 'How many customers the business has so far.',
+    },
+  ],
+  extrasWhy: 'The more we know about your work, the better the steps fit it.',
   plan: (r, common) => {
     const aim = r.one('aim');
     // Growing a business has its own starting plan.
@@ -315,6 +352,8 @@ const business: Niche = {
       options: [opt('marketing', 'Getting seen'), opt('outreach', 'Talking to customers'), opt('product', 'The product or service'), opt('money', 'Money and admin')],
     },
   ],
+  extras: [],
+  extrasWhy: '',
   plan: (r) => {
     const aim = r.one('aim');
     const focus = r.many('focus');
@@ -372,6 +411,32 @@ const business: Niche = {
 
 /* --------------------------------------------------------------- fitness */
 
+/** The starting plan for "Eat healthier": simple weekly habits shaped by the eating style and where meals come from. */
+const eatingPlan = (r: AnswerReader): { title: string; description: string; routines: RoutineDraft[] } => {
+  const style = r.one('style') ?? 'any';
+  const meals = r.one('meals') ?? 'mixed';
+  const protein: Record<string, string> = {
+    any: 'Protein with every meal',
+    vegetarian: 'Protein with every meal (eggs, paneer, lentils)',
+    vegan: 'Protein with every meal (tofu, beans, lentils)',
+    protein: 'Aim for 30 g of protein at every meal',
+    lowcarb: 'Protein and vegetables at every meal',
+  };
+  const routines: RoutineDraft[] = [];
+  if (meals !== 'home') {
+    routines.push({ name: 'Eating out, smartly', tasks: ['Check the menu before you go', 'Choose a protein and a vegetable', 'Skip the sugary drink', 'Stop when you feel 80% full', 'Share a dessert instead of ordering your own'] });
+  }
+  if (meals !== 'out') {
+    routines.push({ name: 'Plan and prep', tasks: ['Plan the week’s meals', 'Grocery shop for fresh food', 'Batch-cook lunches for the week', 'Wash and chop vegetables', 'Portion out healthy snacks'] });
+  }
+  routines.push({ name: 'High-protein day', tasks: [protein[style] ?? protein.any, 'A protein-rich snack', 'Drink 2 to 3 litres of water', 'Log what you ate', 'Take a 10-minute walk after dinner'] });
+  routines.push({ name: 'Veggie-forward day', tasks: ['Half of every plate is vegetables', 'No sugary drinks', 'Try one new vegetable', 'Eat slowly, away from screens', 'Go for an evening walk'] });
+  return { title: 'Eat well, feel great', description: 'Simple weekly habits for steady, healthy eating.', routines };
+};
+
+const eating = (a: Answers) => a.aim === 'eat';
+const notEating = (a: Answers) => a.aim !== 'eat';
+
 const fitness: Niche = {
   key: 'fitness',
   label: 'Health & Fitness',
@@ -389,10 +454,12 @@ const fitness: Niche = {
         opt('fat', 'Lose fat', 'Burn more and feel lighter'),
         opt('stamina', 'Build stamina', 'Run, ride or swim for longer'),
         opt('mobility', 'Stretch and move better', 'Loosen up, fix stiffness'),
+        opt('eat', 'Eat healthier', 'Simple, steady eating habits'),
       ],
     },
     {
       id: 'where',
+      showIf: notEating,
       title: 'Where will you train?',
       why: 'We only use exercises you can do where you train.',
       kind: 'single',
@@ -405,6 +472,7 @@ const fitness: Niche = {
     },
     {
       id: 'level',
+      showIf: notEating,
       title: 'How experienced are you?',
       why: 'It sets how many sets, how heavy and how fast we build up.',
       kind: 'single',
@@ -431,6 +499,7 @@ const fitness: Niche = {
     },
     {
       id: 'limits',
+      showIf: notEating,
       title: 'Any pain or limits to be careful with?',
       hint: 'If you have one, tell us what it is.',
       why: 'We pick gentler exercises around anything that hurts.',
@@ -439,10 +508,81 @@ const fitness: Niche = {
       otherLabel: 'I have a pain or limit',
       options: [nothing('No pain or limits', 'I feel fine, go ahead')],
     },
+    {
+      id: 'style',
+      title: 'Do you follow an eating style?',
+      why: 'We shape the meals and the protein around it.',
+      kind: 'single',
+      showIf: eating,
+      options: [opt('any', 'No particular style'), opt('vegetarian', 'Vegetarian'), opt('vegan', 'Vegan'), opt('protein', 'High-protein'), opt('lowcarb', 'Low-carb')],
+    },
+    {
+      id: 'meals',
+      title: 'Where do most meals come from?',
+      why: 'Cooking at home and eating out need different habits.',
+      kind: 'single',
+      showIf: eating,
+      options: [opt('home', 'I cook at home'), opt('mixed', 'A mix of both'), opt('out', 'Mostly eating out or ordering')],
+    },
   ],
+  extras: [
+    { id: 'age', label: 'Age', kind: 'number', unit: 'years', min: 10, max: 100, ask: 'Age.' },
+    { id: 'height', label: 'Height', kind: 'number', unit: 'cm', min: 100, max: 230, ask: 'Height.' },
+    { id: 'weight', label: 'Weight', kind: 'number', unit: 'kg', min: 25, max: 300, ask: 'Weight.' },
+    { id: 'target', label: 'Target weight (if you have one)', kind: 'number', unit: 'kg', min: 30, max: 300, showIf: (a) => a.aim === 'fat' || a.aim === 'eat', ask: 'Target weight.' },
+    {
+      id: 'parts',
+      label: 'Parts you want to bring up',
+      kind: 'multi',
+      showIf: (a) => a.aim === 'muscle' || a.aim === 'fat',
+      options: [opt('chest', 'Chest and arms'), opt('back', 'Back and shoulders'), opt('legs', 'Legs and glutes'), opt('core', 'Core and posture')],
+      ask: 'Parts of the body they want to bring up.',
+    },
+    {
+      id: 'kit',
+      label: 'Gym equipment you like',
+      kind: 'single',
+      showIf: (a) => a.where === 'gym' && a.aim !== 'eat',
+      options: [opt('machines', 'Machines and cables'), opt('free', 'Free weights and dumbbells'), opt('both', 'Both')],
+      ask: 'Gym equipment they like.',
+    },
+    {
+      id: 'pushups',
+      label: 'How many push-ups can you do now?',
+      kind: 'single',
+      showIf: (a) => a.aim !== 'eat' && a.aim !== 'mobility',
+      options: [opt('none', 'None yet'), opt('few', '1 to 5'), opt('some', '6 to 15'), opt('many', '16 or more')],
+      ask: 'Push-ups they can do now.',
+    },
+    {
+      id: 'walk',
+      label: 'How far can you walk or jog without stopping?',
+      kind: 'single',
+      showIf: (a) => a.aim !== 'eat',
+      options: [opt('short', 'About 10 minutes'), opt('half', 'About 30 minutes'), opt('hour', '1 hour or more'), opt('jog', 'I can jog 5 km')],
+      ask: 'How far they can walk or jog without stopping.',
+    },
+    {
+      id: 'movement',
+      label: 'A normal day',
+      kind: 'single',
+      options: [opt('sitting', 'Mostly sitting', 'A desk or a lot of travel'), opt('some', 'Some walking', 'A few short walks'), opt('active', 'On my feet a lot', 'Standing or walking most of the day')],
+      ask: 'How much they are on their feet in a normal day.',
+    },
+    { id: 'avoid', label: 'Foods you avoid or are allergic to', kind: 'text', showIf: eating, ask: 'Foods they avoid or are allergic to.' },
+    {
+      id: 'mealcount',
+      label: 'Meals a day',
+      kind: 'single',
+      showIf: eating,
+      options: [opt('2', 'Two'), opt('3', 'Three'), opt('4', 'Four or more')],
+      ask: 'Meals a day.',
+    },
+  ],
+  extrasWhy: 'These help us fit the plan to you and start at the right level. They stay inside this goal.',
   // The framework lives in fitnessPlan.ts: the number of training days, the place, the level, the
   // limits and the time for each session shape the week, the exercises and the doses.
-  plan: (r, common) => buildFitnessPlan(r, common),
+  plan: (r, common) => (r.one('aim') === 'eat' ? eatingPlan(r) : buildFitnessPlan(r, common)),
 };
 
 /* ----------------------------------------------------------------- money */
@@ -477,6 +617,13 @@ const money: Niche = {
       options: [opt('budget', 'A simple budget'), opt('spending', 'Cutting spending'), opt('income', 'Earning more'), opt('learn', 'Learning the basics')],
     },
   ],
+  extras: [
+    { id: 'target', label: 'The amount you want to reach', kind: 'number', unit: 'amount', min: 1, max: 100000000, ask: 'The amount they want to reach.' },
+    { id: 'monthly', label: 'What you can put aside each month', kind: 'number', unit: 'amount', min: 1, max: 100000000, ask: 'What they can put aside each month.' },
+    { id: 'debt', label: 'The debt you want to clear', kind: 'number', unit: 'amount', min: 1, max: 100000000, showIf: (a) => a.aim === 'debt', ask: 'The debt they want to clear.' },
+    { id: 'deadline', label: 'By when', kind: 'text', ask: 'The date they want to reach it by.' },
+  ],
+  extrasWhy: 'Numbers help us size the habits. Use any currency. Nothing here is shared.',
   plan: (r) => {
     const aim = r.one('aim');
     const focus = r.many('focus');
@@ -552,6 +699,12 @@ const learning: Niche = {
       options: [opt('read', 'Reading'), opt('watch', 'Videos and courses'), opt('practice', 'Practising and projects'), opt('teach', 'Explaining it to others')],
     },
   ],
+  extras: [
+    { id: 'detail', label: 'What exactly? (a topic, exam or tool)', kind: 'text', ask: 'What exactly they want to learn.' },
+    { id: 'deadline', label: 'An exam or date you are aiming for', kind: 'text', ask: 'A date they are aiming for, such as an exam.' },
+    { id: 'have', label: 'A course, book or app you already have', kind: 'text', ask: 'A course, book or app they already have.' },
+  ],
+  extrasWhy: 'We build the practice around what you already have and when you need it.',
   plan: (r) => {
     const what = r.one('what');
     const subject: Record<string, string> = {
@@ -623,6 +776,11 @@ const custom: Niche = {
       options: [opt('steps', 'Breaking it into small steps'), opt('checkin', 'A daily nudge to keep going'), opt('review', 'A weekly look at my progress')],
     },
   ],
+  extras: [
+    { id: 'detail', label: 'Tell us more about the goal', kind: 'text', ask: 'More about the goal, in their words.' },
+    { id: 'deadline', label: 'A date it should be done by', kind: 'text', ask: 'A date they want it done by.' },
+  ],
+  extrasWhy: 'The more we know, the closer the plan gets to what you mean.',
   plan: (r) => {
     const kind = r.one('kind');
     const help = r.many('help');
@@ -725,6 +883,50 @@ const shapePlan = (
       tasks: routine.tasks.map((t) => cleanText(t, 160)).filter(Boolean).slice(0, drafted.sized ? routine.tasks.length : perRoutine),
     })),
   };
+};
+
+/** What the person typed or tapped under "anything to add?", by field id. Every part is optional. */
+export type ExtraValues = Record<string, string | string[]>;
+
+/** The extras that apply to these answers. */
+export const visibleExtras = (niche: Niche, answers: Answers): ExtraField[] => niche.extras.filter((f) => !f.showIf || f.showIf(answers));
+
+/**
+ * Keeps only extras that apply, are in range, and are made of plain text. A number outside its range
+ * (an age of 400) or a choice that is not offered is dropped, so nothing odd ever reaches the AI or the plan.
+ */
+export const cleanExtras = (niche: Niche, answers: Answers, values: ExtraValues): ExtraValues => {
+  const out: ExtraValues = {};
+  for (const f of visibleExtras(niche, answers)) {
+    const v = values[f.id];
+    if (f.kind === 'number') {
+      const n = typeof v === 'string' && v.trim() !== '' ? Number(v) : NaN;
+      if (Number.isFinite(n) && n >= (f.min ?? 0) && n <= (f.max ?? Infinity)) out[f.id] = String(Math.round(n));
+    } else if (f.kind === 'text') {
+      const t = typeof v === 'string' ? cleanText(v, 80) : '';
+      if (t) out[f.id] = t;
+    } else if (f.kind === 'single') {
+      if (typeof v === 'string' && f.options?.some((o) => o.value === v)) out[f.id] = v;
+    } else {
+      const picked = (Array.isArray(v) ? v : []).filter((x) => f.options?.some((o) => o.value === x));
+      if (picked.length > 0) out[f.id] = picked;
+    }
+  }
+  return out;
+};
+
+/** The extras as plain question and answer text for the AI. */
+export const describeExtras = (niche: Niche, answers: Answers, values: ExtraValues): { q: string; a: string }[] => {
+  const clean = cleanExtras(niche, answers, values);
+  const out: { q: string; a: string }[] = [];
+  for (const f of visibleExtras(niche, answers)) {
+    const v = clean[f.id];
+    if (v === undefined) continue;
+    const label = (x: string) => f.options?.find((o) => o.value === x)?.label ?? x;
+    const text = Array.isArray(v) ? v.map(label).join(', ') : f.kind === 'number' ? `${v}${f.unit && f.unit !== 'amount' ? ` ${f.unit}` : ''}` : label(v);
+    out.push({ q: f.ask, a: text });
+  }
+  return out;
 };
 
 /**

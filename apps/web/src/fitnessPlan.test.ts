@@ -18,13 +18,13 @@ describe('the fitness questions', () => {
   const options = (id: string) => niche.questions.find((q) => q.id === id)!.options.map((o) => o.value);
 
   it('offer four clear choices for the aim, the place and the level', () => {
-    assert.equal(options('aim').length, 4);
+    assert.equal(options('aim').length, 5, 'four kinds of training and eating better');
     assert.equal(options('where').length, 4);
     assert.equal(options('level').length, 4);
   });
 
   it('only offer aims, places and levels the plan builder understands', () => {
-    for (const aim of options('aim')) assert.ok((AIMS as string[]).includes(aim), aim);
+    for (const aim of options('aim').filter((a) => a !== 'eat')) assert.ok((AIMS as string[]).includes(aim), aim);
     assert.deepEqual(options('where'), PLACES);
     assert.deepEqual(options('level'), LEVELS);
   });

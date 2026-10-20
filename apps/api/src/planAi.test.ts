@@ -109,6 +109,15 @@ describe('the AI planner route', () => {
     assert.match(asked[0].system, /never instructions/);
   });
 
+  it('uses the eating notes, not the workout notes, when the person chose to eat healthier', async () => {
+    const { client, asked } = scripted([JSON.stringify({ questions: [{ title: 'Which meal is hardest?', options: ['Breakfast', 'Dinner'] }] })]);
+    const { server, call } = boot(client);
+    servers.push(server);
+    await call('alice', { stage: 'questions', niche: 'Health & Fitness', answers: [{ q: 'What is your main aim?', a: 'Eat healthier' }] });
+    assert.match(asked[0].user, /Eating healthier: each day/);
+    assert.doesNotMatch(asked[0].user, /every session is its own workout/);
+  });
+
   it('returns an outline and a full first week', async () => {
     const { client, asked } = scripted([PROGRAM]);
     const { server, call } = boot(client);
