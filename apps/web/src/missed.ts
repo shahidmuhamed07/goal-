@@ -36,6 +36,37 @@ export const findMissedTasks = (goals: Goal[], today: string, lookbackDays = MIS
   return out.sort((a, b) => (a.task.date < b.task.date ? 1 : a.task.date > b.task.date ? -1 : 0));
 };
 
+/** One missed day of one goal ("Mon, Oct 19: Strength: full body"), with all of its unfinished tasks. */
+export interface MissedDay {
+  key: string;
+  goalId: string;
+  goalTitle: string;
+  date: string;
+  /** The routines that were planned that day, without repeats. Empty when the tasks had no routine. */
+  names: string[];
+  tasks: MissedTask[];
+}
+
+/**
+ * Groups missed tasks by goal and day, so the person is asked once per day
+ * ("can you do this day's plan?") and never once per exercise. Keeps the order
+ * of `items` (newest day first).
+ */
+export const groupMissedByDay = (items: MissedTask[]): MissedDay[] => {
+  const days = new Map<string, MissedDay>();
+  for (const item of items) {
+    const key = `${item.goalId}|${item.task.date}`;
+    let day = days.get(key);
+    if (!day) {
+      day = { key, goalId: item.goalId, goalTitle: item.goalTitle, date: item.task.date, names: [], tasks: [] };
+      days.set(key, day);
+    }
+    day.tasks.push(item);
+    if (item.subcategoryName && !day.names.includes(item.subcategoryName)) day.names.push(item.subcategoryName);
+  }
+  return [...days.values()];
+};
+
 /**
  * Moves the given tasks to `day`. A task that sat in a routine ("Push day")
  * lands in a subcategory of the same name on that day, which is created when

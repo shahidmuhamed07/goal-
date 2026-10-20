@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import type { Goal, Subcategory, TaskItem } from './types';
-import { findMissedTasks, findPushableRoutines, moveTasksToDay, pushRoutineForward, skipTasks } from './missed';
+import { findMissedTasks, findPushableRoutines, groupMissedByDay, moveTasksToDay, pushRoutineForward, skipTasks } from './missed';
 
 const TODAY = '2026-10-18';
 
@@ -241,5 +241,44 @@ describe('pushRoutineForward', () => {
     const other: Subcategory = { id: 'x', name: 'Reading', order: 99, date: '2026-10-20', editorRole: null, repeatId: 'rp-2', repeatDays: [2] };
     const result = pushRoutineForward({ subcategories: [...g.subcategories, other], tasks: g.tasks, repeatId: 'rp-1', today: TODAY, endDate: '2026-10-31' });
     assert.equal(result.subcategories.find((s) => s.id === 'x')!.date, '2026-10-20');
+  });
+});
+
+describe('groupMissedByDay', () => {
+  const full: Subcategory = { id: 'sc-f', name: 'Strength: full body', order: 0, date: '2026-10-19', editorRole: null };
+  const walk: Subcategory = { id: 'sc-w', name: 'Walk', order: 1, date: '2026-10-19', editorRole: null };
+
+  it('asks once per day: all of a day\'s tasks are one group, newest day first', () => {
+    const g = goal({
+      subcategories: [full, walk, { ...full, id: 'sc-f2', date: '2026-10-17' }],
+      tasks: [
+        task({ id: 'a', date: '2026-10-19', subcategoryId: 'sc-f' }),
+        task({ id: 'b', date: '2026-10-19', subcategoryId: 'sc-f' }),
+        task({ id: 'c', date: '2026-10-17', subcategoryId: 'sc-f2' }),
+      ],
+    });
+    const days = groupMissedByDay(findMissedTasks([g], '2026-10-20'));
+    assert.equal(days.length, 2);
+    assert.equal(days[0].date, '2026-10-19');
+    assert.deepEqual(days[0].tasks.map((m) => m.task.id), ['a', 'b']);
+    assert.deepEqual(days[0].names, ['Strength: full body']);
+    assert.equal(days[1].date, '2026-10-17');
+  });
+
+  it('lists each routine of a day once, and keeps two goals apart on the same day', () => {
+    const g1 = goal({
+      id: 'g1',
+      subcategories: [full, walk],
+      tasks: [
+        task({ id: 'a', date: '2026-10-19', subcategoryId: 'sc-f' }),
+        task({ id: 'b', date: '2026-10-19', subcategoryId: 'sc-w' }),
+        task({ id: 'c', date: '2026-10-19', subcategoryId: 'sc-f' }),
+      ],
+    });
+    const g2 = goal({ id: 'g2', title: 'Read more', tasks: [task({ id: 'd', date: '2026-10-19' })] });
+    const days = groupMissedByDay(findMissedTasks([g1, g2], '2026-10-20'));
+    assert.equal(days.length, 2);
+    assert.deepEqual(days.find((d) => d.goalId === 'g1')!.names, ['Strength: full body', 'Walk']);
+    assert.deepEqual(days.find((d) => d.goalId === 'g2')!.names, []);
   });
 });

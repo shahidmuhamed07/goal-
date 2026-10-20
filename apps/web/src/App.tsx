@@ -1770,9 +1770,9 @@ export default function App() {
   /** Unfinished tasks from the last two weeks that this person may change. */
   const missedTasks = findMissedTasks(goals, todayDate).filter((m) => canEditTaskRecord(m.goalId, m.task));
 
-  /** Moves one missed task, or every missed task, to today. One write per goal. */
-  const handleMoveMissed = async (goalId?: string, taskId?: string) => {
-    const picked = missedTasks.filter((m) => (!goalId || m.goalId === goalId) && (!taskId || m.task.id === taskId));
+  /** Moves the given missed tasks (one day's plan), or every missed task, to today. One write per goal. */
+  const handleMoveMissed = async (goalId?: string, taskIds?: string[]) => {
+    const picked = missedTasks.filter((m) => (!goalId || m.goalId === goalId) && (!taskIds || taskIds.includes(m.task.id)));
     if (picked.length === 0) return;
     const idsByGoal = new Map<string, string[]>();
     picked.forEach((m) => idsByGoal.set(m.goalId, [...(idsByGoal.get(m.goalId) || []), m.task.id]));
@@ -1790,19 +1790,19 @@ export default function App() {
         if (!fitsInGoalDocument(next.subcategories, next.tasks)) return;
         await saveGoal(id, { subcategories: next.subcategories, tasks: next.tasks });
       }
-      setSuccessMessage(picked.length === 1 ? 'Moved to today.' : `${picked.length} tasks moved to today.`);
+      setSuccessMessage(picked.length === 1 ? 'Moved to today.' : `${picked.length} tasks added to today.`);
     } catch (err) {
       console.error('Move missed task error:', err);
       setErrorMessage('Failed to move the task to today.');
     }
   };
 
-  /** Lets a missed task go: it stays in the plan as not done, but is not offered again. */
-  const handleSkipMissed = async (goalId: string, taskId: string) => {
+  /** Lets missed tasks (one day's plan) go: they stay in the plan as not done, but are not offered again. */
+  const handleSkipMissed = async (goalId: string, taskIds: string[]) => {
     const target = goals.find((g) => g.id === goalId);
     if (!target) return;
     try {
-      await saveGoal(goalId, { tasks: skipTasks(target.tasks || [], [taskId]) });
+      await saveGoal(goalId, { tasks: skipTasks(target.tasks || [], taskIds) });
     } catch (err) {
       console.error('Skip missed task error:', err);
       setErrorMessage('Failed to skip the task.');
